@@ -5,7 +5,7 @@ config :nerves_hub_cli,
   ca_certs: Path.expand("../test/fixtures/ca_certs", __DIR__)
 
 # Shared Configuration.
-config :nerves_hub,
+config :nerves_hub_device,
   ca_certs: Path.expand("../test/fixtures/ca_certs", __DIR__)
 
 # API HTTP connection.
@@ -14,7 +14,7 @@ config :nerves_hub_user_api,
   port: 4002
 
 # Device HTTP connection.
-config :nerves_hub,
+config :nerves_hub_device,
   device_api_host: "0.0.0.0",
   device_api_port: 4001
 

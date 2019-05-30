@@ -1,1 +1,1 @@
-Mox.defmock(NervesHub.ClientMock, for: NervesHub.Client)
+Mox.defmock(NervesHubDevice.ClientMock, for: NervesHubDevice.Client)

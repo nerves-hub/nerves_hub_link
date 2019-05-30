@@ -1,2 +1,2 @@
-NervesHub.Connection.start_link([])
+NervesHubDevice.Connection.start_link([])
 ExUnit.start()

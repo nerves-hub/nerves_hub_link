@@ -1,2 +1,0 @@
-defmodule NervesHub do
-end

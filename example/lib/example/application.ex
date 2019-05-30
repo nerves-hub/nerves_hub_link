@@ -11,7 +11,7 @@ defmodule Example.Application do
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
     children = [
-      NervesHub.Supervisor
+      NervesHubDevice.Supervisor
     ] ++ children(@target)
 
     opts = [strategy: :one_for_one, name: Example.Supervisor]

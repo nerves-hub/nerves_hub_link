@@ -1,6 +1,6 @@
-defmodule NervesHub.SocketTest do
+defmodule NervesHubDevice.SocketTest do
   use ExUnit.Case, async: true
-  alias NervesHub.{Certificate, Socket}
+  alias NervesHubDevice.{Certificate, Socket}
 
   doctest Socket
 

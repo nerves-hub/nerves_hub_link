@@ -1,5 +1,5 @@
-defmodule NervesHub.Socket do
-  alias NervesHub.Certificate
+defmodule NervesHubDevice.Socket do
+  alias NervesHubDevice.Certificate
 
   @cert "nerves_hub_cert"
   @key "nerves_hub_key"
@@ -12,9 +12,9 @@ defmodule NervesHub.Socket do
     {cert_key, cert_value} = cert(user_config)
     {key_key, key_value} = key(user_config)
 
-    server_name = Application.get_env(:nerves_hub, :device_api_host)
-    server_port = Application.get_env(:nerves_hub, :device_api_port)
-    sni = Application.get_env(:nerves_hub, :device_api_sni)
+    server_name = Application.get_env(:nerves_hub_device, :device_api_host)
+    server_port = Application.get_env(:nerves_hub_device, :device_api_port)
+    sni = Application.get_env(:nerves_hub_device, :device_api_sni)
 
     url = "wss://#{server_name}:#{server_port}/socket/websocket"
 

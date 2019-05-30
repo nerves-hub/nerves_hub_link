@@ -1,4 +1,4 @@
-defmodule NervesHub.ConsoleChannel do
+defmodule NervesHubDevice.ConsoleChannel do
   use GenServer
   require Logger
 
@@ -9,7 +9,7 @@ defmodule NervesHub.ConsoleChannel do
   The remote console ability is disabled by default and requires the
   `remote_iex` key to be enabled in the config:
   ```
-  config :nerves_hub, remote_iex: true
+  config :nerves_hub_device, remote_iex: true
   ```
 
   Once connected, IO requests on the device will be pushed up the socket
@@ -19,7 +19,7 @@ defmodule NervesHub.ConsoleChannel do
   Typically just `iex () >`
   * `put_chars` - Display the sepcified characters from the IEx Server for user review
     * This requires an immediate reply of `:ok` and then IEx will send a `:get_line`
-    request to await the user input. NervesHubWeb handles immediately replies `:ok`
+    request to await the user input. NervesHubDeviceWeb handles immediately replies `:ok`
     to these events (see below)
   * `init_attempt` - Pushed asynchronously after attempting to init an IEx Server.
   Payload has a `success` key with a boolean value to specify whether the server
@@ -39,17 +39,17 @@ defmodule NervesHub.ConsoleChannel do
   * `phx_close` or `phx_error` - This will cause the channel to attempt rejoining
   every 5 seconds. You can change the rejoin timing in the config
   ```
-  config :nerves_hub, rejoin_after: 3_000
+  config :nerves_hub_device, rejoin_after: 3_000
   ```
 
   For more info, see [The Erlang I/O Protocol](http://erlang.org/doc/apps/stdlib/io_protocol.html)
   """
 
   alias PhoenixClient.{Channel, Message}
-  alias NervesHub.Client
+  alias NervesHubDevice.Client
 
-  @client Application.get_env(:nerves_hub, :client, Client.Default)
-  @rejoin_after Application.get_env(:nerves_hub, :rejoin_after, 5_000)
+  @client Application.get_env(:nerves_hub_device, :client, Client.Default)
+  @rejoin_after Application.get_env(:nerves_hub_device, :rejoin_after, 5_000)
 
   defmodule State do
     defstruct socket: nil,

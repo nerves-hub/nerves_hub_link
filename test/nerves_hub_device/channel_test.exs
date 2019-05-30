@@ -1,6 +1,6 @@
-defmodule NervesHub.ChannelTest do
+defmodule NervesHubDevice.ChannelTest do
   use ExUnit.Case, async: true
-  alias NervesHub.{ClientMock, Channel}
+  alias NervesHubDevice.{ClientMock, Channel}
   alias PhoenixClient.Message
 
   doctest Channel

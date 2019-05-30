@@ -1,0 +1,2 @@
+defmodule NervesHubDevice do
+end

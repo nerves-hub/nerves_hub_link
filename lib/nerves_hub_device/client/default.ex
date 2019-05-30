@@ -1,17 +1,17 @@
-defmodule NervesHub.Client.Default do
+defmodule NervesHubDevice.Client.Default do
   @moduledoc """
-  Default NervesHub.Client implementation
+  Default NervesHubDevice.Client implementation
 
   This client always accepts an update.
   """
 
-  @behaviour NervesHub.Client
+  @behaviour NervesHubDevice.Client
   require Logger
 
-  @impl NervesHub.Client
+  @impl NervesHubDevice.Client
   def update_available(_), do: :apply
 
-  @impl NervesHub.Client
+  @impl NervesHubDevice.Client
   def handle_fwup_message({:progress, percent}) when rem(percent, 25) == 0 do
     Logger.debug("FWUP PROG: #{percent}%")
   end
@@ -28,7 +28,7 @@ defmodule NervesHub.Client.Default do
     :ok
   end
 
-  @impl NervesHub.Client
+  @impl NervesHubDevice.Client
   def handle_error(error) do
     Logger.warn("Firmware stream error: #{inspect(error)}")
   end

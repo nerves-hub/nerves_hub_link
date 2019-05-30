@@ -1,13 +1,13 @@
-defmodule NervesHub.Channel do
+defmodule NervesHubDevice.Channel do
   use GenServer
   require Logger
 
-  alias NervesHub.{Client, HTTPFwupStream}
+  alias NervesHubDevice.{Client, HTTPFwupStream}
   alias PhoenixClient.{Channel, Message}
 
-  @rejoin_after Application.get_env(:nerves_hub, :rejoin_after, 5_000)
+  @rejoin_after Application.get_env(:nerves_hub_device, :rejoin_after, 5_000)
 
-  @client Application.get_env(:nerves_hub, :client, Client.Default)
+  @client Application.get_env(:nerves_hub_device, :client, Client.Default)
 
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts)
@@ -29,7 +29,7 @@ defmodule NervesHub.Channel do
   end
 
   def handle_info(%Message{event: "reboot"}, state) do
-    Logger.warn("Reboot Request from NervesHub")
+    Logger.warn("Reboot Request from NervesHubDevice")
     Channel.push_async(state.channel, "rebooting", %{})
     # TODO: Maybe allow delayed reboot
     Nerves.Runtime.reboot()
@@ -43,7 +43,7 @@ defmodule NervesHub.Channel do
   def handle_info(%Message{event: event, payload: payload}, state)
       when event in ["phx_error", "phx_close"] do
     reason = Map.get(payload, :reason, "unknown")
-    NervesHub.Connection.disconnected()
+    NervesHubDevice.Connection.disconnected()
     _ = Client.handle_error(@client, reason)
     Process.send_after(self(), :join, @rejoin_after)
     {:noreply, state}
@@ -52,19 +52,19 @@ defmodule NervesHub.Channel do
   def handle_info(:join, %{socket: socket, topic: topic, params: params} = state) do
     case Channel.join(socket, topic, params) do
       {:ok, reply, channel} ->
-        NervesHub.Connection.connected()
+        NervesHubDevice.Connection.connected()
         state = %{state | channel: channel}
         {:noreply, maybe_update_firmware(reply, state)}
 
       _error ->
-        NervesHub.Connection.disconnected()
+        NervesHubDevice.Connection.disconnected()
         Process.send_after(self(), :join, @rejoin_after)
         {:noreply, state}
     end
   end
 
   def handle_info({:fwup, {:ok, 0, message}}, state) do
-    Logger.info("[NervesHub] FWUP Finished")
+    Logger.info("[NervesHubDevice] FWUP Finished")
     _ = Client.handle_fwup_message(@client, message)
     Nerves.Runtime.reboot()
     {:noreply, state}
@@ -106,7 +106,7 @@ defmodule NervesHub.Channel do
     {:noreply, state}
   end
 
-  def terminate(_reason, _state), do: NervesHub.Connection.disconnected()
+  def terminate(_reason, _state), do: NervesHubDevice.Connection.disconnected()
 
   defp maybe_update_firmware(%{"firmware_url" => url} = data, state) do
     # Cancel an existing timer if it exists.
@@ -121,7 +121,7 @@ defmodule NervesHub.Channel do
       :apply ->
         {:ok, http} = HTTPFwupStream.start_link(self())
         spawn_monitor(HTTPFwupStream, :get, [http, url])
-        Logger.info("[NervesHub] Downloading firmware: #{url}")
+        Logger.info("[NervesHubDevice] Downloading firmware: #{url}")
         state
 
       :ignore ->
@@ -129,7 +129,7 @@ defmodule NervesHub.Channel do
 
       {:reschedule, ms} ->
         timer = Process.send_after(self(), {:update_reschedule, data}, ms)
-        Logger.info("[NervesHub] rescheduling firmware update in #{ms} milliseconds")
+        Logger.info("[NervesHubDevice] rescheduling firmware update in #{ms} milliseconds")
         Map.put(state, :update_reschedule_timer, timer)
     end
   end

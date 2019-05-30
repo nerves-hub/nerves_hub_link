@@ -1,24 +1,24 @@
-defmodule NervesHub.Client do
+defmodule NervesHubDevice.Client do
   @moduledoc """
   A behaviour module for customizing if and when firmware updates get applied.
 
-  By default NervesHub applies updates as soon as it knows about them from the
-  NervesHub server and doesn't give warning before rebooting. This let's
+  By default NervesHubDevice applies updates as soon as it knows about them from the
+  NervesHubDevice server and doesn't give warning before rebooting. This let's
   devices hook into the decision making process and monitor the update's
   progress.
 
   # Example
 
   ```elixir
-  defmodule MyApp.NervesHubClient do
-    @behaviour NervesHub.Client
+  defmodule MyApp.NervesHubDeviceClient do
+    @behaviour NervesHubDevice.Client
 
     # May return:
     #  * `:apply` - apply the action immediately
     #  * `:ignore` - don't apply the action, don't ask again.
     #  * `{:reschedule, timeout_in_milliseconds}` - call this function again later.
 
-    @impl NervesHub.Client
+    @impl NervesHubDevice.Client
     def update_available(data) do
       if SomeInternalAPI.is_now_a_good_time_to_update?(data) do
         :apply
@@ -29,10 +29,10 @@ defmodule NervesHub.Client do
   end
   ```
 
-  To have NervesHub invoke it, add the following to your `config.exs`:
+  To have NervesHubDevice invoke it, add the following to your `config.exs`:
 
   ```elixir
-  config :nerves_hub, client: MyApp.NervesHubClient
+  config :nerves_hub, client: MyApp.NervesHubDeviceClient
   ```
   """
 
@@ -77,7 +77,7 @@ defmodule NervesHub.Client do
   @callback handle_error(any()) :: :ok
 
   @doc """
-  This function is called internally by NervesHub to notify clients.
+  This function is called internally by NervesHubDevice to notify clients.
   """
   @spec update_available(module(), update_data()) :: update_response()
   def update_available(client, data) do
@@ -93,7 +93,9 @@ defmodule NervesHub.Client do
 
       wrong ->
         Logger.error(
-          "[NervesHub] Client: #{client}.update_available/1 bad return value: #{inspect(wrong)} Applying update."
+          "[NervesHubDevice] Client: #{client}.update_available/1 bad return value: #{
+            inspect(wrong)
+          } Applying update."
         )
 
         :apply
@@ -101,7 +103,7 @@ defmodule NervesHub.Client do
   end
 
   @doc """
-  This function is called internally by NervesHub to notify clients of fwup progress.
+  This function is called internally by NervesHubDevice to notify clients of fwup progress.
   """
   @spec handle_fwup_message(module(), fwup_message()) :: :ok
   def handle_fwup_message(client, data) do
@@ -110,7 +112,7 @@ defmodule NervesHub.Client do
   end
 
   @doc """
-  This function is called internally by NervesHub to notify clients of fwup errors.
+  This function is called internally by NervesHubDevice to notify clients of fwup errors.
   """
   @spec handle_error(module(), any()) :: :ok
   def handle_error(client, data) do

@@ -1,11 +1,15 @@
-defmodule NervesHub.MixProject do
+defmodule NervesHubDevice.MixProject do
   use Mix.Project
 
-  Application.put_env(:nerves_hub, :nerves_provisioning, Path.expand("priv/provisioning.conf"))
+  Application.put_env(
+    :nerves_hub_device,
+    :nerves_provisioning,
+    Path.expand("priv/provisioning.conf")
+  )
 
   def project do
     [
-      app: :nerves_hub,
+      app: :nerves_hub_device,
       deps: deps(),
       description: description(),
       docs: [main: "readme", extras: ["README.md"]],
@@ -41,13 +45,13 @@ defmodule NervesHub.MixProject do
   defp elixirc_paths(_), do: ["lib"]
 
   defp description do
-    "The NervesHub client application"
+    "The NervesHub device application"
   end
 
   defp package do
     [
       licenses: ["Apache-2.0"],
-      links: %{"GitHub" => "https://github.com/nerves-hub/nerves_hub"}
+      links: %{"GitHub" => "https://github.com/smartrent/nerves_hub_device"}
     ]
   end
 
@@ -57,11 +61,10 @@ defmodule NervesHub.MixProject do
       {:ex_doc, "~> 0.18", only: [:dev, :test], runtime: false},
       {:excoveralls, "~> 0.10", only: :test},
       {:fwup, "~> 0.3.0"},
-      {:hackney, "~> 1.10"},
       {:jason, "~> 1.0"},
       {:mix_test_watch, "~> 0.8", only: :dev, runtime: false},
       {:mox, "~> 0.4", only: :test},
-      {:nerves_hub_cli, "~> 0.8.0", runtime: false},
+      {:nerves_hub_cli, "~> 0.8", runtime: false},
       {:nerves_runtime, "~> 0.8"},
       {:phoenix_client, "~> 0.7"},
       {:websocket_client, "~> 1.3"},

@@ -9,7 +9,7 @@ use Mix.Config
 # https://hexdocs.pm/nerves/advanced-configuration.html for details.
 config :nerves, :firmware,
   rootfs_overlay: "rootfs_overlay",
-  provisioning: :nerves_hub
+  provisioning: :nerves_hub_device
 
 config :logger,
   backends: [RingLogger]
@@ -33,7 +33,7 @@ config :nerves_firmware_ssh,
     File.read!(Path.join(System.user_home!(), ".ssh/id_rsa.pub"))
   ]
 
-config :nerves_hub,
+config :nerves_hub_device,
   fwup_public_keys: [:test]
 
 ## Uncomment for local NervesHubWeb development
@@ -46,10 +46,10 @@ config :nerves_hub_user_api,
 #   home: Path.expand("../.nerves-hub"),
 #   ca_certs: Path.expand("../test/fixtures/ca_certs")
 
-# config :nerves_hub, NervesHub.Socket,
+# config :nerves_hub_device, NervesHubDevice.Socket,
 #   url: "wss://nerves-hub.org:4001/socket/websocket"
 
-# config :nerves_hub,
+# config :nerves_hub_device,
 #   ca_certs: "/etc/ssl_dev"
 
 ## Uncomment for connecting over WIFI

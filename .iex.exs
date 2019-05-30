@@ -1,1 +1,1 @@
-alias NervesHub.FirmwareChannel
+alias NervesHubDevice.FirmwareChannel
