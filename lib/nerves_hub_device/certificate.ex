@@ -1,11 +1,7 @@
 defmodule NervesHubDevice.Certificate do
   # Get the fwup public keys from the app environment. Support the
   # old name of `:public_keys` for now.
-  @public_keys Application.get_env(
-                 :nerves_hub_device,
-                 :fwup_public_keys,
-                 Application.get_env(:nerves_hub_device, :public_keys, [])
-               )
+  @public_keys Application.get_env(:nerves_hub_device, :fwup_public_keys, [])
                |> NervesHubCLI.resolve_fwup_public_keys()
 
   ca_cert_path =
