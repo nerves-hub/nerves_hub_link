@@ -12,10 +12,10 @@ defmodule NervesHubDevice.SocketTest do
                ssl_verify: :verify_peer,
                transport_opts: [
                  socket_opts: [
-                   key: {:ECPrivateKey, ""},
+                   server_name_indication: 'device.nerves-hub.org',
                    cert: "",
-                   cacerts: Certificate.ca_certs(),
-                   server_name_indication: 'device.nerves-hub.org'
+                   key: {:ECPrivateKey, ""},
+                   cacerts: Certificate.ca_certs()
                  ]
                ]
              ]
@@ -28,10 +28,10 @@ defmodule NervesHubDevice.SocketTest do
                ssl_verify: :verify_peer,
                transport_opts: [
                  socket_opts: [
-                   key: {:ECPrivateKey, ""},
+                   server_name_indication: 'device.nerves-hub.org',
                    cert: "",
-                   cacerts: [:red],
-                   server_name_indication: 'device.nerves-hub.org'
+                   key: {:ECPrivateKey, ""},
+                   cacerts: [:red]
                  ]
                ],
                cacerts: [:red]

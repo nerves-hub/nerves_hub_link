@@ -52,6 +52,11 @@ defmodule NervesHubDevice.ChannelTest do
   end
 
   test "handle_close" do
+    # This fails without starting the connection Agent.
+    # Not sure why
+    # TODO: Manage this agent better. Remove from test
+    NervesHubDevice.Connection.start_link([])
+
     assert Channel.handle_info(%Message{event: "phx_close", payload: %{}}, :state) ==
              {:noreply, :state}
 

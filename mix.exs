@@ -36,7 +36,8 @@ defmodule NervesHubDevice.MixProject do
         device_api_sni: "device.nerves-hub.org",
         fwup_public_keys: []
       ],
-      extra_applications: [:logger, :iex]
+      extra_applications: [:logger, :iex],
+      mod: {NervesHubDevice.Application, []}
     ]
   end
 
@@ -65,6 +66,7 @@ defmodule NervesHubDevice.MixProject do
       {:mix_test_watch, "~> 0.8", only: :dev, runtime: false},
       {:mox, "~> 0.4", only: :test},
       {:nerves_hub_cli, "~> 0.8", runtime: false},
+      {:nerves_key, "~> 0.5"},
       {:nerves_runtime, "~> 0.8"},
       {:phoenix_client, "~> 0.7"},
       {:websocket_client, "~> 1.3"},

@@ -103,48 +103,36 @@ config :nerves, :firmware,
 ```
 
 The library won't connect to [nerves-hub.org](https://nerves-hub.org) unless
-requested. The easiest way is to add `NervesHub.Supervisor` to your main
-application supervisor:
+requested and SSL options must be configured. 
+
+If using [NervesKey](https://github.com/nerves-hub/nerves_key), you can tell
+`NervesHubDevice` to read those certificates and key from the chip and assign
+the SSL options for you by enabling it:
 
 ```elixir
-  defmodule Example.Application do
-    use Application
-
-    def start(_type, _args) do
-
-      opts = [strategy: :one_for_one, name: Example.Supervisor]
-      children = [
-        NervesHub.Supervisor
-      ] ++ children(@target)
-      Supervisor.start_link(children, opts)
-    end
-  end
+config :nerves_hub_device, :nerves_key,
+  enabled: true
 ```
 
-SSL options can be configured by passing them into the NervesHub supervisor.
-This is useful for applications that store their ssl credentials in different
-places, such as [NervesKey](https://github.com/nerves-hub/nerves_key).
+Simply enabling NervesKey will default to using i2c bus 1 and `:primary`
+cerificate pair. However, you can cusomtize these options as well to use
+a different bus and certificate pair:
 
 ```elixir
-  defmodule Example.Application do
-    use Application
+config :nerves_hub_device, :nerves_key,
+  enabled: true,
+  certificate_pair: :aux,
+  i2c_bus: 0
+```
 
-    def start(_type, _args) do
-      {:ok, engine} = NervesKey.PKCS11.load_engine()
-      {:ok, i2c} = ATECC508A.Transport.I2C.init([])
-      nerves_key_socket_opts = [
-        key: NervesKey.PKCS11.private_key(engine, {:i2c, 1}),
-        cert: X509.Certificate.to_der(NervesKey.device_cert(i2c)),
-        cacerts: [X509.Certificate.to_der(NervesKey.signer_cert(i2c)) | NervesHub.Certificate.ca_certs()],
-      ]
+If you aren't using NervesKey, you can also provide your own SSL options 
+to use for the NervesHub socket connection via the `socket` key in the
+config using [valid Erlang ssl socket options](http://erlang.org/doc/man/ssl.html#TLS/DTLS%20OPTION%20DESCRIPTIONS%20-%20COMMON%20for%20SERVER%20and%20CLIENT)
 
-      opts = [strategy: :one_for_one, name: Example.Supervisor]
-      children = [
-        {NervesHub.Supervisor, nerves_key_socket_opts}
-      ] ++ children(@target)
-      Supervisor.start_link(children, opts)
-    end
-  end
+```elixir
+config :nerves_hub_device, :socket,
+  cert: "some_cert_der",
+  keyfile: "path/to/keyfile"
 ```
 
 ### Creating a NervesHub product

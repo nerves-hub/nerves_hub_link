@@ -54,7 +54,7 @@ defmodule NervesHubDevice.HTTPFwupStream do
     fwup_public_keys = NervesHubDevice.Certificate.fwup_public_keys()
 
     if fwup_public_keys == [] do
-      Logger.error("No fwup public keys were configured for nerves_hub.")
+      Logger.error("No fwup public keys were configured for nerves_hub_device.")
       Logger.error("This means that firmware signatures are not being checked.")
       Logger.error("nerves_hub won't allow this in the future.")
     end
