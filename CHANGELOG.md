@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.7.4
+
+* Enhancements
+  * Rename to `NervesHubDevice`
+  * Remove `HTTP` support to use channels exclusively
+  * Reorganize as a an `Application` and remove ability to start a supervisor separately
+  * Support using `NervesKey` via a configuartion flag
+
 ## v0.7.3
 
 * Bug fixes
