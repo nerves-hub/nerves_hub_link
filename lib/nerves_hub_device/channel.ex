@@ -143,6 +143,6 @@ defmodule NervesHubDevice.Channel do
       Process.cancel_timer(timer)
     end
 
-    Map.delete(state, :key)
+    Map.delete(state, key)
   end
 end
