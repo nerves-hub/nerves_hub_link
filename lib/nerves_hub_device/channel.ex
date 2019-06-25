@@ -119,7 +119,7 @@ defmodule NervesHubDevice.Channel do
     # to control exactly when an update is applied.
     case Client.update_available(@client, data) do
       :apply ->
-        {:ok, http} = HTTPFwupStream.start_link(self())
+        {:ok, http} = HTTPFwupStream.start(self())
         spawn_monitor(HTTPFwupStream, :get, [http, url])
         Logger.info("[NervesHubDevice] Downloading firmware: #{url}")
         state
