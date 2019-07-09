@@ -83,20 +83,25 @@ defmodule NervesHubDevice.Socket do
 
       {:ok, i2c} = ATECC508A.Transport.I2C.init(bus_name: "i2c-#{bus_num}")
 
-      {:ok, engine} = NervesKey.PKCS11.load_engine()
+      if NervesKey.provisioned?(i2c) do
+        {:ok, engine} = NervesKey.PKCS11.load_engine()
 
-      cert =
-        NervesKey.device_cert(i2c, certificate_pair)
-        |> X509.Certificate.to_der()
+        cert =
+          NervesKey.device_cert(i2c, certificate_pair)
+          |> X509.Certificate.to_der()
 
-      signer_cert =
-        NervesKey.signer_cert(i2c, certificate_pair)
-        |> X509.Certificate.to_der()
+        signer_cert =
+          NervesKey.signer_cert(i2c, certificate_pair)
+          |> X509.Certificate.to_der()
 
-      key = NervesKey.PKCS11.private_key(engine, i2c: bus_num)
-      cacerts = [signer_cert | cacerts]
+        key = NervesKey.PKCS11.private_key(engine, i2c: bus_num)
+        cacerts = [signer_cert | cacerts]
 
-      [cert: cert, key: key, cacerts: cacerts]
+        [cert: cert, key: key, cacerts: cacerts]
+      else
+        Logger.error("[NervesHubDevice] NervesKey isn't provisioned, so not using.")
+        []
+      end
     else
       _ ->
         Logger.debug("[NervesHubDevice] Using user configured SSL options")
