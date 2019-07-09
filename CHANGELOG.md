@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.7.5
+
+* Bug fixes
+  * Check NervesKey is provisioned before attempting to use it
+
 ## v0.7.4
 
 * Enhancements
