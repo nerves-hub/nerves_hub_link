@@ -5,7 +5,7 @@ config :nerves_hub_cli,
   ca_certs: Path.expand("../test/fixtures/ca_certs", __DIR__)
 
 # Shared Configuration.
-config :nerves_hub_device,
+config :nerves_hub_link,
   ca_certs: Path.expand("../test/fixtures/ca_certs", __DIR__)
 
 # API HTTP connection.
@@ -14,12 +14,12 @@ config :nerves_hub_user_api,
   port: 4002
 
 # Device HTTP connection.
-config :nerves_hub_device,
+config :nerves_hub_link,
   device_api_host: "0.0.0.0",
   device_api_port: 4001
 
-config :nerves_hub_device,
-  client: NervesHubDevice.ClientMock,
+config :nerves_hub_link,
+  client: NervesHubLink.ClientMock,
   rejoin_after: 0
 
 config :nerves_runtime, :kernel, autoload_modules: false

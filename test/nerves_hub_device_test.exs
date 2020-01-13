@@ -1,5 +1,5 @@
-defmodule NervesHubDeviceTest do
+defmodule NervesHubLinkTest do
   use ExUnit.Case, async: true
 
-  doctest NervesHubDevice
+  doctest NervesHubLink
 end

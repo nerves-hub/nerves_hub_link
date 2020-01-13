@@ -1,15 +1,15 @@
-defmodule NervesHubDevice.MixProject do
+defmodule NervesHubLink.MixProject do
   use Mix.Project
 
   Application.put_env(
-    :nerves_hub_device,
+    :nerves_hub_link,
     :nerves_provisioning,
     Path.expand("priv/provisioning.conf")
   )
 
   def project do
     [
-      app: :nerves_hub_device,
+      app: :nerves_hub_link,
       deps: deps(),
       description: description(),
       docs: [main: "readme", extras: ["README.md"]],
@@ -37,7 +37,7 @@ defmodule NervesHubDevice.MixProject do
         fwup_public_keys: []
       ],
       extra_applications: [:logger, :iex],
-      mod: {NervesHubDevice.Application, []}
+      mod: {NervesHubLink.Application, []}
     ]
   end
 
@@ -52,7 +52,7 @@ defmodule NervesHubDevice.MixProject do
   defp package do
     [
       licenses: ["Apache-2.0"],
-      links: %{"GitHub" => "https://github.com/smartrent/nerves_hub_device"}
+      links: %{"GitHub" => "https://github.com/smartrent/nerves_hub_link"}
     ]
   end
 

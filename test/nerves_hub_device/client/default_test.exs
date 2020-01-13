@@ -1,6 +1,6 @@
-defmodule NervesHubDevice.Client.DefaultTest do
+defmodule NervesHubLink.Client.DefaultTest do
   use ExUnit.Case, async: true
-  alias NervesHubDevice.Client.Default
+  alias NervesHubLink.Client.Default
 
   doctest Default
 
