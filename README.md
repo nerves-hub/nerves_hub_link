@@ -1,4 +1,4 @@
-# NervesHub
+# NervesHubLink
 
 [![CircleCI](https://circleci.com/gh/nerves-hub/nerves_hub_link/tree/master.svg?style=svg)](https://circleci.com/gh/nerves-hub/nerves_hub_link/tree/master)
 [![Hex version](https://img.shields.io/hexpm/v/nerves_hub_link.svg "Hex version")](https://hex.pm/packages/nerves_hub_link)
@@ -25,7 +25,7 @@ changes to your Nerves projects:
 * Devices are identified by a unique serial number
 * Each device has its own SSL certificate for authentication with NervesHub
 
-These changes enable NervesHub to provide assurances that the firmware bits 
+These changes enable NervesHub to provide assurances that the firmware bits
 you intend to install on a set of devices make it to those devices unaltered.
 
 ## Getting Started
@@ -86,7 +86,7 @@ your dependencies. For example:
   defp deps(target) do
     [
       {:nerves_runtime, "~> 0.9"},
-      {:nerves_hub, "~> 0.1"},
+      {:nerves_hub_link, "~> 0.1"},
       {:nerves_time, "~> 0.2"},
       ...
     ] ++ system(target)
@@ -103,7 +103,7 @@ config :nerves, :firmware,
 ```
 
 The library won't connect to [nerves-hub.org](https://nerves-hub.org) unless
-requested and SSL options must be configured. 
+requested and SSL options must be configured.
 
 If using [NervesKey](https://github.com/nerves-hub/nerves_key), you can tell
 `NervesHubLink` to read those certificates and key from the chip and assign
@@ -125,7 +125,7 @@ config :nerves_hub_link, :nerves_key,
   i2c_bus: 0
 ```
 
-If you aren't using NervesKey, you can also provide your own SSL options 
+If you aren't using NervesKey, you can also provide your own SSL options
 to use for the NervesHub socket connection via the `socket` key in the
 config using [valid Erlang ssl socket options](http://erlang.org/doc/man/ssl.html#TLS/DTLS%20OPTION%20DESCRIPTIONS%20-%20COMMON%20for%20SERVER%20and%20CLIENT)
 
