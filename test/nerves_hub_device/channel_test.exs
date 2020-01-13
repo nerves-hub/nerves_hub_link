@@ -1,8 +1,8 @@
-defmodule NervesHubDevice.ChannelTest do
+defmodule NervesHubLink.ChannelTest do
   # Fwup can only have one instance at a time.
   # Set async false to account for this
   use ExUnit.Case, async: true
-  alias NervesHubDevice.{ClientMock, Channel}
+  alias NervesHubLink.{ClientMock, Channel}
   alias PhoenixClient.Message
 
   doctest Channel
@@ -80,7 +80,7 @@ defmodule NervesHubDevice.ChannelTest do
     # This fails without starting the connection Agent.
     # Not sure why
     # TODO: Manage this agent better. Remove from test
-    NervesHubDevice.Connection.start_link([])
+    NervesHubLink.Connection.start_link([])
 
     assert Channel.handle_info(%Message{event: "phx_close", payload: %{}}, state) ==
              {:noreply, %Channel.State{connected?: false}}

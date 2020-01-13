@@ -1,7 +1,7 @@
-defmodule NervesHubDevice.Socket do
+defmodule NervesHubLink.Socket do
   require Logger
 
-  alias NervesHubDevice.Certificate
+  alias NervesHubLink.Certificate
 
   @cert "nerves_hub_cert"
   @key "nerves_hub_key"
@@ -13,14 +13,14 @@ defmodule NervesHubDevice.Socket do
   def opts(opts \\ nil)
 
   def opts(nil) do
-    Application.get_env(:nerves_hub_device, :socket, [])
+    Application.get_env(:nerves_hub_link, :socket, [])
     |> opts()
   end
 
   def opts(user_config) when is_list(user_config) do
-    server_name = Application.get_env(:nerves_hub_device, :device_api_host)
-    server_port = Application.get_env(:nerves_hub_device, :device_api_port)
-    sni = Application.get_env(:nerves_hub_device, :device_api_sni)
+    server_name = Application.get_env(:nerves_hub_link, :device_api_host)
+    server_port = Application.get_env(:nerves_hub_link, :device_api_port)
+    sni = Application.get_env(:nerves_hub_link, :device_api_sni)
 
     url = "wss://#{server_name}:#{server_port}/socket/websocket"
 
@@ -71,10 +71,10 @@ defmodule NervesHubDevice.Socket do
   defp opts_from_nerves_key_or_config(user_config) do
     cacerts = user_config[:cacerts] || Certificate.ca_certs()
 
-    with nk_opts <- Application.get_env(:nerves_hub_device, :nerves_key, []),
+    with nk_opts <- Application.get_env(:nerves_hub_link, :nerves_key, []),
          true <- Keyword.get(nk_opts, :enabled, false),
          :nerves_key <- Application.get_application(NervesKey) do
-      Logger.debug("[NervesHubDevice] Reading SSL options from NervesKey")
+      Logger.debug("[NervesHubLink] Reading SSL options from NervesKey")
       # In the future, this may change to support other bus names
       # like "usb-something". But currently, ATECC508A and NervesKey.PKCS11
       # only support "i2c-N" scheme.
@@ -99,12 +99,12 @@ defmodule NervesHubDevice.Socket do
 
         [cert: cert, key: key, cacerts: cacerts]
       else
-        Logger.error("[NervesHubDevice] NervesKey isn't provisioned, so not using.")
+        Logger.error("[NervesHubLink] NervesKey isn't provisioned, so not using.")
         []
       end
     else
       _ ->
-        Logger.debug("[NervesHubDevice] Using user configured SSL options")
+        Logger.debug("[NervesHubLink] Using user configured SSL options")
 
         [cert(user_config), key(user_config), cacerts: cacerts]
     end

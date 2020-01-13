@@ -1,12 +1,12 @@
-defmodule NervesHubDevice.CertificateTest do
+defmodule NervesHubLink.CertificateTest do
   use ExUnit.Case, async: true
-  alias NervesHubDevice.Certificate
+  alias NervesHubLink.Certificate
 
   doctest Certificate
 
   describe "pem_to_der/1" do
     test "decodes certificate" do
-      pem = File.read!(Path.join([:code.priv_dir(:nerves_hub_device), "ca_certs", "ca.pem"]))
+      pem = File.read!(Path.join([:code.priv_dir(:nerves_hub_link), "ca_certs", "ca.pem"]))
       assert is_binary(Certificate.pem_to_der(pem))
     end
 

@@ -1,4 +1,4 @@
-defmodule NervesHubDevice.HTTPFwupStream do
+defmodule NervesHubLink.HTTPFwupStream do
   @moduledoc """
   Download and install a firmware update.
   """
@@ -56,10 +56,10 @@ defmodule NervesHubDevice.HTTPFwupStream do
     devpath = Nerves.Runtime.KV.get("nerves_fw_devpath") || "/dev/mmcblk0"
     args = ["--apply", "--no-unmount", "-d", devpath, "--task", "upgrade"]
 
-    fwup_public_keys = NervesHubDevice.Certificate.fwup_public_keys()
+    fwup_public_keys = NervesHubLink.Certificate.fwup_public_keys()
 
     if fwup_public_keys == [] do
-      Logger.error("No fwup public keys were configured for nerves_hub_device.")
+      Logger.error("No fwup public keys were configured for nerves_hub_link.")
       Logger.error("This means that firmware signatures are not being checked.")
       Logger.error("nerves_hub won't allow this in the future.")
     end

@@ -1,6 +1,6 @@
-defmodule NervesHubDevice.ConsoleChannelTest do
+defmodule NervesHubLink.ConsoleChannelTest do
   use ExUnit.Case, async: false
-  alias NervesHubDevice.{ClientMock, ConsoleChannel}
+  alias NervesHubLink.{ClientMock, ConsoleChannel}
   alias PhoenixClient.Message
 
   doctest ConsoleChannel
@@ -8,7 +8,7 @@ defmodule NervesHubDevice.ConsoleChannelTest do
   setup context do
     context = Map.put(context, :state, %ConsoleChannel.State{})
     :ok = Application.ensure_started(:iex)
-    Application.put_env(:nerves_hub_device, :remote_iex, true)
+    Application.put_env(:nerves_hub_link, :remote_iex, true)
     Mox.verify_on_exit!(context)
     context
   end

@@ -1,7 +1,7 @@
-defmodule NervesHubDevice.Application do
+defmodule NervesHubLink.Application do
   use Application
 
-  alias NervesHubDevice.{Channel, Connection, ConsoleChannel, Socket}
+  alias NervesHubLink.{Channel, Connection, ConsoleChannel, Socket}
 
   def start(_type, _args) do
     params = Nerves.Runtime.KV.get_all_active()
@@ -14,11 +14,11 @@ defmodule NervesHubDevice.Application do
       ]
       |> add_console_child(params)
 
-    Supervisor.start_link(children, strategy: :one_for_one, name: NervesHubDevice.Supervisor)
+    Supervisor.start_link(children, strategy: :one_for_one, name: NervesHubLink.Supervisor)
   end
 
   defp add_console_child(children, params) do
-    if Application.get_env(:nerves_hub_device, :remote_iex, false) do
+    if Application.get_env(:nerves_hub_link, :remote_iex, false) do
       [{ConsoleChannel, [socket: Socket, params: params]} | children]
     else
       children

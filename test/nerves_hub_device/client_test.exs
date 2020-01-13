@@ -1,6 +1,6 @@
-defmodule NervesHubDevice.ClientTest do
+defmodule NervesHubLink.ClientTest do
   use ExUnit.Case, async: true
-  alias NervesHubDevice.{Client, ClientMock}
+  alias NervesHubLink.{Client, ClientMock}
 
   doctest Client
 

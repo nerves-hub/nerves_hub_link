@@ -1,7 +1,7 @@
 # NervesHub
 
-[![CircleCI](https://circleci.com/gh/nerves-hub/nerves_hub_device/tree/master.svg?style=svg)](https://circleci.com/gh/nerves-hub/nerves_hub_device/tree/master)
-[![Hex version](https://img.shields.io/hexpm/v/nerves_hub_device.svg "Hex version")](https://hex.pm/packages/nerves_hub_device)
+[![CircleCI](https://circleci.com/gh/nerves-hub/nerves_hub_link/tree/master.svg?style=svg)](https://circleci.com/gh/nerves-hub/nerves_hub_link/tree/master)
+[![Hex version](https://img.shields.io/hexpm/v/nerves_hub_link.svg "Hex version")](https://hex.pm/packages/nerves_hub_link)
 
 This is the official client for devices that want to receive firmware updates from NervesHub.
 
@@ -13,7 +13,7 @@ Nerves-based devices. A managed version is available at
 
 NervesHub provides many of the features that you'd expect in a firmware update
 server. Fundamentally, devices connect to the server by joining a long-lived Phoenix
-channel (for HTTP polling, see [nerves_hub_device_http](https://github.com/nerves-hub/nerves_hub_device_http)).
+channel (for HTTP polling, see [nerves_hub_link_http](https://github.com/nerves-hub/nerves_hub_link_http)).
 If a firmware update is available, NervesHub will provide a URL to the device and the
 device can update immediately or [when convenient](https://github.com/nerves-hub/nerves_hub#conditionally-applying-updates).
 
@@ -74,9 +74,9 @@ If you already have an account, make sure that you have authenticated by running
 mix nerves_hub.user auth
 ```
 
-### Adding NervesHubDevice to your project
+### Adding NervesHubLink to your project
 
-The first step is to add `nerves_hub_device` to your target dependencies in your
+The first step is to add `nerves_hub_link` to your target dependencies in your
 project's `mix.exs`. Since NervesHub uses SSL certificates, the time must be set
 on the device or certificate validity checks will fail. If you're not already
 setting the time, add [`nerves_time`](https://hex.pm/packages/nerves_time) to
@@ -93,24 +93,24 @@ your dependencies. For example:
   end
 ```
 
-Next, update your `config.exs` so that the `nerves_hub_device` library can help
-provision devices. Do this by adding `provisioning: :nerves_hub_device` to the
+Next, update your `config.exs` so that the `nerves_hub_link` library can help
+provision devices. Do this by adding `provisioning: :nerves_hub_link` to the
 `:nerves, :firmware` option like this:
 
 ```elixir
 config :nerves, :firmware,
-  provisioning: :nerves_hub_device
+  provisioning: :nerves_hub_link
 ```
 
 The library won't connect to [nerves-hub.org](https://nerves-hub.org) unless
 requested and SSL options must be configured. 
 
 If using [NervesKey](https://github.com/nerves-hub/nerves_key), you can tell
-`NervesHubDevice` to read those certificates and key from the chip and assign
+`NervesHubLink` to read those certificates and key from the chip and assign
 the SSL options for you by enabling it:
 
 ```elixir
-config :nerves_hub_device, :nerves_key,
+config :nerves_hub_link, :nerves_key,
   enabled: true
 ```
 
@@ -119,7 +119,7 @@ cerificate pair. However, you can cusomtize these options as well to use
 a different bus and certificate pair:
 
 ```elixir
-config :nerves_hub_device, :nerves_key,
+config :nerves_hub_link, :nerves_key,
   enabled: true,
   certificate_pair: :aux,
   i2c_bus: 0
@@ -130,7 +130,7 @@ to use for the NervesHub socket connection via the `socket` key in the
 config using [valid Erlang ssl socket options](http://erlang.org/doc/man/ssl.html#TLS/DTLS%20OPTION%20DESCRIPTIONS%20-%20COMMON%20for%20SERVER%20and%20CLIENT)
 
 ```elixir
-config :nerves_hub_device, :socket,
+config :nerves_hub_link, :socket,
   cert: "some_cert_der",
   keyfile: "path/to/keyfile"
 ```
@@ -200,7 +200,7 @@ that are stored locally (like the one we just created) can be referred to by
 their atom name:
 
 ```elixir
-config :nerves_hub_device,
+config :nerves_hub_link,
   fwup_public_keys: [:devkey]
 ```
 
@@ -208,20 +208,20 @@ If you have keys that cannot be stored locally, you will have to copy/paste
 their public key:
 
 ```elixir
-config :nerves_hub_device,
+config :nerves_hub_link,
   fwup_public_keys: [
     # devkey
     "bM/O9+ykZhCWx8uZVgx0sU3f0JJX7mqnAVU9VGeuHr4="
   ]
 ```
 
-The `nerves_hub_device` dependency converts key names to public keys at compile time.
+The `nerves_hub_link` dependency converts key names to public keys at compile time.
 If you haven't compiled your project yet, run `mix firmware` now. If you have
-compiled it, `mix` won't know to recompile `nerves_hub_device` due to the configuration
+compiled it, `mix` won't know to recompile `nerves_hub_link` due to the configuration
 change. Force it to recompile by running:
 
 ```bash
-mix deps.compile nerves_hub_device --force
+mix deps.compile nerves_hub_link --force
 mix firmware
 ```
 
@@ -351,20 +351,20 @@ mix nerves_hub.firmware publish --key devkey --deploy qa_deployment
 ### Conditionally applying updates
 
 It's not always appropriate to apply a firmware update immediately.
-Custom logic can be added to the device by implementing the `NervesHubDevice.Client` behaviour and telling the NervesHubDevice OTP application about it.
+Custom logic can be added to the device by implementing the `NervesHubLink.Client` behaviour and telling the NervesHubLink OTP application about it.
 
 Here's an example implementation:
 
 ```elixir
-defmodule MyApp.NervesHubDeviceClient do
-   @behaviour NervesHubDevice.Client
+defmodule MyApp.NervesHubLinkClient do
+   @behaviour NervesHubLink.Client
 
    # May return:
    #  * `:apply` - apply the action immediately
    #  * `:ignore` - don't apply the action, don't ask again.
    #  * `{:reschedule, timeout_in_milliseconds}` - call this function again later.
 
-   @impl NervesHubDevice.Client
+   @impl NervesHubLink.Client
    def update_available(data) do
     if SomeInternalAPI.is_now_a_good_time_to_update?(data) do
       :apply
@@ -375,10 +375,10 @@ defmodule MyApp.NervesHubDeviceClient do
 end
 ```
 
-To have NervesHubDevice invoke it, update your `config.exs` as follows:
+To have NervesHubLink invoke it, update your `config.exs` as follows:
 
 ```elixir
-config :nerves_hub_device, client: MyApp.NervesHubDeviceClient
+config :nerves_hub_link, client: MyApp.NervesHubLinkClient
 ```
 
 ### Enabling remote IEx access
@@ -387,7 +387,7 @@ It's possible to remotely log into your device via the NervesHub web interface. 
 feature is disabled by default. To enable, add the following to your `config.exs`:
 
 ```elixir
-config :nerves_hub_device, remote_iex: true
+config :nerves_hub_link, remote_iex: true
 ```
 
 You may also need additional permissions on NervesHub to see the device and to use the

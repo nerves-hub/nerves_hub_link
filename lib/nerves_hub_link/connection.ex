@@ -1,4 +1,4 @@
-defmodule NervesHubDevice.Connection do
+defmodule NervesHubLink.Connection do
   @moduledoc """
   Agent used to keep the simple state of the devices connection
   to [nerves-hub.org](https://www.nerves-hub.org).
@@ -19,14 +19,14 @@ defmodule NervesHubDevice.Connection do
   ```
   # Set a callback for heart to check every 5 seconds. If the function returns anything other than
   # `:ok`, it will cause reboot.
-  :heart.set_callback(NervesHubDevice.Connection, :check!)
+  :heart.set_callback(NervesHubLink.Connection, :check!)
   ```
 
   Or, you can use the check as part of a separate function with other health checks as well
   ```
   defmodule MyApp.Checker do
     def health_check do
-      with :ok <- NervesHubDevice.Connection.check,
+      with :ok <- NervesHubLink.Connection.check,
            :ok <- MyApp.another_check,
            :ok <- MyApp.yet_another_check,
       do
@@ -84,7 +84,7 @@ defmodule NervesHubDevice.Connection do
   @spec check!() :: :ok
   def check!() do
     unless check() == :ok do
-      raise "too much time has passed since a successful connection to NervesHubDevice"
+      raise "too much time has passed since a successful connection to NervesHubLink"
     end
 
     :ok
