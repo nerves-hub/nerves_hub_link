@@ -12,6 +12,7 @@ defmodule NervesHubLink.MixProject do
       app: :nerves_hub_link,
       deps: deps(),
       description: description(),
+      dialyzer: dialyzer(),
       docs: [main: "readme", extras: ["README.md"]],
       elixir: "~> 1.8",
       elixirc_paths: elixirc_paths(Mix.env()),
@@ -47,6 +48,15 @@ defmodule NervesHubLink.MixProject do
 
   defp description do
     "The NervesHub device application"
+  end
+
+  defp dialyzer() do
+    [
+      # TODO: add :unmatched_returns
+      flags: [:race_conditions, :error_handling, :underspecs],
+      plt_add_apps: [:atecc508a, :nerves_key, :nerves_key_pkcs11],
+      list_unused_filters: true
+    ]
   end
 
   defp package do
