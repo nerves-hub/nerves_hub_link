@@ -107,32 +107,80 @@ requested and SSL options must be configured.
 
 If using [NervesKey](https://github.com/nerves-hub/nerves_key), you can tell
 `NervesHubLink` to read those certificates and key from the chip and assign
-the SSL options for you by enabling it:
+the SSL options for you by enabling add it as a dependency:
 
 ```elixir
-config :nerves_hub_link, :nerves_key,
-  enabled: true
+def deps() do
+  [
+    {:nerves_hub_link, "~> 0.7"},
+    {:nerves_key, "~> 0.5"}
+  ]
+end
 ```
 
-Simply enabling NervesKey will default to using i2c bus 1 and `:primary`
-cerificate pair. However, you can cusomtize these options as well to use
+NervesKey will default to using i2c bus 1 and `:primary` cerificate pair.
+However, you can cusomtize these options as well to use
 a different bus and certificate pair:
 
 ```elixir
 config :nerves_hub_link, :nerves_key,
-  enabled: true,
   certificate_pair: :aux,
   i2c_bus: 0
 ```
 
-If you aren't using NervesKey, you can also provide your own SSL options
-to use for the NervesHub socket connection via the `socket` key in the
-config using [valid Erlang ssl socket options](http://erlang.org/doc/man/ssl.html#TLS/DTLS%20OPTION%20DESCRIPTIONS%20-%20COMMON%20for%20SERVER%20and%20CLIENT)
+If you aren't using NervesKey, you can also provide your own options
+to use for the NervesHub socket connection via the `:socket` and `:ssl` keys,
+which are forwarded on to `phoenix_client` when creating the socket connection (see
+[`PhoenixClient.Socket`
+module](https://github.com/mobileoverlord/phoenix_client/blob/master/lib/phoenix_client/socket.ex#L57-L91)
+for support options.
+
+Any [valid Erlang ssl socket
+option](http://erlang.org/doc/man/ssl.html#TLS/DTLS%20OPTION%20DESCRIPTIONS%20-%20COMMON%20for%20SERVER%20and%20CLIENT)
+can go in the `:ssl` key.
 
 ```elixir
-config :nerves_hub_link, :socket,
-  cert: "some_cert_der",
-  keyfile: "path/to/keyfile"
+config :nerves_hub_link,
+  socket: [
+    json_library: Jason,
+    heartbeat_interval: 45_000
+  ],
+  ssl: [
+    cert: "some_cert_der",
+    keyfile: "path/to/keyfile"
+  ]
+```
+
+### Runtime Configuration
+
+Some cases require that connection configuration happens at runtime like
+selectively choosing which cert/key to use based on device, or reading a file
+stored on device which isn't available during compilation.
+
+Whatever the reason, `NervesHubLink` also supports runtime configuration via the
+`NervesHubLink.Configurator` behavior. This is called during application startup
+to build the configuration that is to be used for the connection. When
+implementing the behavior, you'll receive the initial default config read in
+from the application environment and you can modify it however you need.
+
+For example:
+
+```elixir
+defmodule MyApp.Configurator do
+  @behaviour NervesHubLink.Configurator
+
+  @impl true
+  def build(config) do
+    ssl = [certfile: "/root/ssl/cert.pem", keyfile: "/root/ssl/key.pem"]
+    %{config | ssl: ssl}
+  end
+end
+```
+
+Then you specify which configurator `NervesHubLink` should use in `config.exs`:
+
+```elixir
+config :nerves_hub_link, configurator: MyApp.Configurator
 ```
 
 ### Creating a NervesHub product

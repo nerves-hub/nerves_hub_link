@@ -20,6 +20,15 @@ defmodule NervesHubLink.Certificate do
 
   @ca_certs ca_certs
 
+  def key_pem_to_der(nil), do: <<>>
+
+  def key_pem_to_der(pem) do
+    case X509.PrivateKey.from_pem(pem) do
+      {:error, :not_found} -> <<>>
+      {:ok, decoded} -> X509.PrivateKey.to_der(decoded)
+    end
+  end
+
   def pem_to_der(nil), do: <<>>
 
   def pem_to_der(cert) do
