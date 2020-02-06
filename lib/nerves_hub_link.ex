@@ -9,6 +9,14 @@ defmodule NervesHubLink do
   end
 
   @doc """
+  Checks if the device has a socket connection with NervesHub
+  """
+  @dialyzer {:nowarn_function, {:socket_connected?, 0}}
+  defdelegate socket_connected?(pid \\ NervesHubLink.Socket),
+    to: PhoenixClient.Socket,
+    as: :connected?
+
+  @doc """
   Current status of the device channel
   """
   @spec status :: NervesHubLink.Channel.State.status()
