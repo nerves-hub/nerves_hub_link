@@ -1,3 +1,4 @@
+if Code.ensure_loaded?(NervesKey) do
 defmodule NervesHubLink.Configurator.NervesKey do
   @behaviour NervesHubLink.Configurator
 
@@ -68,4 +69,5 @@ defmodule NervesHubLink.Configurator.NervesKey do
     # got some bad opts. Ignore them
     socket_opts_from_nerves_key([], config)
   end
+end
 end

@@ -9,7 +9,8 @@ defmodule NervesHubLink.Configurator do
               nerves_key: [],
               params: %{},
               remote_iex: false,
-              socket: []
+              socket: [],
+              ssl: []
   end
 
   @callback build(%Config{}) :: %Config{}
@@ -31,6 +32,7 @@ defmodule NervesHubLink.Configurator do
   defp do_build(configurator) when is_atom(configurator) do
     base_config()
     |> configurator.build()
+    |> ssl_opts()
   end
 
   defp do_build({m, f, a}) when is_atom(m) and is_atom(f) and is_list(a) do
@@ -46,8 +48,19 @@ defmodule NervesHubLink.Configurator do
 
     url = "wss://#{base.device_api_host}:#{base.device_api_port}/socket/websocket"
 
-    socket = Keyword.put_new(base.socket, :url, url)
+    socket = [
+      url: url
+    ]
 
-    %{base | params: Nerves.Runtime.KV.get_all_active(), socket: socket}
+    ssl = [
+      ssl_verify: :verify_peer,
+      server_name_indication: to_charlist(base.device_api_sni)
+    ]
+
+    %{base | params: Nerves.Runtime.KV.get_all_active(), socket: socket, ssl: ssl}
+  end
+
+  defp ssl_opts(config) do
+    %{config | socket: Keyword.put(config.socket, :transport_opts, [socket_opts: config.ssl])}
   end
 end
