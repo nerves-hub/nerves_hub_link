@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.7.6
+
+Various cleanup and structure changes
+
+* Enhancements
+  * Add `Configurator` behavior - Gives the user a chance to do some configuration at runtime
+  * `:nerves_key` as optional dep 
+
 ## v0.7.5
 
 * Bug fixes
