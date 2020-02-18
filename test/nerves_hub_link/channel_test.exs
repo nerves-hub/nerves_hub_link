@@ -74,6 +74,17 @@ defmodule NervesHubLink.ChannelTest do
     test "catch all" do
       assert Channel.handle_info(:any, :state) == {:noreply, :state}
     end
+
+    test "update already in progress", %{state: state} do
+      state = %{state | status: {:updating, 20}}
+
+      # State is unchanged, effectively ignored
+      assert {:noreply, ^state} =
+               Channel.handle_info(
+                 %Message{event: "update", payload: %{"firmware_url" => ""}},
+                 state
+               )
+    end
   end
 
   test "handle_close", %{state: state} do

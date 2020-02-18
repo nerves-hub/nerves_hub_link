@@ -134,6 +134,16 @@ defmodule NervesHubLink.Channel do
 
   def terminate(_reason, _state), do: NervesHubLink.Connection.disconnected()
 
+  defp maybe_update_firmware(_data, %{status: {:updating, _percent}} = state) do
+    # Received an update message from NervesHub, but we're already in progress.
+    # It could be because the deployment/device was edited making a duplicate
+    # update message or a new deployment was created. Either way, lets not
+    # interrupt FWUP and let the task finish. After update and reboot, the
+    # device will check-in and get an update message if it was actually new and
+    # required
+    state
+  end
+
   defp maybe_update_firmware(%{"firmware_url" => url} = data, state) do
     # Cancel an existing timer if it exists.
     # This prevents rescheduled updates`
