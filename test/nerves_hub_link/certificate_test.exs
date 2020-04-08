@@ -6,7 +6,7 @@ defmodule NervesHubLink.CertificateTest do
 
   describe "pem_to_der/1" do
     test "decodes certificate" do
-      pem = File.read!(Path.join([:code.priv_dir(:nerves_hub_link), "ca_certs", "ca.pem"]))
+      pem = File.read!(Path.expand("ssl/prod/root-ca.pem"))
       assert is_binary(Certificate.pem_to_der(pem))
     end
 

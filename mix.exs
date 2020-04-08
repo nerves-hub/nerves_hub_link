@@ -62,7 +62,16 @@ defmodule NervesHubLink.MixProject do
   defp package do
     [
       licenses: ["Apache-2.0"],
-      links: %{"GitHub" => "https://github.com/nerves-hub/nerves_hub_link"}
+      links: %{"GitHub" => "https://github.com/nerves-hub/nerves_hub_link"},
+      files: [
+        "lib",
+        "ssl",
+        "CHANGELOG.md",
+        "LICENSE",
+        "mix.exs",
+        "README.md",
+        "provisioning.conf"
+      ]
     ]
   end
 
