@@ -1,11 +1,11 @@
-defmodule NervesHubLink.ChannelTest do
+defmodule NervesHubLink.DeviceChannelTest do
   # Fwup can only have one instance at a time.
   # Set async false to account for this
   use ExUnit.Case, async: true
-  alias NervesHubLink.{ClientMock, Channel}
+  alias NervesHubLink.{ClientMock, DeviceChannel}
   alias PhoenixClient.Message
 
-  doctest Channel
+  doctest DeviceChannel
 
   setup do
     # hack to stop Fwup streams if one was running
@@ -15,7 +15,7 @@ defmodule NervesHubLink.ChannelTest do
       _, _ -> :ok
     end
 
-    %{state: %Channel.State{}}
+    %{state: %DeviceChannel.State{}}
   end
 
   setup context, do: Mox.verify_on_exit!(context)
@@ -23,22 +23,22 @@ defmodule NervesHubLink.ChannelTest do
   describe "handle_in/3 - update" do
     test "no firmware url" do
       Mox.expect(ClientMock, :update_available, 0, fn _ -> :ok end)
-      assert Channel.handle_info(%Message{event: "update"}, %{}) == {:noreply, %{}}
+      assert DeviceChannel.handle_info(%Message{event: "update"}, %{}) == {:noreply, %{}}
     end
 
     test "firmware url - apply", %{state: state} do
       Mox.expect(ClientMock, :update_available, fn _ -> :apply end)
 
-      assert Channel.handle_info(
+      assert DeviceChannel.handle_info(
                %Message{event: "update", payload: %{"firmware_url" => ""}},
                state
-             ) == {:noreply, %Channel.State{status: {:updating, 0}}}
+             ) == {:noreply, %DeviceChannel.State{status: {:updating, 0}}}
     end
 
     test "firmware url - ignore" do
       Mox.expect(ClientMock, :update_available, fn _ -> :ignore end)
 
-      assert Channel.handle_info(
+      assert DeviceChannel.handle_info(
                %Message{event: "update", payload: %{"firmware_url" => ""}},
                %{}
              ) == {:noreply, %{}}
@@ -49,12 +49,12 @@ defmodule NervesHubLink.ChannelTest do
       Mox.expect(ClientMock, :update_available, fn _ -> {:reschedule, 999} end)
 
       assert {:noreply, state} =
-               Channel.handle_info(%Message{event: "update", payload: data}, state)
+               DeviceChannel.handle_info(%Message{event: "update", payload: data}, state)
 
       Mox.expect(ClientMock, :update_available, fn _ -> {:reschedule, 1} end)
 
       assert {:noreply, %{} = state} =
-               Channel.handle_info(%Message{event: "update", payload: data}, state)
+               DeviceChannel.handle_info(%Message{event: "update", payload: data}, state)
 
       assert_receive {:update_reschedule, ^data}
     end
@@ -64,7 +64,7 @@ defmodule NervesHubLink.ChannelTest do
       Mox.expect(ClientMock, :update_available, fn _ -> :ignore end)
 
       assert {:noreply, state} =
-               Channel.handle_info(%Message{event: "update", payload: data}, %{
+               DeviceChannel.handle_info(%Message{event: "update", payload: data}, %{
                  update_reschedule_timer: nil
                })
 
@@ -72,7 +72,7 @@ defmodule NervesHubLink.ChannelTest do
     end
 
     test "catch all" do
-      assert Channel.handle_info(:any, :state) == {:noreply, :state}
+      assert DeviceChannel.handle_info(:any, :state) == {:noreply, :state}
     end
 
     test "update already in progress", %{state: state} do
@@ -80,7 +80,7 @@ defmodule NervesHubLink.ChannelTest do
 
       # State is unchanged, effectively ignored
       assert {:noreply, ^state} =
-               Channel.handle_info(
+               DeviceChannel.handle_info(
                  %Message{event: "update", payload: %{"firmware_url" => ""}},
                  state
                )
@@ -93,8 +93,8 @@ defmodule NervesHubLink.ChannelTest do
     # TODO: Manage this agent better. Remove from test
     NervesHubLink.Connection.start_link([])
 
-    assert Channel.handle_info(%Message{event: "phx_close", payload: %{}}, state) ==
-             {:noreply, %Channel.State{connected?: false}}
+    assert DeviceChannel.handle_info(%Message{event: "phx_close", payload: %{}}, state) ==
+             {:noreply, %DeviceChannel.State{connected?: false}}
 
     assert_receive :join
   end
@@ -103,37 +103,37 @@ defmodule NervesHubLink.ChannelTest do
     test "fwup", %{state: state} do
       message = {:ok, 1, "message"}
       Mox.expect(ClientMock, :handle_fwup_message, fn ^message -> :ok end)
-      assert Channel.handle_info({:fwup, message}, state) == {:noreply, state}
+      assert DeviceChannel.handle_info({:fwup, message}, state) == {:noreply, state}
     end
 
     test "http_error", %{state: state} do
       error = "error"
       Mox.expect(ClientMock, :handle_error, fn ^error -> :apply end)
 
-      assert Channel.handle_info({:http_error, error}, state) ==
-               {:noreply, %Channel.State{status: :update_failed}}
+      assert DeviceChannel.handle_info({:http_error, error}, state) ==
+               {:noreply, %DeviceChannel.State{status: :update_failed}}
     end
 
     test "update_reschedule", %{state: state} do
       data = %{"firmware_url" => ""}
       Mox.expect(ClientMock, :update_available, fn ^data -> :apply end)
 
-      assert Channel.handle_info({:update_reschedule, data}, state) ==
-               {:noreply, %Channel.State{status: {:updating, 0}}}
+      assert DeviceChannel.handle_info({:update_reschedule, data}, state) ==
+               {:noreply, %DeviceChannel.State{status: {:updating, 0}}}
     end
   end
 
   describe "handle_info - down" do
     test "normal", %{state: state} do
-      assert Channel.handle_info({:DOWN, :any, :process, :any, :normal}, state) ==
+      assert DeviceChannel.handle_info({:DOWN, :any, :process, :any, :normal}, state) ==
                {:noreply, state}
     end
 
     test "non-normal", %{state: state} do
       Mox.expect(ClientMock, :handle_error, 1, fn _ -> :ok end)
 
-      assert Channel.handle_info({:DOWN, :any, :process, :any, :"non-normal"}, state) ==
-               {:noreply, %Channel.State{status: :update_failed}}
+      assert DeviceChannel.handle_info({:DOWN, :any, :process, :any, :"non-normal"}, state) ==
+               {:noreply, %DeviceChannel.State{status: :update_failed}}
     end
   end
 end
