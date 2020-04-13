@@ -4,7 +4,7 @@ defmodule NervesHubLink do
   """
   @spec connected? :: boolean()
   def connected?() do
-    channel_state()
+    device_channel_state()
     |> Map.get(:connected?, false)
   end
 
@@ -19,14 +19,14 @@ defmodule NervesHubLink do
   @doc """
   Current status of the device channel
   """
-  @spec status :: NervesHubLink.Channel.State.status()
+  @spec status :: NervesHubLink.DeviceChannel.State.status()
   def status() do
-    channel_state()
+    device_channel_state()
     |> Map.get(:status, :unknown)
   end
 
-  defp channel_state() do
-    GenServer.whereis(NervesHubLink.Channel)
+  defp device_channel_state() do
+    GenServer.whereis(NervesHubLink.DeviceChannel)
     |> case do
       channel when is_pid(channel) -> GenServer.call(channel, :get_state)
       _ -> %{}

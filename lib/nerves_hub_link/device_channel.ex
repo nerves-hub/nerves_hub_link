@@ -1,4 +1,4 @@
-defmodule NervesHubLink.Channel do
+defmodule NervesHubLink.DeviceChannel do
   use GenServer
   require Logger
 
