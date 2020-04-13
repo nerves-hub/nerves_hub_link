@@ -7,8 +7,6 @@ defmodule NervesHubLink.DeviceChannel do
 
   @rejoin_after Application.get_env(:nerves_hub_link, :rejoin_after, 5_000)
 
-  @client Application.get_env(:nerves_hub_link, :client, Client.Default)
-
   defmodule State do
     @type status ::
             :idle
@@ -62,7 +60,7 @@ defmodule NervesHubLink.DeviceChannel do
       when event in ["phx_error", "phx_close"] do
     reason = Map.get(payload, :reason, "unknown")
     NervesHubLink.Connection.disconnected()
-    _ = Client.handle_error(@client, reason)
+    _ = Client.handle_error(reason)
     Process.send_after(self(), :join, @rejoin_after)
     {:noreply, %{state | connected?: false}}
   end
@@ -83,7 +81,7 @@ defmodule NervesHubLink.DeviceChannel do
 
   def handle_info({:fwup, {:ok, 0, message}}, state) do
     Logger.info("[NervesHubLink] FWUP Finished")
-    _ = Client.handle_fwup_message(@client, message)
+    _ = Client.handle_fwup_message(message)
     Nerves.Runtime.reboot()
     {:noreply, state}
   end
@@ -103,12 +101,12 @@ defmodule NervesHubLink.DeviceChannel do
           state
       end
 
-    _ = Client.handle_fwup_message(@client, message)
+    _ = Client.handle_fwup_message(message)
     {:noreply, state}
   end
 
   def handle_info({:http_error, error}, state) do
-    _ = Client.handle_error(@client, error)
+    _ = Client.handle_error(error)
     Channel.push_async(state.channel, "status_update", %{status: "update failed"})
     {:noreply, %{state | status: :update_failed}}
   end
@@ -123,7 +121,7 @@ defmodule NervesHubLink.DeviceChannel do
 
   def handle_info({:DOWN, _, :process, _, reason}, state) do
     Logger.error("HTTP Streaming Error: #{inspect(reason)}")
-    _ = Client.handle_error(@client, reason)
+    _ = Client.handle_error(reason)
     Channel.push_async(state.channel, "status_update", %{status: "update failed"})
     {:noreply, %{state | status: :update_failed}}
   end
@@ -153,7 +151,7 @@ defmodule NervesHubLink.DeviceChannel do
     # possibly offload update decision to an external module.
     # This will allow application developers
     # to control exactly when an update is applied.
-    case Client.update_available(@client, data) do
+    case Client.update_available(data) do
       :apply ->
         {:ok, http} = HTTPFwupStream.start(self())
         spawn_monitor(HTTPFwupStream, :get, [http, url])

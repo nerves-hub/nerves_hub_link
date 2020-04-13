@@ -79,9 +79,9 @@ defmodule NervesHubLink.Client do
   @doc """
   This function is called internally by NervesHubLink to notify clients.
   """
-  @spec update_available(module(), update_data()) :: update_response()
-  def update_available(client, data) do
-    case apply_wrap(client, :update_available, [data]) do
+  @spec update_available(update_data()) :: update_response()
+  def update_available(data) do
+    case apply_wrap(mod(), :update_available, [data]) do
       :apply ->
         :apply
 
@@ -93,9 +93,7 @@ defmodule NervesHubLink.Client do
 
       wrong ->
         Logger.error(
-          "[NervesHubLink] Client: #{client}.update_available/1 bad return value: #{
-            inspect(wrong)
-          } Applying update."
+          "[NervesHubLink] Client: #{mod()}.update_available/1 bad return value: #{inspect(wrong)} Applying update."
         )
 
         :apply
@@ -105,26 +103,30 @@ defmodule NervesHubLink.Client do
   @doc """
   This function is called internally by NervesHubLink to notify clients of fwup progress.
   """
-  @spec handle_fwup_message(module(), fwup_message()) :: :ok
-  def handle_fwup_message(client, data) do
-    _ = apply_wrap(client, :handle_fwup_message, [data])
+  @spec handle_fwup_message(fwup_message()) :: :ok
+  def handle_fwup_message(data) do
+    _ = apply_wrap(mod(), :handle_fwup_message, [data])
     :ok
   end
 
   @doc """
   This function is called internally by NervesHubLink to notify clients of fwup errors.
   """
-  @spec handle_error(module(), any()) :: :ok
-  def handle_error(client, data) do
-    _ = apply_wrap(client, :handle_error, [data])
+  @spec handle_error(any()) :: :ok
+  def handle_error(data) do
+    _ = apply_wrap(mod(), :handle_error, [data])
   end
 
   # Catches exceptions and exits
-  defp apply_wrap(client, function, args) do
-    apply(client, function, args)
+  defp apply_wrap(mod, function, args) do
+    apply(mod, function, args)
   catch
     :error, reason -> {:error, reason}
     :exit, reason -> {:exit, reason}
     err -> err
+  end
+
+  defp mod() do
+    Application.get_env(:nerves_hub_link, :client, Client.Default)
   end
 end
