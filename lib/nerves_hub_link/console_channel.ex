@@ -48,7 +48,6 @@ defmodule NervesHubLink.ConsoleChannel do
   alias PhoenixClient.{Channel, Message}
   alias NervesHubLink.Client
 
-  @client Application.get_env(:nerves_hub_link, :client, Client.Default)
   @rejoin_after Application.get_env(:nerves_hub_link, :rejoin_after, 5_000)
 
   defmodule State do
@@ -98,7 +97,7 @@ defmodule NervesHubLink.ConsoleChannel do
   def handle_info(%Message{event: event, payload: payload}, state)
       when event in ["phx_error", "phx_close"] do
     reason = Map.get(payload, :reason, "unknown")
-    _ = Client.handle_error(@client, reason)
+    _ = Client.handle_error(reason)
     Process.send_after(self(), :join, @rejoin_after)
     {:noreply, state}
   end
@@ -110,7 +109,7 @@ defmodule NervesHubLink.ConsoleChannel do
   end
 
   def handle_info(req, state) do
-    Client.handle_error(@client, "Unhandled Console handle_info - #{inspect(req)}")
+    Client.handle_error("Unhandled Console handle_info - #{inspect(req)}")
     {:noreply, state}
   end
 
@@ -122,7 +121,7 @@ defmodule NervesHubLink.ConsoleChannel do
       {:noreply, state}
     else
       _err ->
-        Client.handle_error(@client, "IEx Group Leader changed or died. Restarting")
+        Client.handle_error("IEx Group Leader changed or died. Restarting")
         Process.exit(state.iex_pid, :kill)
         # restart IEx process
         create_or_reuse_iex_server(%{state | iex_pid: nil})
@@ -188,7 +187,7 @@ defmodule NervesHubLink.ConsoleChannel do
       io_request(from, reply_as, {:put_chars, encoding, data}, state)
     catch
       thrown_value ->
-        Client.handle_error(@client, thrown_value)
+        Client.handle_error(thrown_value)
         io_reply(from, reply_as, {:error, thrown_value})
     end
   end
@@ -200,7 +199,7 @@ defmodule NervesHubLink.ConsoleChannel do
 
       error ->
         if state.retry_count >= 10, do: raise("Cannot send IO through channel - Is it connected?")
-        Client.handle_error(@client, error)
+        Client.handle_error(error)
         io_request(from, reply_as, req, %{state | retry_count: state.retry_count + 1})
     end
 
@@ -208,7 +207,7 @@ defmodule NervesHubLink.ConsoleChannel do
   end
 
   defp io_request(_, _, req, state) do
-    Client.handle_error(@client, "Unknown IO Request !! - #{inspect(req)}")
+    Client.handle_error("Unknown IO Request !! - #{inspect(req)}")
     state
   end
 end
