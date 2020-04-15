@@ -3,10 +3,7 @@ defmodule NervesHubLink do
   Checks if the device is connected to the NervesHub channel.
   """
   @spec connected? :: boolean()
-  def connected?() do
-    device_channel_state()
-    |> Map.get(:connected?, false)
-  end
+  defdelegate connected?(), to: NervesHubLink.DeviceChannel
 
   @doc """
   Checks if the device has a socket connection with NervesHub
@@ -17,19 +14,8 @@ defmodule NervesHubLink do
     as: :connected?
 
   @doc """
-  Current status of the device channel
+  Current status of the update manager
   """
-  @spec status :: NervesHubLink.DeviceChannel.State.status()
-  def status() do
-    device_channel_state()
-    |> Map.get(:status, :unknown)
-  end
-
-  defp device_channel_state() do
-    GenServer.whereis(NervesHubLink.DeviceChannel)
-    |> case do
-      channel when is_pid(channel) -> GenServer.call(channel, :get_state)
-      _ -> %{}
-    end
-  end
+  @spec status :: NervesHubLink.UpdateManager.State.status()
+  defdelegate status(), to: NervesHubLink.UpdateManager
 end
