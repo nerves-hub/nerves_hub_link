@@ -1,7 +1,14 @@
 defmodule NervesHubLink.Application do
   use Application
 
-  alias NervesHubLink.{DeviceChannel, Configurator, Connection, ConsoleChannel, Socket}
+  alias NervesHubLink.{
+    DeviceChannel,
+    Configurator,
+    Connection,
+    ConsoleChannel,
+    Socket,
+    UpdateManager
+  }
 
   def start(_type, _args) do
     config = Configurator.build()
@@ -10,7 +17,8 @@ defmodule NervesHubLink.Application do
       [
         Connection,
         {PhoenixClient.Socket, {config.socket, [name: Socket]}},
-        {DeviceChannel, [socket: Socket, params: config.params]}
+        {DeviceChannel, [socket: Socket, params: config.params]},
+        UpdateManager
       ]
       |> add_console_child(config)
 
