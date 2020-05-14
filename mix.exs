@@ -21,7 +21,9 @@ defmodule NervesHubLink.MixProject do
         coveralls: :test,
         "coveralls.detail": :test,
         "coveralls.post": :test,
-        "coveralls.html": :test
+        "coveralls.html": :test,
+        docs: :docs,
+        "hex.publish": :docs
       ],
       start_permanent: Mix.env() == :prod,
       test_coverage: [tool: ExCoveralls],
@@ -78,7 +80,7 @@ defmodule NervesHubLink.MixProject do
   defp deps do
     [
       {:dialyxir, "~> 1.0.0", only: [:dev, :test], runtime: false},
-      {:ex_doc, "~> 0.18", only: [:dev, :test], runtime: false},
+      {:ex_doc, "~> 0.18", only: :docs, runtime: false},
       {:excoveralls, "~> 0.10", only: :test},
       {:fwup, "~> 0.4.0"},
       {:hackney, "~> 1.10"},
