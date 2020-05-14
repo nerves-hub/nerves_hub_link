@@ -21,6 +21,10 @@ defmodule NervesHubLink.Client.DefaultTest do
       assert Default.handle_fwup_message({:warning, :any, "message"}) == :ok
     end
 
+    test "completion" do
+      assert Default.handle_fwup_message({:ok, 0, "success"}) == :ok
+    end
+
     test "any" do
       assert Default.handle_fwup_message(:any) == :ok
     end

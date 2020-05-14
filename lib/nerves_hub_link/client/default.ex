@@ -24,6 +24,10 @@ defmodule NervesHubLink.Client.Default do
     Logger.warn("FWUP WARN: #{message}")
   end
 
+  def handle_fwup_message({:ok, status, message}) do
+    Logger.info("FWUP SUCCESS: #{status} #{message}")
+  end
+
   def handle_fwup_message(fwup_message) do
     Logger.warn("Unknown FWUP message: #{inspect(fwup_message)}")
   end
