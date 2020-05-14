@@ -77,7 +77,7 @@ defmodule NervesHubLink.MixProject do
 
   defp deps do
     [
-      {:dialyxir, "~> 1.0.0-rc.4", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.0.0", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.18", only: [:dev, :test], runtime: false},
       {:excoveralls, "~> 0.10", only: :test},
       {:fwup, "~> 0.4.0"},
