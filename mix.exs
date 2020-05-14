@@ -13,7 +13,7 @@ defmodule NervesHubLink.MixProject do
       deps: deps(),
       description: description(),
       dialyzer: dialyzer(),
-      docs: [main: "readme", extras: ["README.md"]],
+      docs: [main: "readme", extras: ["README.md", "CHANGELOG.md"]],
       elixir: "~> 1.8",
       elixirc_paths: elixirc_paths(Mix.env()),
       package: package(),
