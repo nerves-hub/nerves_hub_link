@@ -93,7 +93,9 @@ defmodule NervesHubLink.Client do
 
       wrong ->
         Logger.error(
-          "[NervesHubLink] Client: #{mod()}.update_available/1 bad return value: #{inspect(wrong)} Applying update."
+          "[NervesHubLink] Client: #{inspect(mod())}.update_available/1 bad return value: #{
+            inspect(wrong)
+          } Applying update."
         )
 
         :apply
@@ -127,6 +129,6 @@ defmodule NervesHubLink.Client do
   end
 
   defp mod() do
-    Application.get_env(:nerves_hub_link, :client, Client.Default)
+    Application.get_env(:nerves_hub_link, :client, NervesHubLink.Client.Default)
   end
 end
