@@ -4,7 +4,7 @@ defmodule NervesHubLink.MixProject do
   Application.put_env(
     :nerves_hub_link,
     :nerves_provisioning,
-    Path.expand("priv/provisioning.conf")
+    Path.expand("provisioning.conf")
   )
 
   def project do
