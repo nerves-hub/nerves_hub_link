@@ -12,7 +12,7 @@ defmodule NervesHubLink.Client.Default do
   def update_available(_), do: :apply
 
   @impl NervesHubLink.Client
-  def handle_fwup_message({:progress, percent}) when rem(percent, 25) == 0 do
+  def handle_fwup_message({:progress, percent}) do
     Logger.debug("FWUP PROG: #{percent}%")
   end
 
