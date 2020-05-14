@@ -10,13 +10,15 @@ defmodule NervesHubLink.Certificate do
 
   ca_cert_path =
     System.get_env("NERVES_HUB_CA_CERTS") || Application.get_env(:nerves_hub_link, :ca_certs) ||
-      Application.app_dir(:nerves_hub_link, ["ssl", "prod"])
+      Path.join([File.cwd!(), "ssl", "prod"])
 
   ca_certs =
     ca_cert_path
     |> File.ls!()
     |> Enum.map(&File.read!(Path.join(ca_cert_path, &1)))
     |> Enum.map(&X509.Certificate.to_der(X509.Certificate.from_pem!(&1)))
+
+  if ca_certs == [], do: raise("Couldn't find NervesHub CA certificates in '#{ca_cert_path}'")
 
   @ca_certs ca_certs
 
