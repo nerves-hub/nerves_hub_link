@@ -25,7 +25,7 @@ defmodule NervesHubLink.MixProject do
       ],
       start_permanent: Mix.env() == :prod,
       test_coverage: [tool: ExCoveralls],
-      version: "0.7.6"
+      version: "0.8.0"
     ]
   end
 
