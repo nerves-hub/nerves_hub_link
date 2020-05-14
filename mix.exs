@@ -1,12 +1,6 @@
 defmodule NervesHubLink.MixProject do
   use Mix.Project
 
-  Application.put_env(
-    :nerves_hub_link,
-    :nerves_provisioning,
-    Path.expand("priv/provisioning.conf")
-  )
-
   def project do
     [
       app: :nerves_hub_link,
@@ -69,8 +63,7 @@ defmodule NervesHubLink.MixProject do
         "CHANGELOG.md",
         "LICENSE",
         "mix.exs",
-        "README.md",
-        "provisioning.conf"
+        "README.md"
       ]
     ]
   end
