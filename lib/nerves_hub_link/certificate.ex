@@ -1,12 +1,9 @@
 defmodule NervesHubLink.Certificate do
-  # Get the fwup public keys from the app environment.
-  # For now, this first requires adding a key to the environment that
-  # the resolver depends on until https://github.com/nerves-hub/nerves_hub_cli/pull/125
-  # is merged and released
-  Application.put_env(:nerves_hub, :org, Application.get_env(:nerves_hub_link, :org))
+  # Look for org here or from CLI config
+  org = Application.get_env(:nerves_hub_link, :org, Application.get_env(:nerve_hub_cli, :org))
 
   @public_keys Application.get_env(:nerves_hub_link, :fwup_public_keys, [])
-               |> NervesHubCLI.resolve_fwup_public_keys()
+               |> NervesHubCLI.resolve_fwup_public_keys(org)
 
   ca_cert_path =
     System.get_env("NERVES_HUB_CA_CERTS") || Application.get_env(:nerves_hub_link, :ca_certs) ||
