@@ -88,8 +88,7 @@ defmodule NervesHubLink.MixProject do
       {:nerves_hub_cli, "~> 0.8", runtime: false},
       {:nerves_key, "~> 0.5", optional: true},
       {:nerves_runtime, "~> 0.8"},
-      {:phoenix_client, "~> 0.7"},
-      {:websocket_client, "~> 1.3"},
+      {:phoenix_client, "~> 0.11"},
       {:x509, "~> 0.5"}
     ]
   end
