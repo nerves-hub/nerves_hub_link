@@ -81,9 +81,7 @@ defmodule NervesHubLink.Client do
   """
   @spec update_available(update_data()) :: update_response()
   def update_available(data) do
-    ret = apply_wrap(mod(), :update_available, [data])
-
-    case ret do
+    case apply_wrap(mod(), :update_available, [data]) do
       :apply ->
         :apply
 
