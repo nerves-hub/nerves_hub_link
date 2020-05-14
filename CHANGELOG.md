@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.8.0
+
+* `nerves_hub_cli -> 0.10.0` - This decouples the CLI from the deprecated `:nerves_hub`
+lib and frees this lib to do the same. If you are setting `:nerves_hub, org: org` in
+your config, compilation will fail until you change it to use this lib key:
+
+```elixir
+config :nerves_hub_link, org: org
+```
+* `nerves_hub_user_api -> 0.6.0`
+
+* Enhancements
+  * Updates example app
+  * Cleanup and structural changes
+  * The default NervesHub certificates are no longer stored in the `priv` directory so
+  if you're not using them, they won't be included.
+
+* Fixes
+  * Fixes an issue where a device may get an update message from the server while
+  performing an update which would cause things to crash.
+  * decouples `:nerves_hub` config values - see note above
+
 ## v0.7.6
 
 Various cleanup and structure changes
