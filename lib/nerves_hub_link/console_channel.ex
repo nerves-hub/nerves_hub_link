@@ -17,7 +17,7 @@ defmodule NervesHubLink.ConsoleChannel do
 
   * `get_line` - IO is requesting the next line from user input.
   Typically just `iex () >`
-  * `put_chars` - Display the sepcified characters from the IEx Server for user review
+  * `put_chars` - Display the specified characters from the IEx Server for user review
     * This requires an immediate reply of `:ok` and then IEx will send a `:get_line`
     request to await the user input. NervesHubLinkWeb handles immediately replies `:ok`
     to these events (see below)
