@@ -175,7 +175,9 @@ defmodule NervesHubLink.ConsoleChannel do
 
   # All other requests push IO Request over the socket.
   defp io_request(from, reply_as, {:get_line, encoding, data} = req, state) do
-    Channel.push_async(state.channel, "get_line", %{encoding: encoding, data: data})
+    flattened_data = flatten_data(encoding, data)
+
+    Channel.push_async(state.channel, "get_line", %{encoding: encoding, data: flattened_data})
     %{state | request: {from, reply_as, req}}
   end
 
@@ -193,7 +195,9 @@ defmodule NervesHubLink.ConsoleChannel do
   end
 
   defp io_request(from, reply_as, {:put_chars, encoding, data} = req, state) do
-    case Channel.push(state.channel, "put_chars", %{encoding: encoding, data: data}) do
+    flattened_data = flatten_data(encoding, data)
+
+    case Channel.push(state.channel, "put_chars", %{encoding: encoding, data: flattened_data}) do
       {:ok, %{}} ->
         io_reply(from, reply_as, :ok)
 
@@ -210,4 +214,7 @@ defmodule NervesHubLink.ConsoleChannel do
     Client.handle_error("Unknown IO Request !! - #{inspect(req)}")
     state
   end
+
+  defp flatten_data(:unicode, data), do: IO.chardata_to_string(data)
+  defp flatten_data(_other, data), do: IO.iodata_to_binary(data)
 end
