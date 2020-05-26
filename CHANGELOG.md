@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.8.1
+
+  * Enhancements
+    * Flatten console data being sent to NervesHub
+    * Log all fwup progress percentage messages
+
 ## v0.8.0
 
 * `nerves_hub_cli -> 0.10.0` - This decouples the CLI from the deprecated `:nerves_hub`
