@@ -47,9 +47,9 @@ defmodule NervesHubLink.UpdateManager do
     {:reply, status, state}
   end
 
-  def handle_info({:fwup, {:ok, 0, message}}, state) do
+  def handle_info({:fwup, {:ok, 0, _message} = full_message}, state) do
     Logger.info("[NervesHubLink] FWUP Finished")
-    _ = Client.handle_fwup_message(message)
+    _ = Client.handle_fwup_message(full_message)
     Nerves.Runtime.reboot()
     {:noreply, state}
   end
