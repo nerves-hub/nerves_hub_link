@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.8.2
+
+  * Bug Fixes
+    * Fixes a broken call to `handle_fwup_message` on fwup success (thanks @bmteller! :heart:)
+
 ## v0.8.1
 
   * Enhancements
