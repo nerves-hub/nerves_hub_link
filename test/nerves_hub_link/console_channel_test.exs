@@ -14,47 +14,24 @@ defmodule NervesHubLink.ConsoleChannelTest do
   end
 
   describe "handle_info - Channel Messages" do
-    test "iex_terminate", %{state: state} do
-      iex_pid = spawn(fn -> :timer.sleep(10000) end)
-      message = %Message{event: "iex_terminate"}
+    test "restart IEx process", %{state: state} do
+      {:ok, iex_pid} = ExTTY.start_link(type: :elixir, name: Test)
+      state = %{state | iex_pid: iex_pid}
+      Process.unlink(iex_pid)
+      message = %Message{event: "restart"}
 
-      {:noreply, new_state} = ConsoleChannel.handle_info(message, %{state | iex_pid: iex_pid})
-
-      assert new_state.iex_pid == nil
-      refute Process.alive?(iex_pid)
+      {:noreply, new_state} = ConsoleChannel.handle_info(message, state)
+      assert new_state.iex_pid != state.iex_pid
     end
 
-    test "init - creates and links IEx server", %{state: state} do
-      {:noreply, new_state} = ConsoleChannel.handle_info(%Message{event: "init"}, state)
-      assert Process.alive?(new_state.iex_pid)
-      group_leader = Process.info(new_state.iex_pid) |> Keyword.get(:group_leader)
-      assert group_leader == self()
-    end
-
-    test "init - reuses existing IEx server in good state", %{state: state} do
-      {:noreply, new_state} = ConsoleChannel.handle_info(%Message{event: "init"}, state)
-
-      # Repeating same message with the new_state should just return it
-      assert {:noreply, ^new_state} =
-               ConsoleChannel.handle_info(%Message{event: "init"}, new_state)
-    end
-
-    test "init - resets IEx server when existing has mismatch group_leader", %{state: state} do
-      Mox.expect(ClientMock, :handle_error, fn _ -> :ok end)
-      iex_pid = spawn(fn -> :timer.sleep(10000) end)
-      message = %Message{event: "init"}
-
-      {:noreply, new_state} = ConsoleChannel.handle_info(message, %{state | iex_pid: iex_pid})
-      assert new_state.iex_pid != iex_pid
-    end
-
-    test "io_reply - get_line", %{state: state} do
-      state = %{state | request: {self(), "reply_as", "ignored"}}
-      data = "wat"
-      msg = %Message{event: "io_reply", payload: %{"data" => data, "kind" => "get_line"}}
+    test "dn - sends text to ExTTY", %{state: state} do
+      {:ok, iex_pid} = ExTTY.start_link(handler: self(), type: :elixir)
+      state = %{state | iex_pid: iex_pid}
+      data = "Howdy\r\n"
+      msg = %Message{event: "dn", payload: %{"data" => data}}
 
       assert {:noreply, state} == ConsoleChannel.handle_info(msg, state)
-      assert_receive {:io_reply, "reply_as", ^data}
+      assert_receive {:tty_data, "\e[33m\e[36mHowdy\e[0m\e[33m\e[0m\r\n"}
     end
 
     test "phx_error - attempts rejoin", %{state: state} do
@@ -69,44 +46,6 @@ defmodule NervesHubLink.ConsoleChannelTest do
       msg = %Message{event: "phx_close", payload: %{}}
       assert ConsoleChannel.handle_info(msg, state) == {:noreply, state}
       assert_receive :join
-    end
-  end
-
-  describe "handle_info - :io_request" do
-    test "ignores :setopts" do
-      req = {:io_request, self(), "reply_as", {:setopts, {}}}
-      assert ConsoleChannel.handle_info(req, %{}) == {:noreply, %{}}
-      assert_receive {:io_reply, "reply_as", {:error, :enotsup}}
-    end
-
-    test ":getopts" do
-      req = {:io_request, self(), "reply_as", :getopts}
-      assert ConsoleChannel.handle_info(req, %{}) == {:noreply, %{}}
-      assert_receive {:io_reply, "reply_as", {:ok, [binary: true, encoding: :unicode]}}
-    end
-
-    test "ignores :get_geometry, :columns" do
-      req = {:io_request, self(), "reply_as", {:get_geometry, :columns}}
-      assert ConsoleChannel.handle_info(req, %{}) == {:noreply, %{}}
-      assert_receive {:io_reply, "reply_as", {:error, :enotsup}}
-    end
-
-    test "ignores :get_geometry, :rows" do
-      req = {:io_request, self(), "reply_as", {:get_geometry, :rows}}
-      assert ConsoleChannel.handle_info(req, %{}) == {:noreply, %{}}
-      assert_receive {:io_reply, "reply_as", {:error, :enotsup}}
-    end
-
-    test ":get_line", %{state: state} do
-      req = {:io_request, self(), "reply_as", {:get_line, :unicode, "iex()>"}}
-      {:noreply, new_state} = ConsoleChannel.handle_info(req, state)
-      assert new_state.request == Tuple.delete_at(req, 0)
-    end
-
-    test "reports unknown :io_request", %{state: state} do
-      Mox.expect(ClientMock, :handle_error, fn _ -> :ok end)
-      req = {:io_request, self(), "reply_as", :wat}
-      assert ConsoleChannel.handle_info(req, state) == {:noreply, state}
     end
   end
 
