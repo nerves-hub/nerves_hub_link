@@ -1,6 +1,6 @@
 # NervesHubLink
 
-[![CircleCI](https://circleci.com/gh/nerves-hub/nerves_hub_link/tree/master.svg?style=svg)](https://circleci.com/gh/nerves-hub/nerves_hub_link/tree/master)
+[![CircleCI](https://circleci.com/gh/nerves-hub/nerves_hub_link/tree/main.svg?style=svg)](https://circleci.com/gh/nerves-hub/nerves_hub_link/tree/main)
 [![Hex version](https://img.shields.io/hexpm/v/nerves_hub_link.svg "Hex version")](https://hex.pm/packages/nerves_hub_link)
 
 This is the official client for devices that want to receive firmware updates from NervesHub.
@@ -132,7 +132,7 @@ If you aren't using NervesKey, you can also provide your own options
 to use for the NervesHub socket connection via the `:socket` and `:ssl` keys,
 which are forwarded on to `phoenix_client` when creating the socket connection (see
 [`PhoenixClient.Socket`
-module](https://github.com/mobileoverlord/phoenix_client/blob/master/lib/phoenix_client/socket.ex#L57-L91)
+module](https://github.com/mobileoverlord/phoenix_client/blob/main/lib/phoenix_client/socket.ex#L57-L91)
 for support options.
 
 Any [valid Erlang ssl socket
@@ -436,6 +436,14 @@ feature is disabled by default. To enable, add the following to your `config.exs
 
 ```elixir
 config :nerves_hub_link, remote_iex: true
+```
+
+The remote IEx process is started on the first data request from NervesHub and is
+terminated after 5 minutes of inactivity. You can adjust this by setting
+`:remote_iex_timeout` value in seconds in your `config.exs`:
+
+```elixir
+config :nerves_hub_link, remote_iex_timeout: 900 # 15 minutes
 ```
 
 You may also need additional permissions on NervesHub to see the device and to use the
