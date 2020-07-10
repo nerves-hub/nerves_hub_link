@@ -7,8 +7,6 @@ defmodule NervesHubLink.ConsoleChannelTest do
 
   setup context do
     context = Map.put(context, :state, %ConsoleChannel.State{})
-    :ok = Application.ensure_started(:iex)
-    Application.put_env(:nerves_hub_link, :remote_iex, true)
     Mox.verify_on_exit!(context)
     context
   end
@@ -30,8 +28,20 @@ defmodule NervesHubLink.ConsoleChannelTest do
       data = "Howdy\r\n"
       msg = %Message{event: "dn", payload: %{"data" => data}}
 
-      assert {:noreply, state} == ConsoleChannel.handle_info(msg, state)
+      assert {:noreply, state, 300_000} == ConsoleChannel.handle_info(msg, state)
       assert_receive {:tty_data, "\e[33m\e[36mHowdy\e[0m\e[33m\e[0m\r\n"}
+    end
+
+    test "dn - starts new IEx process if needed", %{state: state} do
+      data = "Howdy\r\n"
+      msg = %Message{event: "dn", payload: %{"data" => data}}
+
+      assert is_nil(state.iex_pid)
+
+      assert {:noreply, new_state, 300_000} = ConsoleChannel.handle_info(msg, state)
+      assert_receive {:tty_data, "\e[33m\e[36mHowdy\e[0m\e[33m\e[0m\r\n"}
+
+      assert is_pid(new_state.iex_pid)
     end
 
     test "phx_error - attempts rejoin", %{state: state} do

@@ -49,11 +49,8 @@ defmodule NervesHubLink.ConsoleChannel do
 
   @impl true
   def init(opts) do
-    state = State.__struct__(opts)
-    {:ok, iex_pid} = ExTTY.start_link(handler: self(), type: :elixir)
     send(self(), :join)
-
-    {:ok, %{state | iex_pid: iex_pid}}
+    {:ok, State.__struct__(opts)}
   end
 
   @impl true
@@ -72,18 +69,29 @@ defmodule NervesHubLink.ConsoleChannel do
 
   def handle_info({:tty_data, data}, state) do
     Channel.push_async(state.channel, "up", %{data: data})
-    {:noreply, state}
+    {:noreply, state, iex_timeout()}
   end
 
   def handle_info(%Message{event: "restart"}, state) do
-    :ok = GenServer.stop(state.iex_pid, 10_000)
-    {:ok, iex_pid} = ExTTY.start_link(handler: self(), type: :elixir)
-    {:noreply, %{state | iex_pid: iex_pid}}
+    Logger.warn("[#{inspect(__MODULE__)}] Restarting IEx process from web request")
+
+    Channel.push_async(state.channel, "up", %{data: "\r\n*** Restarting IEx ***\r\n"})
+
+    state =
+      state
+      |> stop_iex()
+      |> start_iex()
+
+    {:noreply, state}
+  end
+
+  def handle_info(%Message{event: "dn"} = msg, %{iex_pid: nil} = state) do
+    handle_info(msg, start_iex(state))
   end
 
   def handle_info(%Message{event: "dn", payload: %{"data" => data}}, state) do
     ExTTY.send_text(state.iex_pid, data)
-    {:noreply, state}
+    {:noreply, state, iex_timeout()}
   end
 
   def handle_info(%Message{event: event, payload: payload}, state)
@@ -94,8 +102,40 @@ defmodule NervesHubLink.ConsoleChannel do
     {:noreply, state}
   end
 
+  def handle_info(:timeout, state) do
+    msg = """
+    \r\n
+    ****************************************\r\n
+    *   Session timeout due to inactivity  *\r\n
+    *                                      *\r\n
+    *   Press any key to continue...       *\r\n
+    ****************************************\r\n
+    """
+
+    Channel.push_async(state.channel, "up", %{data: msg})
+
+    {:noreply, stop_iex(state)}
+  end
+
   def handle_info(req, state) do
     Client.handle_error("Unhandled Console handle_info - #{inspect(req)}")
     {:noreply, state}
+  end
+
+  defp iex_timeout() do
+    Application.get_env(:nerves_hub_link, :remote_iex_timeout, 300) * 1000
+  end
+
+  defp start_iex(state) do
+    {:ok, iex_pid} = ExTTY.start_link(handler: self(), type: :elixir)
+    %{state | iex_pid: iex_pid}
+  end
+
+  defp stop_iex(%{iex_pid: nil} = state), do: state
+
+  defp stop_iex(%{iex_pid: iex} = state) do
+    _ = Process.unlink(iex)
+    :ok = GenServer.stop(iex, 10_000)
+    %{state | iex_pid: nil}
   end
 end
