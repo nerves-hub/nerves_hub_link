@@ -35,7 +35,7 @@ defmodule NervesHubLink.ConsoleChannel do
 
   @rejoin_after Application.get_env(:nerves_hub_link, :rejoin_after, 5_000)
 
-  @version Mix.Project.config()[:version]
+  @version "1.0.0"
 
   defmodule State do
     defstruct socket: nil,
