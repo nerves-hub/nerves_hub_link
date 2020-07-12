@@ -1,6 +1,9 @@
 defmodule NervesHubLink.MixProject do
   use Mix.Project
 
+  @version "0.8.2"
+  @source_url "https://github.com/nerves-hub/nerves_hub_link"
+
   Application.put_env(
     :nerves_hub_link,
     :nerves_provisioning,
@@ -27,7 +30,7 @@ defmodule NervesHubLink.MixProject do
       ],
       start_permanent: Mix.env() == :prod,
       test_coverage: [tool: ExCoveralls],
-      version: "0.8.2"
+      version: @version
     ]
   end
 
@@ -64,7 +67,7 @@ defmodule NervesHubLink.MixProject do
   defp package do
     [
       licenses: ["Apache-2.0"],
-      links: %{"GitHub" => "https://github.com/nerves-hub/nerves_hub_link"},
+      links: %{"GitHub" => @source_url},
       files: [
         "lib",
         "ssl",
