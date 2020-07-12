@@ -16,7 +16,7 @@ defmodule NervesHubLink.MixProject do
       deps: deps(),
       description: description(),
       dialyzer: dialyzer(),
-      docs: [main: "readme", extras: ["README.md", "CHANGELOG.md"]],
+      docs: docs(),
       elixir: "~> 1.8",
       elixirc_paths: elixirc_paths(Mix.env()),
       package: package(),
@@ -61,6 +61,16 @@ defmodule NervesHubLink.MixProject do
       flags: [:race_conditions, :error_handling, :underspecs],
       plt_add_apps: [:atecc508a, :nerves_key, :nerves_key_pkcs11],
       list_unused_filters: true
+    ]
+  end
+
+  defp docs do
+    [
+      extras: ["README.md", "CHANGELOG.md"],
+      main: "readme",
+      source_ref: "v#{@version}",
+      source_url: @source_url,
+      skip_undefined_reference_warnings_on: ["CHANGELOG.md"]
     ]
   end
 
