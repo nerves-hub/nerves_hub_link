@@ -116,7 +116,7 @@ defmodule NervesHubLink.UpdateManager do
     case Client.update_available(data) do
       :apply ->
         {:ok, http} = HTTPFwupStream.start(self())
-        spawn_monitor(HTTPFwupStream, :get, [http, url])
+        _ = spawn_monitor(HTTPFwupStream, :get, [http, url])
         Logger.info("[NervesHubLink] Downloading firmware: #{url}")
         %{state | status: {:updating, 0}}
 
@@ -135,9 +135,7 @@ defmodule NervesHubLink.UpdateManager do
   defp maybe_cancel_timer(%{update_reschedule_timer: nil} = state), do: state
 
   defp maybe_cancel_timer(%{update_reschedule_timer: timer} = state) do
-    if Process.read_timer(timer) do
-      Process.cancel_timer(timer)
-    end
+    _ = Process.cancel_timer(timer)
 
     %{state | update_reschedule_timer: nil}
   end
