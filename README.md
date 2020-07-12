@@ -118,8 +118,8 @@ def deps() do
 end
 ```
 
-NervesKey will default to using i2c bus 1 and `:primary` cerificate pair.
-However, you can cusomtize these options as well to use
+NervesKey will default to using i2c bus 1 and `:primary` certificate pair.
+However, you can customize these options as well to use
 a different bus and certificate pair:
 
 ```elixir
