@@ -1,15 +1,21 @@
 # Changelog
 
+## v0.9.0
+
+This release supports the new NervesHub console terminal. After upgrading,
+remote sessions should look almost the same as `ssh`-based ones: tab-completion,
+colors, and commandline history work as expected now.
+
 ## v0.8.2
 
-  * Bug Fixes
-    * Fixes a broken call to `handle_fwup_message` on fwup success (thanks @bmteller! :heart:)
+* Bug Fixes
+  * Fixes a broken call to `handle_fwup_message` on fwup success (thanks @bmteller! :heart:)
 
 ## v0.8.1
 
-  * Enhancements
-    * Flatten console data being sent to NervesHub
-    * Log all fwup progress percentage messages
+* Enhancements
+  * Flatten console data being sent to NervesHub
+  * Log all fwup progress percentage messages
 
 ## v0.8.0
 
@@ -39,7 +45,7 @@ Various cleanup and structure changes
 
 * Enhancements
   * Add `Configurator` behavior - Gives the user a chance to do some configuration at runtime
-  * `:nerves_key` as optional dep 
+  * `:nerves_key` as optional dep
 
 ## v0.7.5
 
