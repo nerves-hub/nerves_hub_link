@@ -51,7 +51,7 @@ defmodule NervesHubLink.HTTPFwupStream do
 
   @impl true
   def init([cb]) do
-    start_httpc()
+    _ = start_httpc()
 
     devpath = Nerves.Runtime.KV.get("nerves_fw_devpath") || "/dev/mmcblk0"
     args = ["--apply", "--no-unmount", "-d", devpath, "--task", "upgrade"]
