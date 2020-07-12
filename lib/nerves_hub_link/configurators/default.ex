@@ -6,7 +6,7 @@ defmodule NervesHubLink.Configurator.Default do
   @cert "nerves_hub_cert"
   @key "nerves_hub_key"
 
-  @impl true
+  @impl NervesHubLink.Configurator
   def build(%Config{} = config) do
     ssl =
       config.ssl

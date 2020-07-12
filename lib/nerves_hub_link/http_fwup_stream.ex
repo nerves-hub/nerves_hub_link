@@ -49,7 +49,7 @@ defmodule NervesHubLink.HTTPFwupStream do
     GenServer.call(pid, {:get, url}, :infinity)
   end
 
-  @impl true
+  @impl GenServer
   def init([cb]) do
     start_httpc()
 
@@ -82,14 +82,14 @@ defmodule NervesHubLink.HTTPFwupStream do
      }}
   end
 
-  @impl true
+  @impl GenServer
   def terminate(:normal, state) do
     GenServer.stop(state.fwup, :normal)
     :inets.stop(:httpc, @httpc_profile)
     :noop
   end
 
-  @impl true
+  @impl GenServer
   def terminate({:error, reason}, state) do
     state.caller && GenServer.reply(state.caller, reason)
     state.callback && send(state.callback, reason)
@@ -97,34 +97,31 @@ defmodule NervesHubLink.HTTPFwupStream do
     :inets.stop(:httpc, @httpc_profile)
   end
 
-  @impl true
+  @impl GenServer
   def handle_call({:get, url}, from, s) do
     make_request(url)
 
     {:noreply, %{s | url: url, caller: from}}
   end
 
-  @impl true
+  @impl GenServer
   def handle_info({:http, {_, :stream_start, headers}}, s) do
     Logger.debug("Stream Start: #{inspect(headers)}")
 
     {:noreply, s}
   end
 
-  @impl true
   def handle_info({:http, {_, :stream, data}}, s) do
     Fwup.send_chunk(s.fwup, data)
     {:noreply, s, s.timeout}
   end
 
-  @impl true
   def handle_info({:http, {_, :stream_end, _headers}}, s) do
     Logger.debug("Stream End")
     GenServer.reply(s.caller, :ok)
     {:noreply, %{s | url: nil}}
   end
 
-  @impl true
   def handle_info({:http, {_ref, {{_, status_code, _}, headers, body}}}, s)
       when status_code in @redirect_status_codes do
     Logger.debug("Redirect")
@@ -143,19 +140,16 @@ defmodule NervesHubLink.HTTPFwupStream do
     end
   end
 
-  @impl true
   def handle_info({:http, {_ref, {{_, status_code, _}, _headers, body}}}, s) do
     Logger.error("Error: #{status_code} #{inspect(body)}")
     {:stop, {:error, {:http_error, {status_code, body}}}, s}
   end
 
-  @impl true
   def handle_info({:http, {_ref, {:error, error}}}, state) do
     Logger.error("HTTP Stream Error: #{inspect(error)}")
     {:stop, {:error, {:http_error, error}}, state}
   end
 
-  @impl true
   def handle_info(:timeout, s) do
     Logger.error("Error: timeout")
     {:stop, {:error, {:http_error, :timeout}}, s}

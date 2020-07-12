@@ -47,13 +47,13 @@ defmodule NervesHubLink.ConsoleChannel do
 
   def start_link(opts), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
 
-  @impl true
+  @impl GenServer
   def init(opts) do
     send(self(), :join)
     {:ok, State.__struct__(opts)}
   end
 
-  @impl true
+  @impl GenServer
   def handle_info(:join, %{socket: socket, topic: topic, params: params} = state) do
     params = Map.put(params, "console_version", @version)
 
