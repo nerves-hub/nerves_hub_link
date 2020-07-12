@@ -4,7 +4,7 @@ if Code.ensure_loaded?(NervesKey) do
 
     alias NervesHubLink.{Certificate, Configurator.Config}
 
-    @impl true
+    @impl NervesHubLink.Configurator
     def build(%Config{} = config) do
       nk_opts = config.nerves_key || []
 
