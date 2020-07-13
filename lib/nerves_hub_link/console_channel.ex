@@ -127,8 +127,15 @@ defmodule NervesHubLink.ConsoleChannel do
   end
 
   defp start_iex(state) do
-    {:ok, iex_pid} = ExTTY.start_link(handler: self(), type: :elixir)
+    shell_opts = [[dot_iex_path: dot_iex_path()]]
+    {:ok, iex_pid} = ExTTY.start_link(handler: self(), type: :elixir, shell_opts: shell_opts)
     %{state | iex_pid: iex_pid}
+  end
+
+  defp dot_iex_path() do
+    [".iex.exs", "~/.iex.exs", "/etc/iex.exs"]
+    |> Enum.map(&Path.expand/1)
+    |> Enum.find("", &File.regular?/1)
   end
 
   defp stop_iex(%{iex_pid: nil} = state), do: state
