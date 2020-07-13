@@ -104,12 +104,12 @@ defmodule NervesHubLink.ConsoleChannel do
 
   def handle_info(:timeout, state) do
     msg = """
-    \r\n
-    ****************************************\r\n
-    *   Session timeout due to inactivity  *\r\n
-    *                                      *\r\n
-    *   Press any key to continue...       *\r\n
-    ****************************************\r\n
+    \r
+    ****************************************\r
+    *   Session timeout due to inactivity  *\r
+    *                                      *\r
+    *   Press any key to continue...       *\r
+    ****************************************\r
     """
 
     Channel.push_async(state.channel, "up", %{data: msg})
