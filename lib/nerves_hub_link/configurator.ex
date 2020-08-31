@@ -48,7 +48,9 @@ defmodule NervesHubLink.Configurator do
       |> Keyword.put_new(:verify, :verify_peer)
       |> Keyword.put_new(:server_name_indication, to_charlist(base.device_api_sni))
 
-    %{base | params: Nerves.Runtime.KV.get_all_active(), socket: socket, ssl: ssl}
+    params = Map.put(Nerves.Runtime.KV.get_all_active(), "nerves_fw_fwup_version", fwup_version())
+
+    %{base | params: params, socket: socket, ssl: ssl}
   end
 
   defp do_build(configurator) when is_atom(configurator) do
@@ -70,5 +72,10 @@ defmodule NervesHubLink.Configurator do
     else
       Default
     end
+  end
+
+  defp fwup_version do
+    {version_string, 0} = System.cmd("fwup", ["--version"])
+    version_string |> String.trim()
   end
 end
