@@ -18,6 +18,6 @@ defmodule NervesHubLink.ConfiguratorTest do
 
   test "fwup_version is included in params" do
     config = NervesHubLink.Configurator.build()
-    assert Map.has_key?(config.params, "nerves_fw_fwup_version")
+    assert Map.has_key?(config.params, "fwup_version")
   end
 end
