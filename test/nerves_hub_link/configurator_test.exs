@@ -15,4 +15,9 @@ defmodule NervesHubLink.ConfiguratorTest do
     config = NervesHubLink.Configurator.build()
     assert config.socket[:transport_opts][:socket_opts] == ssl
   end
+
+  test "fwup_version is included in params" do
+    config = NervesHubLink.Configurator.build()
+    assert Map.has_key?(config.params, "nerves_fw_fwup_version")
+  end
 end
