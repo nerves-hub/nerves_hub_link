@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.9.1
+
+* Enhancements
+  * Send fwup version to server when connecting. This is required If you are using patchable firmware updates.
+
 ## v0.9.0
 
 This release supports the new NervesHub console terminal. After upgrading,
