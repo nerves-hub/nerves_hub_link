@@ -94,6 +94,11 @@ defmodule NervesHubLink.ConsoleChannel do
     {:noreply, state, iex_timeout()}
   end
 
+  def handle_info(%Message{event: "window_size", payload: %{"height" => height, "width" => width}}, state) do
+    ExTTY.window_change(state.iex_pid, width, height)
+    {:noreply, state}
+  end
+
   def handle_info(%Message{event: event, payload: payload}, state)
       when event in ["phx_error", "phx_close"] do
     reason = Map.get(payload, :reason, "unknown")

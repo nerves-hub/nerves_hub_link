@@ -22,6 +22,14 @@ defmodule NervesHubLink.ConsoleChannelTest do
       assert new_state.iex_pid != state.iex_pid
     end
 
+    test "window_size - sets width & height of ExTTY", %{state: state} do
+      {:ok, iex_pid} = ExTTY.start_link(handler: self(), type: :elixir)
+      state = %{state | iex_pid: iex_pid}
+      msg = %Message{event: "window_size", payload: %{"height" => 200, "width" => 300}}
+
+      assert {:noreply, state} == ConsoleChannel.handle_info(msg, state)
+    end
+
     test "dn - sends text to ExTTY", %{state: state} do
       {:ok, iex_pid} = ExTTY.start_link(handler: self(), type: :elixir)
       state = %{state | iex_pid: iex_pid}
