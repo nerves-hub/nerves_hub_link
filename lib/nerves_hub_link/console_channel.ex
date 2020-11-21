@@ -94,7 +94,10 @@ defmodule NervesHubLink.ConsoleChannel do
     {:noreply, state, iex_timeout()}
   end
 
-  def handle_info(%Message{event: "window_size", payload: %{"height" => height, "width" => width}}, state) do
+  def handle_info(
+        %Message{event: "window_size", payload: %{"height" => height, "width" => width}},
+        state
+      ) do
     ExTTY.window_change(state.iex_pid, width, height)
     {:noreply, state}
   end
