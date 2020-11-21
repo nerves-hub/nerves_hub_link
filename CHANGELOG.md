@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.9.2
+
+* Enhancements
+  * Supports incoming `window_size` message from web channel to change the TTY size
+
 ## v0.9.1
 
 * Enhancements
