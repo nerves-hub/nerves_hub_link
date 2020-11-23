@@ -98,7 +98,7 @@ defmodule NervesHubLink.MixProject do
       {:fwup, "~> 0.4.0"},
       {:hackney, "~> 1.10"},
       {:jason, "~> 1.0"},
-      {:mox, "~> 0.4", only: :test},
+      {:mox, "~> 1.0.0", only: :test},
       {:nerves_hub_cli, "~> 0.10", runtime: false},
       {:nerves_key, "~> 0.5", optional: true},
       {:nerves_runtime, "~> 0.8"},
