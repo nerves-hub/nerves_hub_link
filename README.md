@@ -28,7 +28,7 @@ changes to your Nerves projects:
 These changes enable NervesHub to provide assurances that the firmware bits
 you intend to install on a set of devices make it to those devices unaltered.
 
-## Getting Started
+## Getting started
 
 The following sections will walk you through updating your Nerves project to
 work with the [nerves-hub.org](https://nerves-hub.org) NervesHub server. Using
@@ -53,8 +53,8 @@ list:
 ```elixir
   defp deps do
     [
-      {:nerves, "~> 1.3", runtime: false},
-      {:nerves_hub_cli, "~> 0.1", runtime: false}
+      {:nerves, "~> 1.7", runtime: false},
+      {:nerves_hub_cli, "~> 0.10", runtime: false}
       ...
     ] ++ deps(@target)
   end
@@ -85,8 +85,8 @@ your dependencies. For example:
 ```elixir
   defp deps(target) do
     [
-      {:nerves_runtime, "~> 0.9"},
-      {:nerves_hub_link, "~> 0.1"},
+      {:nerves_runtime, "~> 0.11"},
+      {:nerves_hub_link, "~> 0.9"},
       {:nerves_time, "~> 0.2"},
       ...
     ] ++ system(target)
@@ -112,15 +112,14 @@ the SSL options for you by enabling add it as a dependency:
 ```elixir
 def deps() do
   [
-    {:nerves_hub_link, "~> 0.7"},
     {:nerves_key, "~> 0.5"}
   ]
 end
 ```
 
-NervesKey will default to using i2c bus 1 and `:primary` certificate pair.
-However, you can customize these options as well to use
-a different bus and certificate pair:
+NervesKey will default to using I2C bus 1 and the `:primary` certificate pair
+(`:primary` is one-time configurable and `:aux` may be updated).  You can
+customize these options to use a different bus and certificate pair:
 
 ```elixir
 config :nerves_hub_link, :nerves_key,
@@ -151,7 +150,7 @@ config :nerves_hub_link,
   ]
 ```
 
-### Runtime Configuration
+### Runtime configuration
 
 Some cases require that connection configuration happens at runtime like
 selectively choosing which cert/key to use based on device, or reading a file
