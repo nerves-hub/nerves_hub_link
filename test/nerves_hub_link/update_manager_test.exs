@@ -113,7 +113,7 @@ defmodule NervesHubLink.UpdateManagerTest do
 
   describe "handle_info - down" do
     test "normal", %{state: state} do
-      assert {:noreply, state} =
+      assert {:noreply, ^state} =
                UpdateManager.handle_info({:DOWN, :any, :process, :any, :normal}, state)
     end
 
