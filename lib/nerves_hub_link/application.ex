@@ -16,7 +16,7 @@ defmodule NervesHubLink.Application do
     children =
       [
         Connection,
-        {PhoenixClient.Socket, {config.socket, [name: Socket]}},
+        {PhoenixClient.Socket, {config.socket, [id: Socket, name: Socket]}},
         {DeviceChannel, [socket: Socket, params: config.params]},
         UpdateManager
       ]
