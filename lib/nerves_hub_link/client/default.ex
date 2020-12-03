@@ -34,6 +34,6 @@ defmodule NervesHubLink.Client.Default do
 
   @impl NervesHubLink.Client
   def handle_error(error) do
-    Logger.warn("Firmware stream error: #{inspect(error)}")
+    Logger.warn("[NervesHubLink] error: #{inspect(error)}")
   end
 end
