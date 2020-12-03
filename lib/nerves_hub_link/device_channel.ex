@@ -39,15 +39,18 @@ defmodule NervesHubLink.DeviceChannel do
     GenServer.call(__MODULE__, :connected?)
   end
 
+  @impl GenServer
   def init(opts) do
     send(self(), :join)
     {:ok, struct(State, opts)}
   end
 
+  @impl GenServer
   def handle_call(:connected?, _from, %{connected?: connected?} = state) do
     {:reply, connected?, state}
   end
 
+  @impl GenServer
   def handle_cast({:send_update_progress, progress}, state) do
     Channel.push_async(state.channel, "fwup_progress", %{value: progress})
     {:noreply, state}
@@ -58,6 +61,7 @@ defmodule NervesHubLink.DeviceChannel do
     {:noreply, state}
   end
 
+  @impl GenServer
   def handle_info(%Message{event: "reboot"}, state) do
     Logger.warn("Reboot Request from NervesHubLink")
     Channel.push_async(state.channel, "rebooting", %{})
@@ -98,6 +102,7 @@ defmodule NervesHubLink.DeviceChannel do
     {:noreply, state}
   end
 
+  @impl GenServer
   def terminate(_reason, _state), do: NervesHubLink.Connection.disconnected()
 
   defp handle_join_reply(%{"firmware_url" => _url} = update) do
