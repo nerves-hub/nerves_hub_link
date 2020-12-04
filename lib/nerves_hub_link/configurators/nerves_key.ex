@@ -6,6 +6,16 @@ if Code.ensure_loaded?(NervesKey) do
 
     @impl NervesHubLink.Configurator
     def build(%Config{} = config) do
+      # Because :nerves_key is an optional dep, it does not get added to
+      # .app resource files or may be started in the wrong order
+      # causing failures when calling code that is not yet started.
+      # So we explicitly tell the :nerves_key to start here to ensure
+      # its available when needed. This can be removed once the fix
+      # has been released
+      #
+      # See https://github.com/erlang/otp/pull/2675
+      _ = Application.ensure_all_started(:nerves_key)
+
       nk_opts = config.nerves_key || []
 
       bus_num = nk_opts[:i2c_bus] || 1
