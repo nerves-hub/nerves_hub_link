@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.9.3
+
+* Fixes
+  * Fixes misleading default error message report
+  * Ensures `:nerves_key` is started before use to deal with optional dependency
+  start order bug 
+
 ## v0.9.2
 
 * Enhancements
