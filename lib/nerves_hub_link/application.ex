@@ -3,22 +3,31 @@ defmodule NervesHubLink.Application do
 
   alias NervesHubLink.{
     DeviceChannel,
+    Client,
     Configurator,
     Connection,
     ConsoleChannel,
-    Socket,
-    UpdateManager
+    Socket
   }
+
+  alias NervesHubLinkCommon.{UpdateManager, FwupConfig}
 
   def start(_type, _args) do
     config = Configurator.build()
+
+    fwup_config = %FwupConfig{
+      fwup_public_keys: config.fwup_public_keys,
+      fwup_devpath: config.fwup_devpath,
+      handle_fwup_message: &Client.handle_fwup_message/1,
+      update_available: &Client.update_available/1
+    }
 
     children =
       [
         Connection,
         {PhoenixClient.Socket, {config.socket, [name: Socket]}},
         {DeviceChannel, [socket: Socket, params: config.params]},
-        UpdateManager
+        {UpdateManager, fwup_config}
       ]
       |> add_console_child(config)
 
