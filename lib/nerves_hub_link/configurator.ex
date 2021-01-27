@@ -1,11 +1,13 @@
 defmodule NervesHubLink.Configurator do
   alias __MODULE__.{Config, Default}
+  require Logger
 
   defmodule Config do
     defstruct device_api_host: "device.nerves-hub.org",
               device_api_port: 443,
               device_api_sni: "device.nerves-hub.org",
               fwup_public_keys: [],
+              fwup_devpath: "/dev/mmcblk0",
               nerves_key: [],
               params: %{},
               remote_iex: false,
@@ -20,6 +22,7 @@ defmodule NervesHubLink.Configurator do
     Application.get_env(:nerves_hub_link, :configurator, fetch_default())
     |> do_build()
     |> add_socket_opts()
+    |> add_fwup_public_keys()
   end
 
   defp add_socket_opts(config) do
@@ -77,5 +80,17 @@ defmodule NervesHubLink.Configurator do
   defp fwup_version do
     {version_string, 0} = System.cmd("fwup", ["--version"])
     String.trim(version_string)
+  end
+
+  defp add_fwup_public_keys(config) do
+    fwup_public_keys = NervesHubLink.Certificate.fwup_public_keys()
+
+    if fwup_public_keys == [] do
+      Logger.error("No fwup public keys were configured for nerves_hub_link.")
+      Logger.error("This means that firmware signatures are not being checked.")
+      Logger.error("nerves_hub_link will fail to apply firmware updates.")
+    end
+
+    %{config | fwup_public_keys: config.fwup_public_keys ++ fwup_public_keys}
   end
 end

@@ -2,7 +2,8 @@ defmodule NervesHubLink.DeviceChannel do
   use GenServer
   require Logger
 
-  alias NervesHubLink.{Client, UpdateManager}
+  alias NervesHubLink.Client
+  alias NervesHubLinkCommon.UpdateManager
   alias PhoenixClient.{Channel, Message}
 
   @rejoin_after Application.get_env(:nerves_hub_link, :rejoin_after, 5_000)
