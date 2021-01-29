@@ -102,7 +102,7 @@ defmodule NervesHubLink.MixProject do
       {:nerves_hub_cli, "~> 0.10", runtime: false},
       {:nerves_key, "~> 0.5", optional: true},
       {:nerves_runtime, "~> 0.8"},
-      {:nerves_hub_link_common, "0.1.0"},
+      {:nerves_hub_link_common, "~> 0.1.2"},
       {:phoenix_client, "~> 0.11"},
       {:x509, "~> 0.5"}
     ]
