@@ -72,7 +72,7 @@ defmodule NervesHubLink.DeviceChannel do
   end
 
   def handle_info(%Message{event: "update", payload: update}, state) do
-    UpdateManager.apply_update(update)
+    _ = UpdateManager.apply_update(update)
     {:noreply, state}
   end
 

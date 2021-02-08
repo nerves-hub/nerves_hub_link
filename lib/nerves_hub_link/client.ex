@@ -112,19 +112,19 @@ defmodule NervesHubLink.Client do
     # TODO: nasty side effects here. Consider moving somewhere else
     case data do
       {:progress, percent} ->
-        _ = NervesHubLink.DeviceChannel.send_update_progress(percent)
+        NervesHubLink.DeviceChannel.send_update_progress(percent)
 
       {:error, _, message} ->
-        _ = NervesHubLink.DeviceChannel.send_update_status("fwup error #{message}")
+        NervesHubLink.DeviceChannel.send_update_status("fwup error #{message}")
 
       {:ok, 0, _message} ->
-        spawn(&Nerves.Runtime.reboot/0)
+        _ = spawn(&Nerves.Runtime.reboot/0)
+
+        :ok
 
       _ ->
         :ok
     end
-
-    :ok
   end
 
   @doc """
