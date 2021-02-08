@@ -1,7 +1,7 @@
 defmodule NervesHubLink.MixProject do
   use Mix.Project
 
-  @version "0.9.3"
+  @version "0.9.4"
   @source_url "https://github.com/nerves-hub/nerves_hub_link"
 
   Application.put_env(

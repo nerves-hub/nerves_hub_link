@@ -1,11 +1,17 @@
 # Changelog
 
+## 0.9.4
+
+* Enhancements
+  * Supports resuming failed downloads by offloading the responsibility of downloading
+  and applying updates to a new package: `nerves_hub_link_common`
+
 ## v0.9.3
 
 * Fixes
   * Fixes misleading default error message report
   * Ensures `:nerves_key` is started before use to deal with optional dependency
-  start order bug 
+  start order bug
 
 ## v0.9.2
 
