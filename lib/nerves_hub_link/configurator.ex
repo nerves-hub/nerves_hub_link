@@ -2,6 +2,8 @@ defmodule NervesHubLink.Configurator do
   alias __MODULE__.{Config, Default}
   require Logger
 
+  @device_api_version "1.0.0"
+
   defmodule Config do
     defstruct device_api_host: "device.nerves-hub.org",
               device_api_port: 443,
@@ -66,8 +68,12 @@ defmodule NervesHubLink.Configurator do
       |> Keyword.put_new(:verify, :verify_peer)
       |> Keyword.put_new(:server_name_indication, to_charlist(base.device_api_sni))
 
-    params = Map.put(Nerves.Runtime.KV.get_all_active(), "fwup_version", fwup_version())
     fwup_devpath = Nerves.Runtime.KV.get(@fwup_devpath)
+
+    params =
+      Nerves.Runtime.KV.get_all_active()
+      |> Map.put("fwup_version", fwup_version())
+      |> Map.put("device_api_version", @device_api_version)
 
     %{base | params: params, socket: socket, ssl: ssl, fwup_devpath: fwup_devpath}
   end
