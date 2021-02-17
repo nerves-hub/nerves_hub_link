@@ -106,7 +106,7 @@ defmodule NervesHubLink.DeviceChannel do
   @impl GenServer
   def terminate(_reason, _state), do: NervesHubLink.Connection.disconnected()
 
-  defp handle_join_reply(%{"firmware_url" => _url} = update) do
+  defp handle_join_reply(%{"firmware_url" => url} = update) when is_binary(url) do
     UpdateManager.apply_update(update)
   end
 
