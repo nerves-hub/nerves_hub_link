@@ -13,11 +13,26 @@ defmodule NervesHubLink.Configurator do
               remote_iex: false,
               socket: [],
               ssl: []
+
+    @type t() :: %__MODULE__{
+            device_api_host: String.t(),
+            device_api_port: String.t(),
+            device_api_sni: charlist(),
+            fwup_public_keys: [binary()],
+            fwup_devpath: Path.t(),
+            nerves_key: any(),
+            params: map(),
+            remote_iex: boolean,
+            socket: any(),
+            ssl: [:ssl.tls_client_option()]
+          }
   end
 
-  @callback build(%Config{}) :: %Config{}
+  @callback build(%Config{}) :: Config.t()
 
-  @spec build :: %Config{}
+  @fwup_devpath "nerves_fw_devpath"
+
+  @spec build :: Config.t()
   def build() do
     Application.get_env(:nerves_hub_link, :configurator, fetch_default())
     |> do_build()
@@ -52,8 +67,9 @@ defmodule NervesHubLink.Configurator do
       |> Keyword.put_new(:server_name_indication, to_charlist(base.device_api_sni))
 
     params = Map.put(Nerves.Runtime.KV.get_all_active(), "fwup_version", fwup_version())
+    fwup_devpath = Nerves.Runtime.KV.get(@fwup_devpath)
 
-    %{base | params: params, socket: socket, ssl: ssl}
+    %{base | params: params, socket: socket, ssl: ssl, fwup_devpath: fwup_devpath}
   end
 
   defp do_build(configurator) when is_atom(configurator) do
