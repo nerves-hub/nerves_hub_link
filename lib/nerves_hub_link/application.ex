@@ -2,11 +2,9 @@ defmodule NervesHubLink.Application do
   use Application
 
   alias NervesHubLink.{
-    DeviceChannel,
     Client,
     Configurator,
     Connection,
-    ConsoleChannel,
     Socket
   }
 
@@ -23,23 +21,12 @@ defmodule NervesHubLink.Application do
       update_available: &Client.update_available/1
     }
 
-    children =
-      [
-        {UpdateManager, fwup_config},
-        Connection,
-        {PhoenixClient.Socket, {config.socket, [id: Socket, name: Socket]}},
-        {DeviceChannel, [socket: Socket, params: config.params]}
-      ]
-      |> add_console_child(config)
+    children = [
+      {UpdateManager, fwup_config},
+      Connection,
+      {Socket, config}
+    ]
 
     Supervisor.start_link(children, strategy: :one_for_one, name: NervesHubLink.Supervisor)
-  end
-
-  defp add_console_child(children, config) do
-    if config.remote_iex == true do
-      [{ConsoleChannel, [socket: Socket, params: config.params]} | children]
-    else
-      children
-    end
   end
 end
