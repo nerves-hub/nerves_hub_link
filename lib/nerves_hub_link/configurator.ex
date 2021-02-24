@@ -3,6 +3,7 @@ defmodule NervesHubLink.Configurator do
   require Logger
 
   @device_api_version "1.0.0"
+  @console_version "1.0.0"
 
   defmodule Config do
     defstruct device_api_host: "device.nerves-hub.org",
@@ -74,6 +75,7 @@ defmodule NervesHubLink.Configurator do
       Nerves.Runtime.KV.get_all_active()
       |> Map.put("fwup_version", fwup_version())
       |> Map.put("device_api_version", @device_api_version)
+      |> Map.put("console_version", @console_version)
 
     %{base | params: params, socket: socket, ssl: ssl, fwup_devpath: fwup_devpath}
   end
