@@ -66,8 +66,7 @@ defmodule NervesHubLink.DeviceChannel do
   def handle_info(%Message{event: "reboot"}, state) do
     Logger.warn("Reboot Request from NervesHubLink")
     Channel.push_async(state.channel, "rebooting", %{})
-    # TODO: Maybe allow delayed reboot
-    Nerves.Runtime.reboot()
+    Client.initiate_reboot()
     {:noreply, state}
   end
 

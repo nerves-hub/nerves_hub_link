@@ -77,6 +77,17 @@ defmodule NervesHubLink.Client do
   @callback handle_error(any()) :: :ok
 
   @doc """
+  Optional callback to reboot the device when a firmware update completes
+
+  The default behavior is to call `Nerves.Runtime.reboot/0` after a successful update. This
+  is useful for testing and for doing additional work like notifying users in a UI that a reboot
+  will happen soon. It is critical that a reboot does happen.
+  """
+  @callback reboot() :: no_return()
+
+  @optional_callbacks [reboot: 0]
+
+  @doc """
   This function is called internally by NervesHubLink to notify clients.
   """
   @spec update_available(update_data()) :: update_response()
@@ -118,13 +129,31 @@ defmodule NervesHubLink.Client do
         NervesHubLink.DeviceChannel.send_update_status("fwup error #{message}")
 
       {:ok, 0, _message} ->
-        _ = spawn(&Nerves.Runtime.reboot/0)
-
-        :ok
+        initiate_reboot()
 
       _ ->
         :ok
     end
+  end
+
+  @doc """
+  This function is called internally by NervesHubLink to initiate a reboot.
+
+  After a successful firmware update, NervesHubLink calls this to start the
+  reboot process. It calls `c:reboot/0` if supplied or
+  `Nerves.Runtime.reboot/0`.
+  """
+  @spec initiate_reboot() :: :ok
+  def initiate_reboot() do
+    client = mod()
+
+    {mod, fun, args} =
+      if function_exported?(client, :reboot, 0),
+        do: {client, :reboot, []},
+        else: {Nerves.Runtime, :reboot, 0}
+
+    _ = spawn(mod, fun, args)
+    :ok
   end
 
   @doc """
