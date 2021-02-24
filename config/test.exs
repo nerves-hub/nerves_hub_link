@@ -24,7 +24,8 @@ config :nerves_hub_link,
 
 config :nerves_hub_link,
   client: NervesHubLink.ClientMock,
-  rejoin_after: 0
+  rejoin_after: 0,
+  remote_iex: true
 
 config :nerves_runtime, :kernel, autoload_modules: false
 config :nerves_runtime, target: "host"
@@ -47,3 +48,5 @@ config :nerves_runtime, Nerves.Runtime.KV.Mock, %{
 config :nerves_runtime, :modules, [
   {Nerves.Runtime.KV, Nerves.Runtime.KV.Mock}
 ]
+
+config :phoenix, json_library: Jason

@@ -104,6 +104,7 @@ defmodule NervesHubLink.MixProject do
       {:nerves_hub_link_common, "~> 0.3.0"},
       {:nerves_hub_ca_store, "~> 1.0.0"},
       {:phoenix_client, "~> 0.11"},
+      {:slipstream, "~> 0.5"},
       {:x509, "~> 0.5"}
     ]
   end
