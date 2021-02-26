@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.10.0-rc.0
+
+* Enhancements
+  * Use [`:slipstream`](https://github.com/NFIBrokerage/slipstream) for websocket
+  connections
+  * Report `device_api_version` in web connections
+  * Optional `NervesHubLink.Client.reboot/0` callback behavior
+
+* Fixes
+  * Check `firmware_url` is valid before attempting update
+  * set default `fwup_devpath` in the config
+
 ## 0.9.4
 
 * Enhancements
