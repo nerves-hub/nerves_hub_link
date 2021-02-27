@@ -110,12 +110,12 @@ defmodule NervesHubLink.Socket do
   end
 
   def handle_cast({:send_update_progress, progress}, socket) do
-    push!(socket, @device_topic, "fwup_progress", %{value: progress})
+    _ = push!(socket, @device_topic, "fwup_progress", %{value: progress})
     {:noreply, socket}
   end
 
   def handle_cast({:send_update_status, status}, socket) do
-    push!(socket, @device_topic, "status_update", %{status: status})
+    _ = push!(socket, @device_topic, "status_update", %{status: status})
     {:noreply, socket}
   end
 
@@ -125,7 +125,7 @@ defmodule NervesHubLink.Socket do
   #
   def handle_message(@device_topic, "reboot", _params, socket) do
     Logger.warn("Reboot Request from NervesHubLink")
-    push!(socket, @device_topic, "rebooting", %{})
+    _ = push!(socket, @device_topic, "rebooting", %{})
     # TODO: Maybe allow delayed reboot
     Nerves.Runtime.reboot()
     {:ok, socket}
@@ -142,7 +142,7 @@ defmodule NervesHubLink.Socket do
   def handle_message(@console_topic, "restart", _payload, socket) do
     Logger.warn("[#{inspect(__MODULE__)}] Restarting IEx process from web request")
 
-    push!(socket, @console_topic, "up", %{data: "\r*** Restarting IEx ***\r"})
+    _ = push!(socket, @console_topic, "up", %{data: "\r*** Restarting IEx ***\r"})
 
     socket =
       socket
@@ -173,13 +173,13 @@ defmodule NervesHubLink.Socket do
 
   @impl Slipstream
   def handle_info({:tty_data, data}, socket) do
-    push!(socket, @console_topic, "up", %{data: data})
+    _ = push!(socket, @console_topic, "up", %{data: data})
     {:noreply, set_iex_timer(socket)}
   end
 
   def handle_info({:EXIT, iex_pid, reason}, %{assigns: %{iex_pid: iex_pid}} = socket) do
     msg = "\r******* Remote IEx stopped: #{inspect(reason)} *******\r"
-    push!(socket, @console_topic, "up", %{data: msg})
+    _ = push!(socket, @console_topic, "up", %{data: msg})
     Logger.warn(msg)
 
     socket =
@@ -200,8 +200,7 @@ defmodule NervesHubLink.Socket do
     ****************************************\r
     """
 
-    # Channel.push_async(socket.channel, "up", %{data: msg})
-    push!(socket, @console_topic, "up", %{data: msg})
+    _ = push!(socket, @console_topic, "up", %{data: msg})
 
     {:noreply, stop_iex(socket)}
   end

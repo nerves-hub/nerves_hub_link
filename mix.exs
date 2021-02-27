@@ -59,6 +59,7 @@ defmodule NervesHubLink.MixProject do
     [
       flags: [:race_conditions, :error_handling, :underspecs, :unmatched_returns],
       plt_add_apps: [:atecc508a, :nerves_key, :nerves_key_pkcs11],
+      ignore_warnings: "dialyzer-ignore.exs",
       list_unused_filters: true
     ]
   end
