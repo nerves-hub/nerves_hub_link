@@ -3,7 +3,7 @@ defmodule NervesHubLink.DeviceChannel do
   require Logger
 
   alias NervesHubLink.Client
-  alias NervesHubLinkCommon.UpdateManager
+  alias NervesHubLinkCommon.{UpdateManager, Message.UpdateInfo}
   alias PhoenixClient.{Channel, Message}
 
   @rejoin_after Application.get_env(:nerves_hub_link, :rejoin_after, 5_000)
@@ -14,14 +14,16 @@ defmodule NervesHubLink.DeviceChannel do
             connected?: boolean(),
             params: map(),
             socket: pid(),
-            topic: String.t()
+            topic: String.t(),
+            update_info: nil | UpdateInfo.t()
           }
 
     defstruct socket: nil,
               topic: "device",
               channel: nil,
               params: %{},
-              connected?: false
+              connected?: false,
+              update_info: nil
   end
 
   def start_link(opts) do
@@ -53,7 +55,11 @@ defmodule NervesHubLink.DeviceChannel do
 
   @impl GenServer
   def handle_cast({:send_update_progress, progress}, state) do
-    Channel.push_async(state.channel, "fwup_progress", %{value: progress})
+    Channel.push_async(state.channel, "fwup_progress", %{
+      value: progress,
+      uuid: state.update_info.uuid
+    })
+
     {:noreply, state}
   end
 
@@ -73,8 +79,8 @@ defmodule NervesHubLink.DeviceChannel do
   def handle_info(%Message{event: "update", payload: update}, state) do
     case NervesHubLinkCommon.Message.UpdateInfo.parse(update) do
       {:ok, %NervesHubLinkCommon.Message.UpdateInfo{} = info} ->
-        _ = UpdateManager.apply_update(info)
-        {:noreply, state}
+        _status = UpdateManager.apply_update(info)
+        {:noreply, %{state | update_info: info}}
 
       error ->
         Logger.error("Error parsing update data: #{inspect(update)} error: #{inspect(error)}")
@@ -95,7 +101,7 @@ defmodule NervesHubLink.DeviceChannel do
     case Channel.join(socket, topic, params) do
       {:ok, reply, channel} ->
         NervesHubLink.Connection.connected()
-        _ = handle_join_reply(reply)
+        state = handle_join_reply(reply, state)
         {:noreply, %{state | channel: channel, connected?: true}}
 
       _error ->
@@ -112,16 +118,18 @@ defmodule NervesHubLink.DeviceChannel do
   @impl GenServer
   def terminate(_reason, _state), do: NervesHubLink.Connection.disconnected()
 
-  defp handle_join_reply(%{"firmware_url" => url} = update) when is_binary(url) do
+  @spec handle_join_reply(map(), State.t()) :: State.t()
+  defp handle_join_reply(%{"firmware_url" => url} = update, state) when is_binary(url) do
     case NervesHubLinkCommon.Message.UpdateInfo.parse(update) do
       {:ok, %NervesHubLinkCommon.Message.UpdateInfo{} = info} ->
-        UpdateManager.apply_update(info)
+        _status = UpdateManager.apply_update(info)
+        %{state | update_info: info}
 
       error ->
         Logger.error("Error parsing update data: #{inspect(update)} error: #{inspect(error)}")
-        :noop
+        state
     end
   end
 
-  defp handle_join_reply(_), do: :noop
+  defp handle_join_reply(_, state), do: state
 end
