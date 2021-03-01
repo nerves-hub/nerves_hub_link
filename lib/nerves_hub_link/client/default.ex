@@ -12,24 +12,24 @@ defmodule NervesHubLink.Client.Default do
   def update_available(_), do: :apply
 
   @impl NervesHubLink.Client
-  def handle_fwup_message({:progress, percent}) do
-    Logger.debug("FWUP PROG: #{percent}%")
+  def handle_fwup_message({:progress, percent}, meta) do
+    Logger.debug("FWUP PROG [#{meta.uuid}]: #{percent}%")
   end
 
-  def handle_fwup_message({:error, _, message}) do
-    Logger.error("FWUP ERROR: #{message}")
+  def handle_fwup_message({:error, _, message}, meta) do
+    Logger.error("FWUP ERROR [#{meta.uuid}]: #{message}")
   end
 
-  def handle_fwup_message({:warning, _, message}) do
-    Logger.warn("FWUP WARN: #{message}")
+  def handle_fwup_message({:warning, _, message}, meta) do
+    Logger.warn("FWUP WARN [#{meta.uuid}]: #{message}")
   end
 
-  def handle_fwup_message({:ok, status, message}) do
-    Logger.info("FWUP SUCCESS: #{status} #{message}")
+  def handle_fwup_message({:ok, status, message}, meta) do
+    Logger.info("FWUP SUCCESS [#{meta.uuid}]: #{status} #{message}")
   end
 
-  def handle_fwup_message(fwup_message) do
-    Logger.warn("Unknown FWUP message: #{inspect(fwup_message)}")
+  def handle_fwup_message(fwup_message, meta) do
+    Logger.warn("Unknown FWUP message [#{meta.uuid}]: #{inspect(fwup_message)}")
   end
 
   @impl NervesHubLink.Client

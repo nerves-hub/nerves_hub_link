@@ -1,6 +1,7 @@
 defmodule NervesHubLink.Client.DefaultTest do
   use ExUnit.Case, async: true
   alias NervesHubLink.Client.Default
+  alias NervesHubLinkCommon.Message.FirmwareMetadata
 
   doctest Default
 
@@ -9,24 +10,28 @@ defmodule NervesHubLink.Client.DefaultTest do
   end
 
   describe "handle_fwup_message/1" do
-    test "progress" do
-      assert Default.handle_fwup_message({:progress, 25}) == :ok
+    setup do
+      %{meta: %FirmwareMetadata{}}
     end
 
-    test "error" do
-      assert Default.handle_fwup_message({:error, :any, "message"}) == :ok
+    test "progress", %{meta: meta} do
+      assert Default.handle_fwup_message({:progress, 25}, meta) == :ok
     end
 
-    test "warning" do
-      assert Default.handle_fwup_message({:warning, :any, "message"}) == :ok
+    test "error", %{meta: meta} do
+      assert Default.handle_fwup_message({:error, :any, "message"}, meta) == :ok
     end
 
-    test "completion" do
-      assert Default.handle_fwup_message({:ok, 0, "success"}) == :ok
+    test "warning", %{meta: meta} do
+      assert Default.handle_fwup_message({:warning, :any, "message"}, meta) == :ok
     end
 
-    test "any" do
-      assert Default.handle_fwup_message(:any) == :ok
+    test "completion", %{meta: meta} do
+      assert Default.handle_fwup_message({:ok, 0, "success"}, meta) == :ok
+    end
+
+    test "any", %{meta: meta} do
+      assert Default.handle_fwup_message(:any, meta) == :ok
     end
   end
 

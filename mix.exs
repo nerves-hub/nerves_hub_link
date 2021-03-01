@@ -102,7 +102,7 @@ defmodule NervesHubLink.MixProject do
       {:nerves_hub_cli, "~> 0.10", runtime: false},
       {:nerves_key, "~> 0.5", optional: true},
       {:nerves_runtime, "~> 0.8"},
-      {:nerves_hub_link_common, github: "nerves-hub/nerves_hub_link_common", ref: "0f27e15"},
+      {:nerves_hub_link_common, github: "nerves-hub/nerves_hub_link_common", ref: "155a737"},
       # {:nerves_hub_link_common, path: "../nerves_hub_link_common"},
       {:phoenix_client, "~> 0.11"},
       {:x509, "~> 0.5"}

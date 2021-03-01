@@ -3,7 +3,7 @@ defmodule NervesHubLink.DeviceChannel do
   require Logger
 
   alias NervesHubLink.Client
-  alias NervesHubLinkCommon.UpdateManager
+  alias NervesHubLinkCommon.{UpdateManager, Message.FirmwareMetadata}
   alias PhoenixClient.{Channel, Message}
 
   @rejoin_after Application.get_env(:nerves_hub_link, :rejoin_after, 5_000)
@@ -28,12 +28,14 @@ defmodule NervesHubLink.DeviceChannel do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
-  def send_update_progress(progress) do
-    GenServer.cast(__MODULE__, {:send_update_progress, progress})
+  @spec send_update_progress(non_neg_integer(), FirmwareMetadata.t() | nil) :: :ok
+  def send_update_progress(progress, meta) do
+    GenServer.cast(__MODULE__, {:send_update_progress, progress, meta})
   end
 
-  def send_update_status(status) do
-    GenServer.cast(__MODULE__, {:send_update_status, status})
+  @spec send_update_status(String.t(), FirmwareMetadata.t() | nil) :: :ok
+  def send_update_status(status, meta) do
+    GenServer.cast(__MODULE__, {:send_update_status, status, meta})
   end
 
   def connected?() do
@@ -52,13 +54,13 @@ defmodule NervesHubLink.DeviceChannel do
   end
 
   @impl GenServer
-  def handle_cast({:send_update_progress, progress}, state) do
-    Channel.push_async(state.channel, "fwup_progress", %{value: progress})
+  def handle_cast({:send_update_progress, progress, meta}, state) do
+    Channel.push_async(state.channel, "fwup_progress", %{value: progress, uuid: meta.uuid})
     {:noreply, state}
   end
 
-  def handle_cast({:send_update_status, status}, state) do
-    Channel.push_async(state.channel, "status_update", %{status: status})
+  def handle_cast({:send_update_status, status, meta}, state) do
+    Channel.push_async(state.channel, "status_update", %{status: status, uuid: meta.uuid})
     {:noreply, state}
   end
 

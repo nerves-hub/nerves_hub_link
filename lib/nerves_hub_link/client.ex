@@ -63,11 +63,23 @@ defmodule NervesHubLink.Client do
   @callback update_available(update_data()) :: update_response()
 
   @doc """
-  Called on firmware update reports.
+  Same as handle_fwup_message/2, but does not include the firmware metadata
 
-  The return value of this function is not checked.
+  This is included for backwards compatibility, but handle_fwup_message/2 is preferred
   """
+  @doc deprecated: "Use NervesHubLink.Client.handle_fwup_message/2"
   @callback handle_fwup_message(fwup_message()) :: :ok
+
+  @doc """
+  Called on firmware update reports
+
+  The return value of this function is not checked
+
+  Will take precedence over handle_fwup_message/1 if implemented
+  """
+  @doc since: "0.10.0"
+  @callback handle_fwup_message(fwup_message(), NervesHubLinkCommon.Message.FirmwareMetadata.t()) ::
+              :ok
 
   @doc """
   Called when downloading a firmware update fails.
@@ -85,7 +97,7 @@ defmodule NervesHubLink.Client do
   """
   @callback reboot() :: no_return()
 
-  @optional_callbacks [reboot: 0]
+  @optional_callbacks [handle_fwup_message: 1, reboot: 0]
 
   @doc """
   This function is called internally by NervesHubLink to notify clients.
@@ -116,17 +128,19 @@ defmodule NervesHubLink.Client do
   @doc """
   This function is called internally by NervesHubLink to notify clients of fwup progress.
   """
-  @spec handle_fwup_message(fwup_message()) :: :ok
-  def handle_fwup_message(data) do
-    _ = apply_wrap(mod(), :handle_fwup_message, [data])
+  @spec handle_fwup_message(fwup_message(), NervesHubLinkCommon.Message.FirmwareMetadata.t()) ::
+          :ok
+  def handle_fwup_message(data, meta) do
+    args = if function_exported?(mod(), :handle_fwup_message, 2), do: [data, meta], else: [data]
+    _ = apply_wrap(mod(), :handle_fwup_message, args)
 
     # TODO: nasty side effects here. Consider moving somewhere else
     case data do
       {:progress, percent} ->
-        NervesHubLink.DeviceChannel.send_update_progress(percent)
+        NervesHubLink.DeviceChannel.send_update_progress(percent, meta)
 
       {:error, _, message} ->
-        NervesHubLink.DeviceChannel.send_update_status("fwup error #{message}")
+        NervesHubLink.DeviceChannel.send_update_status("fwup error #{message}", meta)
 
       {:ok, 0, _message} ->
         initiate_reboot()
