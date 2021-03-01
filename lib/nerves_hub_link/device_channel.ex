@@ -92,6 +92,9 @@ defmodule NervesHubLink.DeviceChannel do
   end
 
   def handle_info(:join, %{socket: socket, topic: topic, params: params} = state) do
+    currently_downloading_uuid = UpdateManager.currently_downloading_uuid()
+    params = Map.put(params, :currently_downloading_uuid, currently_downloading_uuid)
+
     case Channel.join(socket, topic, params) do
       {:ok, reply, channel} ->
         NervesHubLink.Connection.connected()
