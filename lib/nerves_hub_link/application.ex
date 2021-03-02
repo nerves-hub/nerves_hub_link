@@ -24,10 +24,10 @@ defmodule NervesHubLink.Application do
 
     children =
       [
+        {UpdateManager, fwup_config},
         Connection,
         {PhoenixClient.Socket, {config.socket, [name: Socket]}},
-        {DeviceChannel, [socket: Socket, params: config.params]},
-        {UpdateManager, fwup_config}
+        {DeviceChannel, [socket: Socket, params: config.params]}
       ]
       |> add_console_child(config)
 
