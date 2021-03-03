@@ -6,7 +6,8 @@ defmodule NervesHubLink.SocketTest do
   test "can join the channels" do
     params = Configurator.build().params
     accept_connect(Socket)
-    assert_join("device", ^params, :ok)
+    device_params = Map.put(params, "currently_downloading_uuid", nil)
+    assert_join("device", ^device_params, :ok)
     assert_join("console", ^params, :ok)
   end
 end
