@@ -138,8 +138,15 @@ defmodule NervesHubLink.Socket do
   end
 
   def handle_message(@device_topic, "update", update, socket) do
-    _ = UpdateManager.apply_update(update)
-    {:ok, socket}
+    case NervesHubLinkCommon.Message.UpdateInfo.parse(update) do
+      {:ok, %NervesHubLinkCommon.Message.UpdateInfo{} = info} ->
+        _ = UpdateManager.apply_update(info)
+        {:ok, socket}
+
+      error ->
+        Logger.error("Error parsing update data: #{inspect(update)} error: #{inspect(error)}")
+        {:ok, socket}
+    end
   end
 
   ##
@@ -239,7 +246,14 @@ defmodule NervesHubLink.Socket do
   end
 
   defp handle_join_reply(%{"firmware_url" => url} = update) when is_binary(url) do
-    UpdateManager.apply_update(update)
+    case NervesHubLinkCommon.Message.UpdateInfo.parse(update) do
+      {:ok, %NervesHubLinkCommon.Message.UpdateInfo{} = info} ->
+        UpdateManager.apply_update(info)
+
+      error ->
+        Logger.error("Error parsing update data: #{inspect(update)} error: #{inspect(error)}")
+        :noop
+    end
   end
 
   defp handle_join_reply(_), do: :noop
