@@ -69,9 +69,15 @@ defmodule NervesHubLink.Socket do
 
   @impl Slipstream
   def handle_connect(socket) do
+    currently_downloading_uuid = UpdateManager.currently_downloading_uuid()
+
+    device_join_params =
+      socket.assigns.params
+      |> Map.put("currently_downloading_uuid", currently_downloading_uuid)
+
     socket =
       socket
-      |> join(@device_topic, socket.assigns.params)
+      |> join(@device_topic, device_join_params)
       |> maybe_join_console()
 
     {:ok, socket}

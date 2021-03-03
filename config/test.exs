@@ -48,5 +48,3 @@ config :nerves_runtime, Nerves.Runtime.KV.Mock, %{
 config :nerves_runtime, :modules, [
   {Nerves.Runtime.KV, Nerves.Runtime.KV.Mock}
 ]
-
-config :phoenix, json_library: Jason
