@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.10.0
+
+* `nerves_hub_link_common 0.2.0`
+
+* Enhancements
+  * Report API version to NervesHub. While there's currently only one version of
+    the Device API, this is anticipation that we may want to change it in the future.
+  * On reconnect, notify NervesHub of firmware currently being downloaded so
+    that NervesHub can differentiate failed firmware updates from network hiccups.
+  * Allow devices to implement their own reboot logic by implementing the
+    `NervesHubLink.Client.reboot/0` callback
+
+* Fixes
+  * Check `firmware_url` is valid before attempting update
+
 ## 0.9.4
 
 * Enhancements
