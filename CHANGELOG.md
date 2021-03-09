@@ -4,6 +4,13 @@
 
 * `nerves_hub_link_common 0.2.0`
 
+* Potential Breaking Changes
+  * This enforces the update data structure exchanged between device and server
+    and is mostly internal. However, if you implement your own `NervesHubLink.Client`
+    behavior, then you will need to your `NervesHubLink.Client.update_available/1` to
+    accept a `%NervesHubLinkCommon.Message.UpdateInfo{}` struct as the parameter
+    instead of a map with string keys which was used until this point.
+
 * Enhancements
   * Report API version to NervesHub. While there's currently only one version of
     the Device API, this is anticipation that we may want to change it in the future.
