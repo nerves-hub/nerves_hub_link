@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.1
+
+* Fixes
+  * Fix typo that would cause the device to fail to reboot after applying
+    an update
+
 ## 0.10.0
 
 * `nerves_hub_link_common 0.2.0`
