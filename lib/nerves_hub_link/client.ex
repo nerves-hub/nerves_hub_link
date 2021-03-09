@@ -150,7 +150,7 @@ defmodule NervesHubLink.Client do
     {mod, fun, args} =
       if function_exported?(client, :reboot, 0),
         do: {client, :reboot, []},
-        else: {Nerves.Runtime, :reboot, 0}
+        else: {Nerves.Runtime, :reboot, []}
 
     _ = spawn(mod, fun, args)
     :ok
