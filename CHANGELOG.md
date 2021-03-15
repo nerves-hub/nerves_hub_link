@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.2
+
+* Fixes
+  * Fix issue that allowed unresolved atom keys in `:fwup_public_keys`
+    config which would break firmware updates by failing to validate
+    the public key
+  * Add missing dependency on `:inets`
+
 ## 0.10.1
 
 * Fixes
