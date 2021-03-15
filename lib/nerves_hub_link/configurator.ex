@@ -105,7 +105,15 @@ defmodule NervesHubLink.Configurator do
   end
 
   defp add_fwup_public_keys(config) do
-    fwup_public_keys = NervesHubLink.Certificate.fwup_public_keys()
+    # NervesHubLink.Certificate.fwup_public_keys() is compiled into the module
+    # This is a simple workaround to support changing hardcoded binary keys
+    # in the config and being able to load without recompiling. However, it
+    # is still suggested to recompile as well which is required for resolve
+    # public keys referenced by an atom
+    fwup_public_keys =
+      for key <- NervesHubLink.Certificate.fwup_public_keys() ++ config.fwup_public_keys,
+          is_binary(key),
+          do: key
 
     if fwup_public_keys == [] do
       Logger.error("No fwup public keys were configured for nerves_hub_link.")
@@ -113,6 +121,6 @@ defmodule NervesHubLink.Configurator do
       Logger.error("nerves_hub_link will fail to apply firmware updates.")
     end
 
-    %{config | fwup_public_keys: config.fwup_public_keys ++ fwup_public_keys}
+    %{config | fwup_public_keys: fwup_public_keys}
   end
 end

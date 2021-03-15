@@ -20,4 +20,21 @@ defmodule NervesHubLink.ConfiguratorTest do
     config = NervesHubLink.Configurator.build()
     assert Map.has_key?(config.params, "fwup_version")
   end
+
+  test "only includes binary in fwup_public_keys" do
+    keys = [
+      "thisisavalidkey==",
+      :not_valid,
+      false,
+      {:also, :not, :valid},
+      nil,
+      1234
+    ]
+
+    Application.put_env(:nerves_hub_link, :fwup_public_keys, keys)
+
+    config = NervesHubLink.Configurator.build()
+
+    assert ["thisisavalidkey=="] == config.fwup_public_keys
+  end
 end
