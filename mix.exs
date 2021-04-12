@@ -79,7 +79,6 @@ defmodule NervesHubLink.MixProject do
       links: %{"GitHub" => @source_url},
       files: [
         "lib",
-        "ssl",
         "CHANGELOG.md",
         "LICENSE",
         "mix.exs",
@@ -103,6 +102,7 @@ defmodule NervesHubLink.MixProject do
       {:nerves_key, "~> 0.5", optional: true},
       {:nerves_runtime, "~> 0.8"},
       {:nerves_hub_link_common, "~> 0.2.0"},
+      {:nerves_hub_ca_store, "~> 1.0.0"},
       {:phoenix_client, "~> 0.11"},
       {:x509, "~> 0.5"}
     ]

@@ -1,12 +1,7 @@
 use Mix.Config
 
 config :nerves_hub_cli,
-  home_dir: Path.expand("nerves-hub"),
-  ca_certs: Path.expand("../test/fixtures/ca_certs", __DIR__)
-
-# Shared Configuration.
-config :nerves_hub_link,
-  ca_certs: Path.expand("../test/fixtures/ca_certs", __DIR__)
+  home_dir: Path.expand("nerves-hub")
 
 # API HTTP connection.
 config :nerves_hub_user_api,
@@ -17,7 +12,15 @@ config :nerves_hub_user_api,
 config :nerves_hub_link,
   device_api_host: "0.0.0.0",
   device_api_port: 4001,
-  configurator: NervesHubLink.Configurator.Default
+  configurator: NervesHubLink.Configurator.Default,
+  # SSL values are used in a test.
+  ssl: [
+    cert: "ima cert!",
+    key: "ima key!",
+    cacerts: ["Everyone", "gets", "a", "CA"],
+    server_name_indication: "waddup",
+    verify: :verify_peer
+  ]
 
 config :nerves_hub_link,
   client: NervesHubLink.ClientMock,
