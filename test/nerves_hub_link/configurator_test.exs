@@ -10,8 +10,6 @@ defmodule NervesHubLink.ConfiguratorTest do
       verify: :verify_peer
     ]
 
-    Application.put_env(:nerves_hub_link, :ssl, ssl)
-
     config = NervesHubLink.Configurator.build()
     assert config.socket[:transport_opts][:socket_opts] == ssl
   end

@@ -448,6 +448,26 @@ config :nerves_hub_link, remote_iex_timeout: 900 # 15 minutes
 You may also need additional permissions on NervesHub to see the device and to use the
 remote IEx feature.
 
+## CA Certificates
+
+If you are connecting to the publicly available https://nerves-hub.org instance, then
+then you don't need to do anything here as they are handled by default with
+[`NervesHubCAStore`](https://github.com/nerves-hub/nerves_hub_ca_store).
+If you are connecting to your own instance with custom CA certificates, use the
+`:ca_store` option to specific a module with a `ca_certs/0` function that returns
+a list of DER encoded certificates:
+
+```elixir
+config :nerves_hub_link, ca_store: MyModule
+```
+
+Or if you have the certificates in DER format, you can also explicitly set them in the :ssl option:
+
+```elixir
+my_der_list = [<<213, 34, 234, 53, 83, 8, 2, ...>>]
+config :nerves_hub_link, ssl: [cacerts: my_der_list]
+```
+
 ## Debugging errors
 
 ### TLS client errors

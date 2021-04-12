@@ -1,12 +1,7 @@
 use Mix.Config
 
 config :nerves_hub_cli,
-  home_dir: Path.expand("nerves-hub"),
-  ca_certs: Path.expand("../test/fixtures/ca_certs", __DIR__)
-
-# Shared Configuration.
-config :nerves_hub_link,
-  ca_certs: Path.expand("../test/fixtures/ca_certs", __DIR__)
+  home_dir: Path.expand("nerves-hub")
 
 # API HTTP connection.
 config :nerves_hub_user_api,
