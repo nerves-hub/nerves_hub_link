@@ -86,8 +86,8 @@ your dependencies. For example:
   defp deps(target) do
     [
       {:nerves_runtime, "~> 0.11"},
-      {:nerves_hub_link, "~> 0.9"},
-      {:nerves_time, "~> 0.2"},
+      {:nerves_hub_link, "~> 0.20"},
+      {:nerves_time, "~> 0.4"},
       ...
     ] ++ system(target)
   end

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.20.0
+
+* Breaking Changes
+  * This release includes a change to how CA certificates are used in the connection
+    to NervesHub. If you are connecting to the publicly hosted https://nerves-hub.org,
+    then no changes are required.
+    If you are manually supplying `:ca_certs` config value to connect to another instance
+    of NervesHub, then you will need to update you config following the instructions of
+    [CA Certificates](https://hexdocs.pm/nerves_hub_link/readme.html#ca-certificates) in the README.
+
 ## 0.10.2
 
 * Fixes
