@@ -49,7 +49,7 @@ defmodule NervesHubLink.Socket do
   @impl Slipstream
   def init(config) do
     opts = [
-      gun_open_options: %{transport: :tls, transport_opts: config.ssl},
+      mint_opts: [protocols: [:http1], transport_opts: config.ssl],
       uri: config.socket[:url],
       rejoin_after_msec: [@rejoin_after]
     ]
