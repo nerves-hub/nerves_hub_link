@@ -1,7 +1,7 @@
 defmodule NervesHubLink.MixProject do
   use Mix.Project
 
-  @version "0.10.0-rc.0"
+  @version "0.12.1"
   @source_url "https://github.com/nerves-hub/nerves_hub_link"
 
   Application.put_env(
@@ -103,7 +103,7 @@ defmodule NervesHubLink.MixProject do
       {:nerves_runtime, "~> 0.8"},
       {:nerves_hub_link_common, "~> 0.3.0"},
       {:nerves_hub_ca_store, "~> 1.0.0"},
-      {:slipstream, "~> 0.6.0"},
+      {:slipstream, "~> 0.8"},
       {:x509, "~> 0.5"}
     ]
   end
