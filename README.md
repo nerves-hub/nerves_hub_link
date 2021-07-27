@@ -15,7 +15,7 @@ NervesHub provides many of the features that you'd expect in a firmware update
 server. Fundamentally, devices connect to the server by joining a long-lived Phoenix
 channel (for HTTP polling, see [nerves_hub_link_http](https://github.com/nerves-hub/nerves_hub_link_http)).
 If a firmware update is available, NervesHub will provide a URL to the device and the
-device can update immediately or [when convenient](https://github.com/nerves-hub/nerves_hub#conditionally-applying-updates).
+device can update immediately or [when convenient](https://github.com/nerves-hub/nerves_hub_link#conditionally-applying-updates).
 
 NervesHub does impose some requirements on devices and firmware that may require
 changes to your Nerves projects:
