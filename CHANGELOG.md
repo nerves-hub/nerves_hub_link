@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.12.0
+
+* fwup 1.0.0
+
+* Enhancements
+  * added `:fwup_env` option to the Configurator to support
+    environment variables which are needed in `fwup`
+
 ## 0.11.0
 
 * Breaking Changes
