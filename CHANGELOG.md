@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.12.1] - 2020-08-19
+
+* Added
+  * `NervesHubLink.reconnect/0` to force reconnection of the socket and channels
+
 ## 0.12.0
 
 * fwup 1.0.0
