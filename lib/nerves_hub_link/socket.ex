@@ -111,7 +111,13 @@ defmodule NervesHubLink.Socket do
 
   @impl Slipstream
   def handle_cast(:reconnect, socket) do
+    {:ok, socket} =
+      socket
+      |> disconnect()
+      |> await_disconnect()
+
     {:ok, socket} = reconnect(socket)
+
     {:noreply, socket}
   end
 
