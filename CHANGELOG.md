@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.13.0] - 2020-10-01
+
+### Potentially Breaking
+
+* Added
+  * Switch the websocket client to the [Slipstream](https://github.com/NFIBrokerage/slipstream)
+    library for communication with NervesHub. There are no API changes. This should only be
+    a change to the internals, but you may notice timing differences especially around retries. 
+
 ## [0.12.1] - 2020-08-19
 
 * Added
