@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.13.1] - 2020-10-19
+
+* Fixed
+  * `NervesHubLink.reconnect/0` no longer times out and instead disconnects
+    the socket forcing the reconnection logic
+
 ## [0.13.0] - 2020-10-01
 
 ### Potentially Breaking
