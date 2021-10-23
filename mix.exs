@@ -99,7 +99,7 @@ defmodule NervesHubLink.MixProject do
       {:jason, "~> 1.0"},
       {:mox, "~> 1.0.0", only: :test},
       {:nerves_hub_cli, "~> 0.11", runtime: false},
-      {:nerves_key, "~> 0.5", optional: true},
+      {:nerves_key, "~> 1.0 or ~> 0.5", optional: true},
       {:nerves_runtime, "~> 0.8"},
       {:nerves_hub_link_common, "~> 0.3.0"},
       {:nerves_hub_ca_store, "~> 1.0.0"},
