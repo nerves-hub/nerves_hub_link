@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.0.0] - 2020-10-25
+
+This release only bumps the version number. It doesn't have any code changes.
+
 ## [0.13.1] - 2020-10-19
 
 * Fixed
