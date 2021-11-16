@@ -166,8 +166,8 @@ defmodule NervesHubLink.Socket do
     {:ok, set_iex_timer(socket)}
   end
 
-  def handle_message(@console_topic, "dn", payload, %{assigns: %{iex_pid: nil}} = socket) do
-    handle_message(@console_topic, "dn", payload, start_iex(socket))
+  def handle_message(@console_topic, message, payload, %{assigns: %{iex_pid: nil}} = socket) do
+    handle_message(@console_topic, message, payload, start_iex(socket))
   end
 
   def handle_message(@console_topic, "dn", %{"data" => data}, socket) do
