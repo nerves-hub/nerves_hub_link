@@ -1,16 +1,16 @@
 # Changelog
 
-## [1.0.0] - 2020-10-25
+## [1.0.0] - 2021-10-25
 
 This release only bumps the version number. It doesn't have any code changes.
 
-## [0.13.1] - 2020-10-19
+## [0.13.1] - 2021-10-19
 
 * Fixed
   * `NervesHubLink.reconnect/0` no longer times out and instead disconnects
     the socket forcing the reconnection logic
 
-## [0.13.0] - 2020-10-01
+## [0.13.0] - 2021-10-01
 
 ### Potentially Breaking
 
@@ -19,7 +19,7 @@ This release only bumps the version number. It doesn't have any code changes.
     library for communication with NervesHub. There are no API changes. This should only be
     a change to the internals, but you may notice timing differences especially around retries. 
 
-## [0.12.1] - 2020-08-19
+## [0.12.1] - 2021-08-19
 
 * Added
   * `NervesHubLink.reconnect/0` to force reconnection of the socket and channels
