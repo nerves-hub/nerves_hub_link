@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.1] - 2021-11-16
+
+* Fixed
+  * A crash in the remote console would occur if a window resize message was received
+    before the IEx process was started
+
 ## [1.0.0] - 2021-10-25
 
 This release only bumps the version number. It doesn't have any code changes.
