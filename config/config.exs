@@ -1,4 +1,4 @@
-use Mix.Config
+import Config
 
 # This config.exs file will configure `nerves_hub_link` to point to a local instance
 # of `nerves_hub_web`. See CONTRIBUTING.md for details.
