@@ -51,7 +51,8 @@ defmodule NervesHubLink.Socket do
     opts = [
       mint_opts: [protocols: [:http1], transport_opts: config.ssl],
       uri: config.socket[:url],
-      rejoin_after_msec: [@rejoin_after]
+      rejoin_after_msec: [@rejoin_after],
+      reconnect_after_msec: backoff()
     ]
 
     socket =
@@ -295,5 +296,14 @@ defmodule NervesHubLink.Socket do
     _ = Process.unlink(iex)
     :ok = GenServer.stop(iex, 10_000)
     assign(socket, iex_pid: nil)
+  end
+
+  # Produces a jittered list of 11 that grows exponentially from less than a second to about 60 secs
+  defp backoff() do
+    jitter = Enum.random(0..500)
+
+    for i <- 1..11 do
+      round(:math.exp(i)) + jitter
+    end
   end
 end
