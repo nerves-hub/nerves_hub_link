@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.1.0] - 2021-12-09
+
+* Removed
+  * Elixir 1.8 and 1.9 are no longer supported. These hadn't been tested on CI
+    and were removed when we started testing Elixir 1.13.
+
+* Added
+  * Retry timeouts are now being set on Slipstream via the
+    `:reconnect_after_msec` parameter.  The timeouts start at 1 second and
+    double up to 60 seconds plus a random amount of jitter. Previously the
+    timeouts started under a second and maxed out at 5 seconds without jitter.
+    These timeouts were chosen to reduce the load on NervesHub servers when
+    large numbers of devices disconnect. They can be overridden.
+
 ## [1.0.1] - 2021-11-16
 
 * Fixed
@@ -23,7 +37,7 @@ This release only bumps the version number. It doesn't have any code changes.
 * Added
   * Switch the websocket client to the [Slipstream](https://github.com/NFIBrokerage/slipstream)
     library for communication with NervesHub. There are no API changes. This should only be
-    a change to the internals, but you may notice timing differences especially around retries. 
+    a change to the internals, but you may notice timing differences especially around retries.
 
 ## [0.12.1] - 2021-08-19
 
