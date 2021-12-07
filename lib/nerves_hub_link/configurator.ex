@@ -1,4 +1,5 @@
 defmodule NervesHubLink.Configurator do
+  alias NervesHubLink.Backoff
   alias __MODULE__.{Config, Default}
   require Logger
 
@@ -52,9 +53,17 @@ defmodule NervesHubLink.Configurator do
     # any other items that may have been provided in :socket or
     # :transport_opts keys previously.
     transport_opts = config.socket[:transport_opts] || []
-
     transport_opts = Keyword.put(transport_opts, :socket_opts, config.ssl)
-    socket = Keyword.put(config.socket, :transport_opts, transport_opts)
+
+    socket =
+      config.socket
+      |> Keyword.put(:transport_opts, transport_opts)
+      |> Keyword.put_new_lazy(:reconnect_after_msec, fn ->
+        # Default retry interval
+        # 1 second minimum delay that doubles up to 60 seconds. Up to 50% of
+        # the delay is added to introduce jitter into the retry attempts.
+        Backoff.delay_list(1000, 60000, 0.50)
+      end)
 
     %{config | socket: socket}
   end
