@@ -94,7 +94,7 @@ defmodule NervesHubLink.MixProject do
       {:ex_doc, "~> 0.18", only: :docs, runtime: false},
       {:excoveralls, "~> 0.10", only: :test},
       {:extty, "~> 0.2"},
-      {:fwup, "~> 1.0.0"},
+      {:fwup, "~> 1.0"},
       {:hackney, "~> 1.10"},
       {:jason, "~> 1.0"},
       {:mox, "~> 1.0.0", only: :test},
