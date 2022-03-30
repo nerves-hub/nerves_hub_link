@@ -44,23 +44,23 @@ config :vintage_net,
   config: [
     {"usb0", %{type: VintageNetDirect}},
     {"eth0",
-
      %{
        type: VintageNetEthernet,
        ipv4: %{method: :dhcp}
      }},
-    {"wlan0", %{
-      type: VintageNetWiFi,
-      vintage_net_wifi: %{
-        networks: [
-          %{
-            key_mgmt: :wpa_psk,
-            ssid: System.get_env("NERVES_WIFI_SSID"),
-            psk: System.get_env("NERVES_WIFI_PSK")
-          }
-        ]
-      }
-    }}
+    {"wlan0",
+     %{
+       type: VintageNetWiFi,
+       vintage_net_wifi: %{
+         networks: [
+           %{
+             key_mgmt: :wpa_psk,
+             ssid: System.get_env("NERVES_WIFI_SSID"),
+             psk: System.get_env("NERVES_WIFI_PSK")
+           }
+         ]
+       }
+     }}
   ]
 
 config :mdns_lite,
