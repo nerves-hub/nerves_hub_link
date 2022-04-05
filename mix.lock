@@ -1,4 +1,4 @@
-%{
+%{<<<<<<< HEAD
   "atecc508a": {:hex, :atecc508a, "1.1.0", "8bcbc5e46e04cd48d5cf2c219559e65b4333fd85cbb86bc659f8993312014a69", [:mix], [{:circuits_i2c, "~> 1.0 or ~> 0.2", [hex: :circuits_i2c, repo: "hexpm", optional: false]}, {:x509, "~> 0.5.1 or ~> 0.6", [hex: :x509, repo: "hexpm", optional: false]}], "hexpm", "ebfdacc6b40e8051ac550e7df45b8d5f1f78fdc39d771d2d8209e16ad02196ac"},
   "castore": {:hex, :castore, "0.1.17", "ba672681de4e51ed8ec1f74ed624d104c0db72742ea1a5e74edbc770c815182f", [:mix], [], "hexpm", "d9844227ed52d26e7519224525cb6868650c272d4a3d327ce3ca5570c12163f9"},
   "certifi": {:hex, :certifi, "2.9.0", "6f2a475689dd47f19fb74334859d460a2dc4e3252a3324bd2111b8f0429e7e21", [:rebar3], [], "hexpm", "266da46bdb06d6c6d35fde799bcb28d36d985d424ad7c08b5bb48f5b5cdd4641"},

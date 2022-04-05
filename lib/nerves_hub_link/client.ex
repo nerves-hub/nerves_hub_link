@@ -63,6 +63,16 @@ defmodule NervesHubLink.Client do
   @callback update_available(update_data()) :: update_response()
 
   @doc """
+  Called when new deployment info is available.
+  """
+  @callback deployment_info_available(map()) :: :ok
+
+  @doc """
+  Called to find out what deployment info is already known to the client.
+  """
+  @callback known_deployment_info() :: map()
+
+  @doc """
   Called on firmware update reports.
 
   The return value of this function is not checked.
@@ -109,6 +119,22 @@ defmodule NervesHubLink.Client do
 
         :apply
     end
+  end
+
+  @doc """
+  This function is called internally by NervesHubLink to notify clients of new deployment info.
+  """
+  @spec deployment_info_available(map) :: :ok
+  def deployment_info_available(info) do
+    apply_wrap(mod(), :deployment_info_available, [info])
+  end
+
+  @doc """
+  This function is called internally by NervesHubLink to query clients of about the deployment info they already know about.
+  """
+  @spec known_deployment_info() :: map()
+  def known_deployment_info() do
+    apply_wrap(mod(), :known_deployment_info, [])
   end
 
   @doc """

@@ -75,6 +75,7 @@ defmodule NervesHubLink.Socket do
     device_join_params =
       socket.assigns.params
       |> Map.put("currently_downloading_uuid", currently_downloading_uuid)
+      |> with_known_deployment_info()
 
     socket =
       socket
@@ -149,6 +150,11 @@ defmodule NervesHubLink.Socket do
         Logger.error("Error parsing update data: #{inspect(update)} error: #{inspect(error)}")
         {:ok, socket}
     end
+  end
+
+  def handle_message(@device_topic, "deployment_info", info, socket) do
+    if not Enum.empty?(info), do: UpdateManager.apply_deployment_info(info)
+    {:ok, socket}
   end
 
   ##
@@ -247,7 +253,16 @@ defmodule NervesHubLink.Socket do
     disconnect(socket)
   end
 
-  defp handle_join_reply(%{"firmware_url" => url} = update) when is_binary(url) do
+  defp handle_join_reply(join_reply) do
+    _ = handle_deployment_info_join(join_reply)
+    handle_update_join_reply(join_reply)
+  end
+
+  defp handle_deployment_info_join(join_reply) do
+    UpdateManager.apply_deployment_info(Map.get(join_reply, "deployment_info", %{}))
+  end
+
+  defp handle_update_join_reply(%{"firmware_url" => url} = update) when is_binary(url) do
     case NervesHubLinkCommon.Message.UpdateInfo.parse(update) do
       {:ok, %NervesHubLinkCommon.Message.UpdateInfo{} = info} ->
         UpdateManager.apply_update(info)
@@ -258,7 +273,7 @@ defmodule NervesHubLink.Socket do
     end
   end
 
-  defp handle_join_reply(_), do: :noop
+  defp handle_update_join_reply(_), do: :noop
 
   defp maybe_join_console(socket) do
     if socket.assigns.remote_iex do
@@ -297,4 +312,7 @@ defmodule NervesHubLink.Socket do
     :ok = GenServer.stop(iex, 10_000)
     assign(socket, iex_pid: nil)
   end
+
+  defp with_known_deployment_info(device_join_params),
+    do: Map.put(device_join_params, "known_deployment_info", Client.known_deployment_info())
 end

@@ -18,7 +18,8 @@ defmodule NervesHubLink.Application do
       fwup_devpath: config.fwup_devpath,
       fwup_env: config.fwup_env,
       handle_fwup_message: &Client.handle_fwup_message/1,
-      update_available: &Client.update_available/1
+      update_available: &Client.update_available/1,
+      deployment_info_available: &Client.deployment_info_available/1
     }
 
     children = [

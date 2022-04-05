@@ -12,6 +12,15 @@ defmodule NervesHubLink.Client.Default do
   def update_available(_), do: :apply
 
   @impl NervesHubLink.Client
+  def deployment_info_available(info) do
+    Logger.debug("Deployment info available: #{inspect(info)}")
+    :ok
+  end
+
+  @impl NervesHubLink.Client
+  def known_deployment_info(), do: %{}
+
+  @impl NervesHubLink.Client
   def handle_fwup_message({:progress, percent}) do
     Logger.debug("FWUP PROG: #{percent}%")
   end
