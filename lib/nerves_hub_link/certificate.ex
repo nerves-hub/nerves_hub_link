@@ -52,21 +52,24 @@ defmodule NervesHubLink.Certificate do
     ssl = Application.get_env(:nerves_hub_link, :ssl, [])
     ca_store = Application.get_env(:nerves_hub_link, :ca_store, NervesHubCAStore)
 
-    cond do
-      # prefer explicit SSL setting if available
-      is_list(ssl[:cacerts]) ->
-        ssl[:cacerts]
+    cacerts = if is_list(ssl[:cacerts]), do: ssl[:cacerts], else: []
+    if is_atom(ca_store), do: cacerts ++ ca_store.ca_certs(), else: cacerts
 
-      is_atom(ca_store) ->
-        ca_store.ca_certs()
+    # cond do
+    #   # prefer explicit SSL setting if available
+    #   is_list(ssl[:cacerts]) ->
+    #     ssl[:cacerts]
 
-      true ->
-        Logger.warn(
-          "[NervesHubLink] No CA store or :cacerts have been specified. Request will fail"
-        )
+    #   is_atom(ca_store) ->
+    #     ca_store.ca_certs()
 
-        []
-    end
+    #   true ->
+    #     Logger.warn(
+    #       "[NervesHubLink] No CA store or :cacerts have been specified. Request will fail"
+    #     )
+
+    #     []
+    # end
   end
 
   @deprecated "Use fwup_public_keys/0 instead"
