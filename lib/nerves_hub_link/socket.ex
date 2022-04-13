@@ -260,7 +260,13 @@ defmodule NervesHubLink.Socket do
   end
 
   defp handle_deployment_info_join(join_reply) do
-    UpdateManager.apply_deployment_info(Map.get(join_reply, "deployment_info", %{}))
+    case Map.get(join_reply, "deployment_info") do
+      nil ->
+        :noop
+
+      info ->
+        if Enum.empty?(info), do: :noop, else: UpdateManager.apply_deployment_info(info)
+    end
   end
 
   defp handle_update_join_reply(%{"firmware_url" => url} = update) when is_binary(url) do
