@@ -153,7 +153,8 @@ defmodule NervesHubLink.Socket do
   end
 
   def handle_message(@device_topic, "deployment_info", info, socket) do
-    if not Enum.empty?(info), do: UpdateManager.apply_deployment_info(info)
+    Logger.info("[#{inspect(__MODULE__)}] Received deployment_info #{inspect(info)}")
+    UpdateManager.apply_deployment_info(info)
     {:ok, socket}
   end
 
