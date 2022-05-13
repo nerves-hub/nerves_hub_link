@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.2.0] - 2022-05-13
+
+* `:nerves_hub_link_common 0.4.0`
+
+* Removed
+  * Elixir 1.10 is no longer supported. This matches the minimum version of
+    `nerves_hub_link_common` which is Elixir 1.11
+
+* Fixed
+  * Allow for `:slipstream ~> 1.0`
+
 ## [1.1.0] - 2021-12-09
 
 * Removed
