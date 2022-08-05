@@ -9,7 +9,19 @@ defmodule NervesHubLink.Client.Default do
   require Logger
 
   @impl NervesHubLink.Client
-  def update_available(_), do: :apply
+  def update_available(update_info) do
+    if update_info.firmware_meta.uuid == Nerves.Runtime.KV.get_active("nerves_fw_uuid") do
+      Logger.info("""
+      [NervesHubLink.Client] Ignoring request to update to the same firmware
+
+      #{inspect(update_info)}
+      """)
+
+      :ignore
+    else
+      :apply
+    end
+  end
 
   @impl NervesHubLink.Client
   def handle_fwup_message({:progress, percent}) do
