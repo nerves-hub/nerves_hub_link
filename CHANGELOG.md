@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.0] - 2022-09-06
+
+* Fixed
+  * Use `Slipstream.push/5` for safe publishing
+  * Don't apply update by default if the UUID is the same
+
 ## [1.2.0] - 2022-05-13
 
 * `:nerves_hub_link_common 0.4.0`
