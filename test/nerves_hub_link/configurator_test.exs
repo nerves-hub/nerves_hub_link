@@ -3,6 +3,7 @@ defmodule NervesHubLink.ConfiguratorTest do
 
   test "inserts socket_opts from ssl" do
     ssl = [
+      versions: [:"tlsv1.2"],
       cert: "ima cert!",
       key: "ima key!",
       cacerts: ["Everyone", "gets", "a", "CA"],
