@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0] - 2022-10-07
+
+* Fixed
+  * Default to TLS 1.2 for all connections. This fixes issues if TLS 1.3 is
+    used or attempted. See [NervesHubWeb: Potential SSL Issues](https://github.com/nerves-hub/nerves_hub_web#potential-ssl-issues)
+    for more information.
+
 ## [1.3.0] - 2022-09-06
 
 * Fixed
