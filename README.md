@@ -487,3 +487,5 @@ mix nerves_hub.ca_certificate register my-signer.cert
 
 Another possibility is that the device wasn't provisioned with the certificate
 that's on nerves-hub.org.
+
+See also [NervesHubWeb: Potential SSL Issues](https://github.com/nerves-hub/nerves_hub_web#potential-ssl-issues)
