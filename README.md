@@ -428,6 +428,44 @@ To have NervesHubLink invoke it, update your `config.exs` as follows:
 config :nerves_hub_link, client: MyApp.NervesHubLinkClient
 ```
 
+### Reporting update progress
+
+See the previous section for implementing a `client` behaviour.
+
+```elixir
+defmodule MyApp.NervesHubLinkClient do
+   @behaviour NervesHubLink.Client
+    #  argument can be:
+    #   {:ok, non_neg_integer(), String.t()}
+    #   {:warning, non_neg_integer(), String.t()}
+    #   {:error, non_neg_integer(), String.t()}
+    #   {:progress, 0..100}
+    def handle_fwup_message({:ok, _, _}) do
+      Logger.error("Firmware update complete")
+      :ok
+    end
+
+    def handle_fwup_message({:warning, code, message}) do
+      Logger.error("Warning while applying firmware update (#{code)}): #{message}")
+      :ok
+    end
+
+    def handle_fwup_message({:error, _, message}) do
+      Logger.error("Error while applying firmware update #(#{code}): {message}")
+      :ok
+    end
+
+    def handle_fwup_message({:progress, progress}) when rem(progress, 10) do
+      Logger.info("Update progress: #{progress}%")
+      :ok
+    end
+
+    def handle_fwup_message({:progress, _}) do
+      :ok
+    end
+end
+```
+
 ### Enabling remote IEx access
 
 It's possible to remotely log into your device via the NervesHub web interface. This

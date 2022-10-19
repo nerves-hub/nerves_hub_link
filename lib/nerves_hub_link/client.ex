@@ -32,7 +32,7 @@ defmodule NervesHubLink.Client do
   To have NervesHubLink invoke it, add the following to your `config.exs`:
 
   ```elixir
-  config :nerves_hub, client: MyApp.NervesHubLinkClient
+  config :nerves_hub_link, client: MyApp.NervesHubLinkClient
   ```
   """
 
