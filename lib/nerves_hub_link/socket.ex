@@ -5,8 +5,6 @@ defmodule NervesHubLink.Socket do
   alias NervesHubLink.Client
   alias NervesHubLinkCommon.UpdateManager
 
-  @rejoin_after Application.get_env(:nerves_hub_link, :rejoin_after, 5_000)
-
   defmodule State do
     @type t :: %__MODULE__{
             channel: pid(),
@@ -48,10 +46,12 @@ defmodule NervesHubLink.Socket do
 
   @impl Slipstream
   def init(config) do
+    rejoin_after = Application.get_env(:nerves_hub_link, :rejoin_after, 5_000)
+
     opts = [
       mint_opts: [protocols: [:http1], transport_opts: config.ssl],
       uri: config.socket[:url],
-      rejoin_after_msec: [@rejoin_after],
+      rejoin_after_msec: [rejoin_after],
       reconnect_after_msec: config.socket[:reconnect_after_msec]
     ]
 
