@@ -3,8 +3,6 @@ defmodule NervesHubLink.Client.DefaultTest do
   alias NervesHubLink.Client.Default
   alias NervesHubLinkCommon.Message.{FirmwareMetadata, UpdateInfo}
 
-  import ExUnit.CaptureIO
-
   doctest Default
 
   @update_info %UpdateInfo{
@@ -16,7 +14,7 @@ defmodule NervesHubLink.Client.DefaultTest do
     assert Default.update_available(@update_info) == :apply
   end
 
-  test "update_avialable with same uuid" do
+  test "update_available with same uuid" do
     update_info =
       put_in(@update_info.firmware_meta.uuid, Nerves.Runtime.KV.get_active("nerves_fw_uuid"))
 
