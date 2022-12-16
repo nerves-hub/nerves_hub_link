@@ -99,7 +99,7 @@ defmodule NervesHubLink.HTTPFwupStream do
 
   @impl GenServer
   def handle_call({:get, url}, from, s) do
-    make_request(url)
+    _ = make_request(url)
 
     {:noreply, %{s | url: url, caller: from}}
   end
@@ -132,7 +132,7 @@ defmodule NervesHubLink.HTTPFwupStream do
 
       next_url ->
         if s.number_of_redirects < 5 do
-          make_request(next_url)
+          _ = make_request(next_url)
           {:noreply, %{s | number_of_redirects: s.number_of_redirects + 1}}
         else
           {:stop, {:error, {:http_error, :too_many_redirects}}, s}
