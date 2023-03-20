@@ -50,6 +50,9 @@ defmodule NervesHubLink.Client.Default do
   end
 
   @impl NervesHubLink.Client
+  def connected(), do: :ok
+
+  @impl NervesHubLink.Client
   def identify() do
     Logger.info("[NervesHubLink] identifying")
   end

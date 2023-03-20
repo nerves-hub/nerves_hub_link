@@ -77,6 +77,11 @@ defmodule NervesHubLink.Client do
   @callback handle_error(any()) :: :ok
 
   @doc """
+  Callback to perform an action when the device has connected to NervesHub.
+  """
+  @callback connected() :: :ok
+
+  @doc """
   Callback to identify the device from NervesHub.
   """
   @callback identify() :: :ok
@@ -137,6 +142,13 @@ defmodule NervesHubLink.Client do
       _ ->
         :ok
     end
+  end
+
+  @doc """
+  This function is called internally by NervesHubLink to notify clients of connecting to NervesHub.
+  """
+  def connected() do
+    apply_wrap(mod(), :connected, [])
   end
 
   @doc """
