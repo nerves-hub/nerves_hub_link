@@ -77,6 +77,11 @@ defmodule NervesHubLink.Client do
   @callback handle_error(any()) :: :ok
 
   @doc """
+  Callback to identify the device from NervesHub.
+  """
+  @callback identify() :: :ok
+
+  @doc """
   Optional callback to reboot the device when a firmware update completes
 
   The default behavior is to call `Nerves.Runtime.reboot/0` after a successful update. This
@@ -132,6 +137,13 @@ defmodule NervesHubLink.Client do
       _ ->
         :ok
     end
+  end
+
+  @doc """
+  This function is called internally by NervesHubLink to identify a device.
+  """
+  def identify() do
+    apply_wrap(mod(), :identify, [])
   end
 
   @doc """

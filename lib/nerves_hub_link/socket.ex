@@ -139,6 +139,11 @@ defmodule NervesHubLink.Socket do
     {:ok, socket}
   end
 
+  def handle_message(@device_topic, "identify", _params, socket) do
+    Client.identify()
+    {:ok, socket}
+  end
+
   def handle_message(@device_topic, "update", update, socket) do
     case NervesHubLinkCommon.Message.UpdateInfo.parse(update) do
       {:ok, %NervesHubLinkCommon.Message.UpdateInfo{} = info} ->

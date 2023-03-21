@@ -48,4 +48,9 @@ defmodule NervesHubLink.Client.Default do
   def handle_error(error) do
     Logger.warn("[NervesHubLink] error: #{inspect(error)}")
   end
+
+  @impl NervesHubLink.Client
+  def identify() do
+    Logger.info("[NervesHubLink] identifying")
+  end
 end
