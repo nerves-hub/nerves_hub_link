@@ -5,8 +5,8 @@ defmodule NervesHubLink.Application do
   alias NervesHubLink.Configurator
   alias NervesHubLink.Connection
   alias NervesHubLink.Socket
-  alias NervesHubLinkCommon.FwupConfig
-  alias NervesHubLinkCommon.UpdateManager
+  alias NervesHubLink.FwupConfig
+  alias NervesHubLink.UpdateManager
 
   def start(_type, _args) do
     config = Configurator.build()

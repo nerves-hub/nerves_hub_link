@@ -90,17 +90,20 @@ defmodule NervesHubLink.MixProject do
 
   defp deps do
     [
+      {:castore, "~> 0.1.0"},
+      {:credo, "~> 1.2", only: :test, runtime: false},
       {:dialyxir, "~> 1.1", only: [:dev, :test], runtime: false},
-      {:ex_doc, "~> 0.18", only: :docs, runtime: false},
       {:excoveralls, "~> 0.10", only: :test},
+      {:ex_doc, "~> 0.18", only: :docs, runtime: false},
       {:extty, "~> 0.2"},
       {:fwup, "~> 1.0"},
       {:hackney, "~> 1.10"},
       {:jason, "~> 1.0"},
+      {:mint, "~> 1.2"},
       {:mox, "~> 1.0.0", only: :test},
       {:nerves_key, "~> 1.0 or ~> 0.5", optional: true},
       {:nerves_runtime, "~> 0.8"},
-      {:nerves_hub_link_common, "~> 0.4"},
+      {:plug_cowboy, "~> 2.0", only: :test},
       {:slipstream, "~> 1.0 or ~> 0.8"},
       {:x509, "~> 0.5"}
     ]

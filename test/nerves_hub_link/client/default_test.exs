@@ -1,7 +1,7 @@
 defmodule NervesHubLink.Client.DefaultTest do
   use ExUnit.Case, async: true
   alias NervesHubLink.Client.Default
-  alias NervesHubLinkCommon.Message.{FirmwareMetadata, UpdateInfo}
+  alias NervesHubLink.Message.{FirmwareMetadata, UpdateInfo}
 
   doctest Default
 

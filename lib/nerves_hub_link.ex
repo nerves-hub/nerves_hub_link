@@ -29,8 +29,8 @@ defmodule NervesHubLink do
   @doc """
   Current status of the update manager
   """
-  @spec status :: NervesHubLinkCommon.UpdateManager.State.status()
-  defdelegate status(), to: NervesHubLinkCommon.UpdateManager
+  @spec status :: NervesHubLink.UpdateManager.State.status()
+  defdelegate status(), to: NervesHubLink.UpdateManager
 
   @doc """
   Restart the socket and device channel
