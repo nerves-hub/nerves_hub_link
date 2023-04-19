@@ -1,13 +1,5 @@
 import Config
 
-config :nerves_hub_cli,
-  home_dir: Path.expand("../nerves-hub", __DIR__)
-
-# API HTTP connection.
-config :nerves_hub_user_api,
-  host: "api.staging.nerves-hub.org",
-  port: 443
-
 # Device HTTP connection.
 config :nerves_hub_link,
   device_api_host: "device.staging.nerves-hub.org",

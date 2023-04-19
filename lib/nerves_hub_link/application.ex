@@ -1,14 +1,12 @@
 defmodule NervesHubLink.Application do
   use Application
 
-  alias NervesHubLink.{
-    Client,
-    Configurator,
-    Connection,
-    Socket
-  }
-
-  alias NervesHubLinkCommon.{UpdateManager, FwupConfig}
+  alias NervesHubLink.Client
+  alias NervesHubLink.Configurator
+  alias NervesHubLink.Connection
+  alias NervesHubLink.Socket
+  alias NervesHubLinkCommon.FwupConfig
+  alias NervesHubLinkCommon.UpdateManager
 
   def start(_type, _args) do
     config = Configurator.build()
@@ -21,12 +19,18 @@ defmodule NervesHubLink.Application do
       update_available: &Client.update_available/1
     }
 
-    children = [
+    children = children(config, fwup_config)
+
+    Supervisor.start_link(children, strategy: :one_for_one, name: NervesHubLink.Supervisor)
+  end
+
+  defp children(%{connect: false}, _fwup_config), do: []
+
+  defp children(config, fwup_config) do
+    [
       {UpdateManager, fwup_config},
       Connection,
       {Socket, config}
     ]
-
-    Supervisor.start_link(children, strategy: :one_for_one, name: NervesHubLink.Supervisor)
   end
 end

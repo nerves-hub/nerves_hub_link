@@ -7,9 +7,10 @@ defmodule NervesHubLink.Configurator do
   @console_version "1.0.0"
 
   defmodule Config do
-    defstruct device_api_host: "device.nerves-hub.org",
+    defstruct connect: true,
+              device_api_host: nil,
               device_api_port: 443,
-              device_api_sni: "device.nerves-hub.org",
+              device_api_sni: nil,
               fwup_public_keys: [],
               fwup_devpath: "/dev/mmcblk0",
               fwup_env: [],
@@ -20,6 +21,7 @@ defmodule NervesHubLink.Configurator do
               ssl: []
 
     @type t() :: %__MODULE__{
+            connect: boolean(),
             device_api_host: String.t(),
             device_api_port: String.t(),
             device_api_sni: charlist(),
@@ -28,7 +30,7 @@ defmodule NervesHubLink.Configurator do
             fwup_env: [{String.t(), String.t()}],
             nerves_key: any(),
             params: map(),
-            remote_iex: boolean,
+            remote_iex: boolean(),
             socket: any(),
             ssl: [:ssl.tls_client_option()]
           }
@@ -119,15 +121,7 @@ defmodule NervesHubLink.Configurator do
   end
 
   defp add_fwup_public_keys(config) do
-    # NervesHubLink.Certificate.fwup_public_keys() is compiled into the module
-    # This is a simple workaround to support changing hardcoded binary keys
-    # in the config and being able to load without recompiling. However, it
-    # is still suggested to recompile as well which is required for resolve
-    # public keys referenced by an atom
-    fwup_public_keys =
-      for key <- NervesHubLink.Certificate.fwup_public_keys() ++ config.fwup_public_keys,
-          is_binary(key),
-          do: key
+    fwup_public_keys = for key <- config.fwup_public_keys, is_binary(key), do: key
 
     if fwup_public_keys == [] do
       Logger.error("No fwup public keys were configured for nerves_hub_link.")

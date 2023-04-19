@@ -22,7 +22,6 @@ defmodule NervesHubLink.Configurator.DefaultTest do
 
     ssl = config.ssl
 
-    assert ssl[:server_name_indication] == 'device.nerves-hub.org'
     assert Keyword.has_key?(ssl, :cacerts)
     assert Keyword.has_key?(ssl, :cert)
     assert Keyword.has_key?(ssl, :key)
