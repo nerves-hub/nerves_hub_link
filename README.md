@@ -39,41 +39,6 @@ Many of the steps below may feel manual, but they can and are automated by
 NervesHub users to set up automatic firmware updates from CI and to manufacture
 large numbers of devices.
 
-### Creating an account on nerves-hub.org
-
-The [nerves-hub.org](https://nerves-hub.org) NervesHub server is currently in
-limited beta so it does not allow new users to sign up. However, you found these
-docs and if you can use `mix` and endure some API changes, you can join us.
-
-In addition to the web site, NervesHub provides a command line interface (CLI).
-Some features are only available via the CLI. To enable the CLI in your project,
-add [nerves_hub_cli](https://hex.pm/packages/nerves_hub_cli) to your dependency
-list:
-
-```elixir
-  defp deps do
-    [
-      {:nerves, "~> 1.7", runtime: false},
-      {:nerves_hub_cli, "~> 0.10", runtime: false}
-      ...
-    ] ++ deps(@target)
-  end
-```
-
-Run `mix deps.get` to download the `nerves_hub_cli` dependency.
-
-Presumably you do not have an account yet. Create one by running:
-
-```bash
-mix nerves_hub.user register
-```
-
-If you already have an account, make sure that you have authenticated by running:
-
-```bash
-mix nerves_hub.user auth
-```
-
 ### Adding NervesHubLink to your project
 
 The first step is to add `nerves_hub_link` to your target dependencies in your
@@ -242,17 +207,7 @@ receives from a NervesHub server before applying the update. This protects the
 device against anyone tampering with the firmware image between when it was
 signed by you and when it is installed.
 
-All firmware signing public keys need to be added to your `config.exs`. Keys
-that are stored locally (like the one we just created) can be referred to by
-their atom name:
-
-```elixir
-config :nerves_hub_link,
-  fwup_public_keys: [:devkey]
-```
-
-If you have keys that cannot be stored locally, you will have to copy/paste
-their public key:
+All firmware signing public keys need to be added to your `config.exs`.
 
 ```elixir
 config :nerves_hub_link,
@@ -488,9 +443,6 @@ remote IEx feature.
 
 ## CA Certificates
 
-If you are connecting to the publicly available https://nerves-hub.org instance, then
-then you don't need to do anything here as they are handled by default with
-[`NervesHubCAStore`](https://github.com/nerves-hub/nerves_hub_ca_store).
 If you are connecting to your own instance with custom CA certificates, use the
 `:ca_store` option to specific a module with a `ca_certs/0` function that returns
 a list of DER encoded certificates:

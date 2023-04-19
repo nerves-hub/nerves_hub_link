@@ -37,9 +37,9 @@ defmodule NervesHubLink.MixProject do
   def application do
     [
       env: [
-        device_api_host: "device.nerves-hub.org",
+        device_api_host: nil,
         device_api_port: 443,
-        device_api_sni: "device.nerves-hub.org",
+        device_api_sni: nil,
         fwup_public_keys: []
       ],
       extra_applications: [:logger, :iex, :inets],
@@ -98,11 +98,9 @@ defmodule NervesHubLink.MixProject do
       {:hackney, "~> 1.10"},
       {:jason, "~> 1.0"},
       {:mox, "~> 1.0.0", only: :test},
-      {:nerves_hub_cli, "~> 0.11", runtime: false},
       {:nerves_key, "~> 1.0 or ~> 0.5", optional: true},
       {:nerves_runtime, "~> 0.8"},
       {:nerves_hub_link_common, "~> 0.4"},
-      {:nerves_hub_ca_store, "~> 1.0.0"},
       {:slipstream, "~> 1.0 or ~> 0.8"},
       {:x509, "~> 0.5"}
     ]
