@@ -299,7 +299,7 @@ defmodule NervesHubLink.Socket do
 
   defp stop_iex(%{assigns: %{iex_pid: iex}} = socket) do
     _ = Process.unlink(iex)
-    :ok = GenServer.stop(iex, 10_000)
+    :ok = GenServer.stop(iex, :normal)
     assign(socket, iex_pid: nil)
   end
 end
