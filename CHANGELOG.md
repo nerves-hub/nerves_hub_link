@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.4.1] - 2023-05-26
+
+* Added
+  * Expose `NervesHubLink.console_active?` for checking active IEx sessions (#123)
+  * Improvements for Elixir 1.15 and OTP 26
+
+* Fixed
+  * Stops IEx process with `:normal` instead of causing a crash (#121)
+
 ## [1.4.0] - 2022-10-07
 
 * Fixed
