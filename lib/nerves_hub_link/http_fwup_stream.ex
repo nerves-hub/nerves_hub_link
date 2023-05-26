@@ -126,7 +126,7 @@ defmodule NervesHubLink.HTTPFwupStream do
       when status_code in @redirect_status_codes do
     Logger.debug("Redirect")
 
-    case get_header(headers, 'location') do
+    case get_header(headers, ~c"location") do
       nil ->
         {:stop, {:http_error, {status_code, body}}, s}
 
@@ -172,7 +172,7 @@ defmodule NervesHubLink.HTTPFwupStream do
 
   defp make_request(url) do
     headers = [
-      {'Content-Type', 'application/octet-stream'}
+      {~c"Content-Type", ~c"application/octet-stream"}
     ]
 
     http_opts = [connect_timeout: 30_000, timeout: :infinity, autoredirect: false]
