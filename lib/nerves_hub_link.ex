@@ -21,6 +21,12 @@ defmodule NervesHubLink do
   end
 
   @doc """
+  Return whether there's currently an active console session
+  """
+  @spec console_active?() :: boolean()
+  defdelegate console_active?, to: Socket
+
+  @doc """
   Current status of the update manager
   """
   @spec status :: NervesHubLinkCommon.UpdateManager.State.status()
