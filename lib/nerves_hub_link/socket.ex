@@ -1,4 +1,6 @@
 defmodule NervesHubLink.Socket do
+  @moduledoc false
+
   use Slipstream
   require Logger
 
@@ -42,6 +44,14 @@ defmodule NervesHubLink.Socket do
 
   def check_connection(type) do
     GenServer.call(__MODULE__, {:check_connection, type})
+  end
+
+  @doc """
+  Return whether an IEx or other console session is active
+  """
+  @spec console_active?() :: boolean()
+  def console_active?() do
+    GenServer.call(__MODULE__, :console_active?)
   end
 
   @impl Slipstream
@@ -108,6 +118,10 @@ defmodule NervesHubLink.Socket do
 
   def handle_call({:check_connection, :socket}, _from, socket) do
     {:reply, connected?(socket), socket}
+  end
+
+  def handle_call(:console_active?, _from, socket) do
+    {:reply, socket.assigns.iex_pid != nil, socket}
   end
 
   @impl Slipstream
