@@ -34,7 +34,7 @@ defmodule NervesHubLink.Certificate do
         ca_store.ca_certs()
 
       true ->
-        Logger.warn(
+        Logger.warning(
           "[NervesHubLink] No CA store or :cacerts have been specified. Request will fail"
         )
 

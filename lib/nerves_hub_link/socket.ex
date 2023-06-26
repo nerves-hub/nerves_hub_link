@@ -146,7 +146,7 @@ defmodule NervesHubLink.Socket do
   # Device API messages
   #
   def handle_message(@device_topic, "reboot", _params, socket) do
-    Logger.warn("Reboot Request from NervesHubLink")
+    Logger.warning("Reboot Request from NervesHubLink")
     _ = push(socket, @device_topic, "rebooting", %{})
     # TODO: Maybe allow delayed reboot
     Nerves.Runtime.reboot()
@@ -174,7 +174,7 @@ defmodule NervesHubLink.Socket do
   # Console API messages
   #
   def handle_message(@console_topic, "restart", _payload, socket) do
-    Logger.warn("[#{inspect(__MODULE__)}] Restarting IEx process from web request")
+    Logger.warning("[#{inspect(__MODULE__)}] Restarting IEx process from web request")
 
     _ = push(socket, @console_topic, "up", %{data: "\r*** Restarting IEx ***\r"})
 
@@ -214,7 +214,7 @@ defmodule NervesHubLink.Socket do
   def handle_info({:EXIT, iex_pid, reason}, %{assigns: %{iex_pid: iex_pid}} = socket) do
     msg = "\r******* Remote IEx stopped: #{inspect(reason)} *******\r"
     _ = push(socket, @console_topic, "up", %{data: msg})
-    Logger.warn(msg)
+    Logger.warning(msg)
 
     socket =
       socket
@@ -240,7 +240,7 @@ defmodule NervesHubLink.Socket do
   end
 
   def handle_info(msg, socket) do
-    Logger.warn("[#{inspect(__MODULE__)}] Unhandled handle_info: #{inspect(msg)}")
+    Logger.warning("[#{inspect(__MODULE__)}] Unhandled handle_info: #{inspect(msg)}")
     {:noreply, socket}
   end
 
