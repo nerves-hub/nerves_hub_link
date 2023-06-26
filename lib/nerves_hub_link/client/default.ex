@@ -33,7 +33,7 @@ defmodule NervesHubLink.Client.Default do
   end
 
   def handle_fwup_message({:warning, _, message}) do
-    Logger.warn("FWUP WARN: #{message}")
+    Logger.warning("FWUP WARN: #{message}")
   end
 
   def handle_fwup_message({:ok, status, message}) do
@@ -41,12 +41,12 @@ defmodule NervesHubLink.Client.Default do
   end
 
   def handle_fwup_message(fwup_message) do
-    Logger.warn("Unknown FWUP message: #{inspect(fwup_message)}")
+    Logger.warning("Unknown FWUP message: #{inspect(fwup_message)}")
   end
 
   @impl NervesHubLink.Client
   def handle_error(error) do
-    Logger.warn("[NervesHubLink] error: #{inspect(error)}")
+    Logger.warning("[NervesHubLink] error: #{inspect(error)}")
   end
 
   @impl NervesHubLink.Client
