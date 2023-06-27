@@ -108,7 +108,7 @@ This release only bumps the version number. It doesn't have any code changes.
   * This enforces the update data structure exchanged between device and server
     and is mostly internal. However, if you implement your own `NervesHubLink.Client`
     behavior, then you will need to your `NervesHubLink.Client.update_available/1` to
-    accept a `%NervesHubLinkCommon.Message.UpdateInfo{}` struct as the parameter
+    accept a `%NervesHubLink.Message.UpdateInfo{}` struct as the parameter
     instead of a map with string keys which was used until this point.
 
 * Enhancements

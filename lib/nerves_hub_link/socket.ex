@@ -5,7 +5,7 @@ defmodule NervesHubLink.Socket do
   require Logger
 
   alias NervesHubLink.Client
-  alias NervesHubLinkCommon.UpdateManager
+  alias NervesHubLink.UpdateManager
 
   defmodule State do
     @type t :: %__MODULE__{
@@ -159,8 +159,8 @@ defmodule NervesHubLink.Socket do
   end
 
   def handle_message(@device_topic, "update", update, socket) do
-    case NervesHubLinkCommon.Message.UpdateInfo.parse(update) do
-      {:ok, %NervesHubLinkCommon.Message.UpdateInfo{} = info} ->
+    case NervesHubLink.Message.UpdateInfo.parse(update) do
+      {:ok, %NervesHubLink.Message.UpdateInfo{} = info} ->
         _ = UpdateManager.apply_update(info)
         {:ok, socket}
 
@@ -267,8 +267,8 @@ defmodule NervesHubLink.Socket do
   end
 
   defp handle_join_reply(%{"firmware_url" => url} = update) when is_binary(url) do
-    case NervesHubLinkCommon.Message.UpdateInfo.parse(update) do
-      {:ok, %NervesHubLinkCommon.Message.UpdateInfo{} = info} ->
+    case NervesHubLink.Message.UpdateInfo.parse(update) do
+      {:ok, %NervesHubLink.Message.UpdateInfo{} = info} ->
         UpdateManager.apply_update(info)
 
       error ->

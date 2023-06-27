@@ -39,7 +39,7 @@ defmodule NervesHubLink.Client do
   require Logger
 
   @typedoc "Update that comes over a socket."
-  @type update_data :: NervesHubLinkCommon.Message.UpdateInfo.t()
+  @type update_data :: NervesHubLink.Message.UpdateInfo.t()
 
   @typedoc "Supported responses from `update_available/1`"
   @type update_response :: :apply | :ignore | {:reschedule, pos_integer()}
