@@ -30,7 +30,7 @@ defmodule NervesHubLink.Certificate do
       is_list(ssl[:cacerts]) ->
         ssl[:cacerts]
 
-      is_atom(ca_store) ->
+      Code.ensure_loaded?(ca_store) ->
         ca_store.ca_certs()
 
       true ->
