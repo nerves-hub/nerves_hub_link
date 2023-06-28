@@ -18,7 +18,8 @@ defmodule NervesHubLink.Configurator do
               params: %{},
               remote_iex: false,
               socket: [],
-              ssl: []
+              ssl: [],
+              rejoin_after: 5000
 
     @type t() :: %__MODULE__{
             connect: boolean(),
@@ -32,7 +33,8 @@ defmodule NervesHubLink.Configurator do
             params: map(),
             remote_iex: boolean(),
             socket: any(),
-            ssl: [:ssl.tls_client_option()]
+            ssl: [:ssl.tls_client_option()],
+            rejoin_after: pos_integer()
           }
   end
 

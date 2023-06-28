@@ -26,42 +26,44 @@ defmodule NervesHubLink.Socket do
   @console_topic "console"
   @device_topic "device"
 
-  def start_link(config) do
-    GenServer.start_link(__MODULE__, config, name: __MODULE__)
+  def start_link(config, opts \\ [name: __MODULE__]) do
+    GenServer.start_link(__MODULE__, config, opts)
   end
 
-  def reconnect() do
-    GenServer.cast(__MODULE__, :reconnect)
+  @spec reconnect_socket(GenServer.server()) :: :ok
+  def reconnect_socket(socket \\ __MODULE__) do
+    GenServer.cast(socket, :reconnect)
   end
 
-  def send_update_progress(progress) do
-    GenServer.cast(__MODULE__, {:send_update_progress, progress})
+  @spec send_update_progress(GenServer.server()) :: :ok
+  def send_update_progress(socket \\ __MODULE__, progress) do
+    GenServer.cast(socket, {:send_update_progress, progress})
   end
 
-  def send_update_status(status) do
-    GenServer.cast(__MODULE__, {:send_update_status, status})
+  @spec send_update_status(GenServer.server(), atom | String.t()) :: :ok
+  def send_update_status(socket \\ __MODULE__, status) do
+    GenServer.cast(socket, {:send_update_status, status})
   end
 
-  def check_connection(type) do
-    GenServer.call(__MODULE__, {:check_connection, type})
+  @spec check_connection(GenServer.server(), :console | :device | :socket) :: boolean()
+  def check_connection(socket \\ __MODULE__, type) do
+    GenServer.call(socket, {:check_connection, type})
   end
 
   @doc """
   Return whether an IEx or other console session is active
   """
-  @spec console_active?() :: boolean()
-  def console_active?() do
-    GenServer.call(__MODULE__, :console_active?)
+  @spec console_active?(GenServer.server()) :: boolean()
+  def console_active?(socket \\ __MODULE__) do
+    GenServer.call(socket, :console_active?)
   end
 
   @impl Slipstream
   def init(config) do
-    rejoin_after = Application.get_env(:nerves_hub_link, :rejoin_after, 5_000)
-
     opts = [
       mint_opts: [protocols: [:http1], transport_opts: config.ssl],
       uri: config.socket[:url],
-      rejoin_after_msec: [rejoin_after],
+      rejoin_after_msec: [config.rejoin_after],
       reconnect_after_msec: config.socket[:reconnect_after_msec]
     ]
 
