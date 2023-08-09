@@ -42,6 +42,10 @@ defmodule NervesHubLink.Socket do
     GenServer.cast(__MODULE__, {:send_update_status, status})
   end
 
+  def send_connection_types(types) do
+    GenServer.cast(__MODULE__, {:send_connection_types, types})
+  end
+
   def check_connection(type) do
     GenServer.call(__MODULE__, {:check_connection, type})
   end
@@ -98,6 +102,7 @@ defmodule NervesHubLink.Socket do
   def handle_join(@device_topic, reply, socket) do
     Logger.debug("[#{inspect(__MODULE__)}] Joined Device channel")
     NervesHubLink.Connection.connected()
+    NervesHubLink.Client.connected()
     _ = handle_join_reply(reply)
     {:ok, socket}
   end
@@ -138,6 +143,11 @@ defmodule NervesHubLink.Socket do
 
   def handle_cast({:send_update_status, status}, socket) do
     _ = push(socket, @device_topic, "status_update", %{status: status})
+    {:noreply, socket}
+  end
+
+  def handle_cast({:send_connection_types, types}, socket) do
+    _ = push(socket, @device_topic, "connection_types", %{value: types})
     {:noreply, socket}
   end
 
