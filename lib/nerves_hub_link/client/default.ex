@@ -50,6 +50,12 @@ defmodule NervesHubLink.Client.Default do
   end
 
   @impl NervesHubLink.Client
+  def reconnect_backoff() do
+    socket_config = Application.get_env(:nerves_hub_link, :socket, [])
+    socket_config[:reconnect_after_msec]
+  end
+
+  @impl NervesHubLink.Client
   def identify() do
     Logger.info("[NervesHubLink] identifying")
   end

@@ -77,6 +77,13 @@ defmodule NervesHubLink.Client do
   @callback handle_error(any()) :: :ok
 
   @doc """
+  Called when the socket disconnected, before starting to reconnect
+
+  The return value is is used to reset the next socket's retry timeout
+  """
+  @callback reconnect_backoff() :: [integer()]
+
+  @doc """
   Callback to identify the device from NervesHub.
   """
   @callback identify() :: :ok
@@ -172,6 +179,19 @@ defmodule NervesHubLink.Client do
   @spec handle_error(any()) :: :ok
   def handle_error(data) do
     _ = apply_wrap(mod(), :handle_error, [data])
+  end
+
+  @doc """
+  This function is called internally by NervesHubLink to notify clients of disconnects.
+  """
+  def reconnect_backoff() do
+    backoff = mod().reconnect_backoff()
+
+    if is_nil(backoff) do
+      NervesHubLink.Backoff.delay_list(1000, 60000, 0.50)
+    else
+      backoff
+    end
   end
 
   # Catches exceptions and exits

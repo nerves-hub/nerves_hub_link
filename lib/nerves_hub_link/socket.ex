@@ -257,6 +257,10 @@ defmodule NervesHubLink.Socket do
   @impl Slipstream
   def handle_disconnect(reason, socket) do
     _ = Client.handle_error(reason)
+
+    channel_config = %{socket.channel_config | reconnect_after_msec: Client.reconnect_backoff()}
+    socket = %{socket | channel_config: channel_config}
+
     reconnect(socket)
   end
 
