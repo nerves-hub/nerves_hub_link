@@ -81,7 +81,7 @@ defmodule NervesHubLink.Client do
 
   The return value is is used to reset the next socket's retry timeout
   """
-  @callback reconnect_backoff() :: [integer()]
+  @callback reconnect_backoff() :: [integer()] | nil
 
   @doc """
   Callback to identify the device from NervesHub.
