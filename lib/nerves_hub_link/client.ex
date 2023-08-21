@@ -187,7 +187,7 @@ defmodule NervesHubLink.Client do
   """
   @spec reconnect_backoff() :: [integer()]
   def reconnect_backoff() do
-    backoff = mod().reconnect_backoff()
+    backoff = apply_wrap(mod(), :reconnect_backoff, [])
 
     if is_list(backoff) do
       backoff
