@@ -79,7 +79,8 @@ defmodule NervesHubLink.Client do
   @doc """
   Called when the socket disconnected, before starting to reconnect
 
-  The return value is is used to reset the next socket's retry timeout
+  The return value is used to reset the next socket's retry timeout. `nil` uses
+  the default.
   """
   @callback reconnect_backoff() :: [integer()] | nil
 
