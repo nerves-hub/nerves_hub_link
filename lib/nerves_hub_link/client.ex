@@ -185,6 +185,7 @@ defmodule NervesHubLink.Client do
   @doc """
   This function is called internally by NervesHubLink to notify clients of disconnects.
   """
+  @spec reconnect_backoff() :: [integer()]
   def reconnect_backoff() do
     backoff = mod().reconnect_backoff()
 
