@@ -188,10 +188,10 @@ defmodule NervesHubLink.Client do
   def reconnect_backoff() do
     backoff = mod().reconnect_backoff()
 
-    if is_nil(backoff) do
-      NervesHubLink.Backoff.delay_list(1000, 60000, 0.50)
-    else
+    if is_list(backoff) do
       backoff
+    else
+      NervesHubLink.Backoff.delay_list(1000, 60000, 0.50)
     end
   end
 
