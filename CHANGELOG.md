@@ -1,5 +1,29 @@
 # Changelog
 
+## [2.0.0] - 2023-08-22
+
+The new release of NervesHubLink starts adding new features from NervesHub 2.0, such as identifying the device you have open in NervesHub and hooks to help prevent a thundering herd of device reconnects. It also cleans up the code base a bit by removing unused packages. Make sure to run mix deps.unlock --unused after updating to keep your lock file up to date.
+
+* Removed
+  * NervesHubCLI and NervesHubCAStore as dependencies
+  * NervesHubLinkCommon as dependencies, it was merged into this repo
+
+* Added
+  * Identify callback from NervesHub, a new message from the server that
+    will let you blink an LED or anything else that will help you identify
+    the device you're looking at is the one you have open in NervesHub.
+  * Add a client callback for changing the backoff timeouts on reconnects
+    (#128)
+
+## [1.4.1] - 2023-05-26
+
+* Added
+  * Expose `NervesHubLink.console_active?` for checking active IEx sessions (#123)
+  * Improvements for Elixir 1.15 and OTP 26
+
+* Fixed
+  * Stops IEx process with `:normal` instead of causing a crash (#121)
+
 ## [1.4.0] - 2022-10-07
 
 * Fixed
