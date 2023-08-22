@@ -77,6 +77,20 @@ defmodule NervesHubLink.Client do
   @callback handle_error(any()) :: :ok
 
   @doc """
+  Optional callback when the socket disconnected, before starting to reconnect.
+
+  The return value is used to reset the next socket's retry timeout. `nil` uses
+  the default. The default is a call to `NervesHubLink.Backoff.delay_list/3`.
+
+  You may wish to use this to dynamically change the reconnect backoffs. For instance,
+  during a NervesHub deploy you may wish to change the reconnect based on your
+  own logic to not create a thundering herd of reconnections. If you have a particularly
+  flaky connection you can increase how fast the reconnect happens to avoid overloading
+  your server.
+  """
+  @callback reconnect_backoff() :: [integer()] | nil
+
+  @doc """
   Callback to identify the device from NervesHub.
   """
   @callback identify() :: :ok
@@ -90,7 +104,7 @@ defmodule NervesHubLink.Client do
   """
   @callback reboot() :: no_return()
 
-  @optional_callbacks [reboot: 0]
+  @optional_callbacks [reconnect_backoff: 0, reboot: 0]
 
   @doc """
   This function is called internally by NervesHubLink to notify clients.
@@ -172,6 +186,25 @@ defmodule NervesHubLink.Client do
   @spec handle_error(any()) :: :ok
   def handle_error(data) do
     _ = apply_wrap(mod(), :handle_error, [data])
+  end
+
+  @doc """
+  This function is called internally by NervesHubLink to notify clients of disconnects.
+  """
+  @spec reconnect_backoff() :: [integer()]
+  def reconnect_backoff() do
+    backoff =
+      if function_exported?(mod(), :reconnect_backoff, 0) do
+        apply_wrap(mod(), :reconnect_backoff, [])
+      else
+        nil
+      end
+
+    if is_list(backoff) do
+      backoff
+    else
+      NervesHubLink.Backoff.delay_list(1000, 60000, 0.50)
+    end
   end
 
   # Catches exceptions and exits
