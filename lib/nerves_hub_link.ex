@@ -49,4 +49,10 @@ defmodule NervesHubLink do
   """
   @spec send_update_status(String.t() | atom()) :: :ok
   defdelegate send_update_status(status), to: Socket
+
+  @doc """
+  Send a file to the connected console
+  """
+  @spec send_file(Path.t()) :: :ok
+  defdelegate send_file(file_path), to: Socket
 end
