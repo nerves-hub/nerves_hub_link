@@ -6,6 +6,7 @@ defmodule NervesHubLink.Socket do
 
   alias NervesHubLink.Client
   alias NervesHubLink.UpdateManager
+  alias NervesHubLink.UploadFile
 
   defmodule State do
     @type t :: %__MODULE__{
@@ -46,6 +47,35 @@ defmodule NervesHubLink.Socket do
     GenServer.call(__MODULE__, {:check_connection, type})
   end
 
+  def send_file(file_path) do
+    GenServer.call(__MODULE__, {:send_file, file_path})
+  end
+
+  @doc false
+  def start_uploading(pid, filename) do
+    GenServer.call(pid, {:start_uploading, filename})
+  end
+
+  @doc false
+  def upload_data(pid, filename, index, chunk) do
+    GenServer.call(pid, {:upload_data, filename, index, chunk})
+  end
+
+  @doc false
+  def finish_uploading(pid, filename) do
+    GenServer.call(pid, {:finish_uploading, filename})
+  end
+
+  @doc """
+  Cancel an ongoing upload
+
+  Escape hatch for uploading files via the console, kill the upload
+  process to stop uploading.
+  """
+  def cancel_upload() do
+    GenServer.call(__MODULE__, :cancel_upload)
+  end
+
   @doc """
   Return whether an IEx or other console session is active
   """
@@ -71,6 +101,7 @@ defmodule NervesHubLink.Socket do
       |> assign(remote_iex: config.remote_iex)
       |> assign(iex_pid: nil)
       |> assign(iex_timer: nil)
+      |> assign(uploader_pid: nil)
       |> connect!(opts)
 
     Process.flag(:trap_exit, true)
@@ -122,6 +153,66 @@ defmodule NervesHubLink.Socket do
 
   def handle_call(:console_active?, _from, socket) do
     {:reply, socket.assigns.iex_pid != nil, socket}
+  end
+
+  def handle_call({:push, topic, event, payload}, _from, socket) do
+    {:reply, push(socket, topic, event, payload), socket}
+  end
+
+  def handle_call({:send_file, file_path}, _from, socket) do
+    case File.stat(file_path) do
+      {:ok, %{size: size}} when size < 10_485_760 ->
+        {:ok, uploader_pid} = UploadFile.start_link(file_path, self())
+        {:reply, :ok, assign(socket, :uploader_pid, uploader_pid)}
+
+      {:ok, _} ->
+        {:reply, {:error, :too_large}, socket}
+
+      {:error, posix} ->
+        {:reply, {:error, posix}, socket}
+    end
+  end
+
+  def handle_call({:start_uploading, filename}, _from, socket) do
+    if socket.assigns.uploader_pid do
+      _ = push(socket, @console_topic, "file-data/start", %{filename: filename})
+      {:reply, :ok, socket}
+    else
+      {:reply, :error, socket}
+    end
+  end
+
+  def handle_call({:upload_data, filename, index, chunk}, _from, socket) do
+    if socket.assigns.uploader_pid do
+      _ =
+        push(socket, @console_topic, "file-data", %{
+          filename: filename,
+          chunk: index,
+          data: Base.encode64(chunk)
+        })
+
+      {:reply, :ok, socket}
+    else
+      {:reply, :error, socket}
+    end
+  end
+
+  def handle_call({:finish_uploading, filename}, _from, socket) do
+    if socket.assigns.uploader_pid do
+      _ = push(socket, @console_topic, "file-data/stop", %{filename: filename})
+      {:reply, :ok, assign(socket, :uploader_pid, nil)}
+    else
+      {:reply, :error, socket}
+    end
+  end
+
+  def handle_call(:cancel_upload, _from, socket) do
+    if socket.assigns.uploader_pid do
+      true = Process.exit(socket.assigns.uploader_pid, :kill)
+      {:reply, :ok, socket}
+    else
+      {:reply, :error, socket}
+    end
   end
 
   @impl Slipstream
@@ -222,6 +313,15 @@ defmodule NervesHubLink.Socket do
       |> set_iex_timer()
 
     {:noreply, socket}
+  end
+
+  def handle_info(
+        {:EXIT, uploader_pid, :killed},
+        %{assigns: %{uploader_pid: uploader_pid}} = socket
+      ) do
+    Logger.info("[#{inspect(__MODULE__)}] Upload cancelled")
+
+    {:noreply, assign(socket, :uploader_pid, nil)}
   end
 
   def handle_info(:iex_timeout, socket) do
