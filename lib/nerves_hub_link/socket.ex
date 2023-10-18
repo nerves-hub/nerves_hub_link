@@ -2,6 +2,7 @@ defmodule NervesHubLink.Socket do
   @moduledoc false
 
   use Slipstream
+
   require Logger
 
   alias NervesHubLink.Client
@@ -102,6 +103,7 @@ defmodule NervesHubLink.Socket do
       |> assign(iex_pid: nil)
       |> assign(iex_timer: nil)
       |> assign(uploader_pid: nil)
+      |> assign(data_path: config.data_path)
       |> connect!(opts)
 
     Process.flag(:trap_exit, true)
@@ -294,6 +296,30 @@ defmodule NervesHubLink.Socket do
       ) do
     _ = ExTTY.window_change(socket.assigns.iex_pid, width, height)
     {:ok, set_iex_timer(socket)}
+  end
+
+  def handle_message(@console_topic, "file-data/start", params, socket) do
+    :ok = File.mkdir_p!(socket.assigns.data_path)
+    path = Path.join(socket.assigns.data_path, params["filename"])
+    _ = File.rm_rf!(path)
+    :ok = File.touch!(path)
+    {:ok, socket}
+  end
+
+  def handle_message(@console_topic, "file-data", params, socket) do
+    path = Path.join(socket.assigns.data_path, params["filename"])
+
+    {:ok, _res} =
+      File.open!(path, [:append], fn fd ->
+        chunk = Base.decode64!(params["data"])
+        IO.binwrite(fd, chunk)
+      end)
+
+    {:ok, socket}
+  end
+
+  def handle_message(@console_topic, "file-data/stop", _params, socket) do
+    {:ok, socket}
   end
 
   @impl Slipstream
