@@ -4,10 +4,11 @@ defmodule NervesHubLink.Configurator do
   require Logger
 
   @device_api_version "1.0.0"
-  @console_version "1.0.0"
+  @console_version "2.0.0"
 
   defmodule Config do
     defstruct connect: true,
+              data_path: "/data/nerves-hub",
               device_api_host: nil,
               device_api_port: 443,
               device_api_sni: nil,
@@ -22,6 +23,7 @@ defmodule NervesHubLink.Configurator do
 
     @type t() :: %__MODULE__{
             connect: boolean(),
+            data_path: Path.t(),
             device_api_host: String.t(),
             device_api_port: String.t(),
             device_api_sni: charlist(),
