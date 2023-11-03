@@ -41,8 +41,14 @@ defmodule NervesHubLink.Client do
   @typedoc "Update that comes over a socket."
   @type update_data :: NervesHubLink.Message.UpdateInfo.t()
 
+  @typedoc "Archive that comes over a socket."
+  @type archive_data :: NervesHubLink.Message.ArchiveInfo.t()
+
   @typedoc "Supported responses from `update_available/1`"
   @type update_response :: :apply | :ignore | {:reschedule, pos_integer()}
+
+  @typedoc "Supported responses from `archive_available/1`"
+  @type archive_response :: :download | :ignore | {:reschedule, pos_integer()}
 
   @typedoc "Firmware update progress, completion or error report"
   @type fwup_message ::
@@ -61,6 +67,22 @@ defmodule NervesHubLink.Client do
   * `{:reschedule, timeout}` - Defer making a decision. Call this function again in `timeout` milliseconds.
   """
   @callback update_available(update_data()) :: update_response()
+
+  @doc """
+  Called when an archive is available for download
+
+  May return one of:
+
+  * `download` - Download the archive right now
+  * `ignore` - Don't download this archive.
+  * `{:reschedule, timeout}` - Defer making a decision. Call this function again in `timeout` milliseconds.
+  """
+  @callback archive_available(archive_data()) :: archive_response()
+
+  @doc """
+  Called when an archive has been downloaded and is available for the application to do something
+  """
+  @callback archive_ready(archive_data(), Path.t()) :: :ok
 
   @doc """
   Called on firmware update reports.
@@ -128,6 +150,18 @@ defmodule NervesHubLink.Client do
 
         :apply
     end
+  end
+
+  @spec archive_available(archive_data()) :: archive_response()
+  def archive_available(data) do
+    apply_wrap(mod(), :archive_available, [data])
+  end
+
+  @spec archive_ready(archive_data(), Path.t()) :: :ok
+  def archive_ready(data, file_path) do
+    _ = apply_wrap(mod(), :archive_ready, [data, file_path])
+
+    :ok
   end
 
   @doc """

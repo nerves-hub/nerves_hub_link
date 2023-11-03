@@ -24,6 +24,24 @@ defmodule NervesHubLink.Client.Default do
   end
 
   @impl NervesHubLink.Client
+  def archive_available(archive_info) do
+    Logger.info(
+      "[NervesHubLink.Client] Archive is available for downloading #{inspect(archive_info)}"
+    )
+
+    :ignore
+  end
+
+  @impl NervesHubLink.Client
+  def archive_ready(archive_info, file_path) do
+    Logger.info(
+      "[NervesHubLink.Client] Archive is ready for processing #{inspect(archive_info)} at #{inspect(file_path)}"
+    )
+
+    :ok
+  end
+
+  @impl NervesHubLink.Client
   def handle_fwup_message({:progress, percent}) do
     Logger.debug("FWUP PROG: #{percent}%")
   end
