@@ -104,6 +104,9 @@ defmodule NervesHubLink.Socket do
       |> assign(iex_timer: nil)
       |> assign(uploader_pid: nil)
       |> assign(data_path: config.data_path)
+      |> assign(started_at: System.monotonic_time(:millisecond))
+      |> assign(connected_at: nil)
+      |> assign(joined_at: nil)
       |> connect!(opts)
 
     Process.flag(:trap_exit, true)
@@ -123,6 +126,7 @@ defmodule NervesHubLink.Socket do
       socket
       |> join(@device_topic, device_join_params)
       |> maybe_join_console()
+      |> assign(connected_at: System.monotonic_time(:millisecond))
 
     {:ok, socket}
   end
@@ -130,9 +134,8 @@ defmodule NervesHubLink.Socket do
   @impl Slipstream
   def handle_join(@device_topic, reply, socket) do
     Logger.debug("[#{inspect(__MODULE__)}] Joined Device channel")
-    NervesHubLink.Connection.connected()
     _ = handle_join_reply(reply)
-    {:ok, socket}
+    {:ok, assign(socket, joined_at: System.monotonic_time(:millisecond))}
   end
 
   def handle_join(@console_topic, _reply, socket) do
@@ -373,7 +376,6 @@ defmodule NervesHubLink.Socket do
   @impl Slipstream
   def handle_topic_close(topic, reason, socket) when reason != :left do
     if topic == @device_topic do
-      _ = NervesHubLink.Connection.disconnected()
       _ = Client.handle_error(reason)
     end
 
@@ -392,7 +394,6 @@ defmodule NervesHubLink.Socket do
 
   @impl Slipstream
   def terminate(_reason, socket) do
-    _ = NervesHubLink.Connection.disconnected()
     disconnect(socket)
   end
 

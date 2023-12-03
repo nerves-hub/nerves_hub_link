@@ -3,7 +3,6 @@ defmodule NervesHubLink.Application do
 
   alias NervesHubLink.Client
   alias NervesHubLink.Configurator
-  alias NervesHubLink.Connection
   alias NervesHubLink.Socket
   alias NervesHubLink.FwupConfig
   alias NervesHubLink.UpdateManager
@@ -29,7 +28,6 @@ defmodule NervesHubLink.Application do
   defp children(config, fwup_config) do
     [
       {UpdateManager, fwup_config},
-      Connection,
       {Socket, config}
     ]
   end
