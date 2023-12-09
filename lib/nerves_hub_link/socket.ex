@@ -6,6 +6,7 @@ defmodule NervesHubLink.Socket do
   require Logger
 
   alias NervesHubLink.Client
+  alias NervesHubLink.Configurator.SharedSecret
   alias NervesHubLink.UpdateManager
   alias NervesHubLink.UploadFile
 
@@ -91,6 +92,7 @@ defmodule NervesHubLink.Socket do
 
     opts = [
       mint_opts: [protocols: [:http1], transport_opts: config.ssl],
+      headers: config.socket[:headers] || [],
       uri: config.socket[:url],
       rejoin_after_msec: [rejoin_after],
       reconnect_after_msec: config.socket[:reconnect_after_msec]
@@ -98,6 +100,7 @@ defmodule NervesHubLink.Socket do
 
     socket =
       new_socket()
+      |> assign(config: config)
       |> assign(params: config.params)
       |> assign(remote_iex: config.remote_iex)
       |> assign(iex_pid: nil)
@@ -387,6 +390,20 @@ defmodule NervesHubLink.Socket do
     _ = Client.handle_error(reason)
 
     channel_config = %{socket.channel_config | reconnect_after_msec: Client.reconnect_backoff()}
+
+    channel_config =
+      case Application.get_env(:nerves_hub_link, :configurator) do
+        SharedSecret ->
+          # TODO: I don't know when reconnect/1 actually gets valudated. It could be that
+          # the signature we create here will be too old before the headers are used
+          # in a connection attempt again
+          headers = SharedSecret.headers(socket.assigns.config)
+          %{channel_config | headers: headers}
+
+        _ ->
+          channel_config
+      end
+
     socket = %{socket | channel_config: channel_config}
 
     reconnect(socket)
