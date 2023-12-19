@@ -35,10 +35,13 @@ defmodule NervesHubLink.Certificate do
 
       true ->
         Logger.warning(
-          "[NervesHubLink] No CA store or :cacerts have been specified. Request will fail"
+          "[NervesHubLink] Using CAStore dependency. Requests may fail if server certificate is not signed by globally trusted CA"
         )
 
-        []
+        CAStore.file_path()
+        |> File.read!()
+        |> X509.from_pem()
+        |> Enum.map(&X509.Certificate.to_der/1)
     end
   end
 
