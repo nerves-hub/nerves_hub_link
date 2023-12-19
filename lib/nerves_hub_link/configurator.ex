@@ -83,7 +83,10 @@ defmodule NervesHubLink.Configurator do
       base.ssl
       |> Keyword.put_new(:verify, :verify_peer)
       |> Keyword.put_new(:versions, [:"tlsv1.2"])
-      |> Keyword.put_new(:server_name_indication, to_charlist(base.device_api_sni))
+      |> Keyword.put_new(
+        :server_name_indication,
+        to_charlist(base.device_api_sni || base.device_api_host)
+      )
 
     fwup_devpath = Nerves.Runtime.KV.get(@fwup_devpath)
 
