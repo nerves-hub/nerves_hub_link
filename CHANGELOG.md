@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.1.1] - 2024-02-05
+
+* Fixed
+  * `UploadFile` stream changed to be backwards compatible with Elixir 1.16 and older
+
 ## [2.1.0] - 2024-02-05
 
 This update should be relatively safe and backwards compatible. It introduces some
