@@ -18,6 +18,7 @@ defmodule NervesHubLink.UploadFile do
     defstruct [:file_path, :socket_pid]
   end
 
+  @spec start_link(Path.t(), pid()) :: GenServer.on_start()
   def start_link(file_path, socket_pid) do
     GenServer.start_link(__MODULE__, file_path: file_path, socket_pid: socket_pid)
   end
@@ -38,7 +39,7 @@ defmodule NervesHubLink.UploadFile do
 
     :ok = Socket.start_uploading(state.socket_pid, filename)
 
-    File.stream!(state.file_path, [], 1024)
+    File.stream!(state.file_path, 1024)
     |> Stream.with_index()
     |> Stream.each(fn {chunk, index} ->
       :ok = Socket.upload_data(state.socket_pid, filename, index, chunk)

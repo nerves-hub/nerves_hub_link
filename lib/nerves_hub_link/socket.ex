@@ -49,6 +49,7 @@ defmodule NervesHubLink.Socket do
     GenServer.call(__MODULE__, {:check_connection, type})
   end
 
+  @spec send_file(Path.t()) :: :ok | {:error, :too_large | File.posix()}
   def send_file(file_path) do
     GenServer.call(__MODULE__, {:send_file, file_path})
   end

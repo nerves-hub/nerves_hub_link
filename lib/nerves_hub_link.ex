@@ -53,6 +53,6 @@ defmodule NervesHubLink do
   @doc """
   Send a file to the connected console
   """
-  @spec send_file(Path.t()) :: :ok
+  @spec send_file(Path.t()) :: :ok | {:error, :too_large | File.posix()}
   defdelegate send_file(file_path), to: Socket
 end
