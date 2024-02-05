@@ -1,5 +1,26 @@
 # Changelog
 
+## [2.1.0] - 2024-02-05
+
+This update should be relatively safe and backwards compatible. It introduces some
+new features with NervesHub including Pre-shared key authentication and file
+upload/download ability through the console channge. If you were previously
+relying on `NervesHubLink.Connection` functions then you will need to review
+and update your code to use `NervesHubLink` connection functions instead.
+
+* Removed
+  * `NervesHubLink.Connection` was removed in favor is using the connection
+    state of the socket instead.
+
+* Added
+  * Use the console channel to save files to the device (#131)
+  * Send a file to an attached NervesHub web console (#130)
+  * Pre-shared key authentication as an alternative to certificate authentication
+
+* Updated
+  * Default SNI from host if none specified
+  * Default to CAStore when no `:ca_certs` are provided
+
 ## [2.0.0] - 2023-08-22
 
 The new release of NervesHubLink starts adding new features from NervesHub 2.0, such as identifying the device you have open in NervesHub and hooks to help prevent a thundering herd of device reconnects. It also cleans up the code base a bit by removing unused packages. Make sure to run mix deps.unlock --unused after updating to keep your lock file up to date.
