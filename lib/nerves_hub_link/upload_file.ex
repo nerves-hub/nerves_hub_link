@@ -39,7 +39,7 @@ defmodule NervesHubLink.UploadFile do
 
     :ok = Socket.start_uploading(state.socket_pid, filename)
 
-    File.stream!(state.file_path, 1024)
+    file_stream!(state)
     |> Stream.with_index()
     |> Stream.each(fn {chunk, index} ->
       :ok = Socket.upload_data(state.socket_pid, filename, index, chunk)
@@ -49,5 +49,11 @@ defmodule NervesHubLink.UploadFile do
     :ok = Socket.finish_uploading(state.socket_pid, filename)
 
     {:noreply, state}
+  end
+
+  if Version.match?(System.version(), ">= 1.16.0") do
+    def file_stream!(state), do: File.stream!(state.file_path, 1024, [])
+  else
+    def file_stream!(state), do: File.stream!(state.file_path, [], 1024)
   end
 end
