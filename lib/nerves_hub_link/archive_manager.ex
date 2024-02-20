@@ -26,6 +26,7 @@ defmodule NervesHubLink.ArchiveManager do
           download: nil | GenServer.server(),
           file_path: Path.t(),
           status: status(),
+          temp_file_path: Path.t(),
           update_reschedule_timer: nil | :timer.tref()
         }
 
@@ -34,6 +35,7 @@ defmodule NervesHubLink.ArchiveManager do
             download: nil,
             file_path: nil,
             status: :idle,
+            temp_file_path: nil,
             update_reschedule_timer: nil
 
   @doc """
@@ -107,10 +109,22 @@ defmodule NervesHubLink.ArchiveManager do
   # messages from Downloader
   def handle_info({:download, :complete}, state) do
     Logger.info("[NervesHubLink] Archive Download complete")
+
+    # Clear a potential old file since we finished downloading
+    _ = File.rm_rf(state.file_path)
+    _ = File.rename(state.temp_file_path, state.file_path)
+
     _ = Client.archive_ready(state.archive_info, state.file_path)
 
     {:noreply,
-     %__MODULE__{state | archive_info: nil, file_path: nil, download: nil, status: :idle}}
+     %__MODULE__{
+       state
+       | archive_info: nil,
+         file_path: nil,
+         temp_file_path: nil,
+         download: nil,
+         status: :idle
+     }}
   end
 
   def handle_info({:download, {:error, reason}}, state) do
@@ -121,7 +135,7 @@ defmodule NervesHubLink.ArchiveManager do
   # Data from the downloader
   def handle_info({:download, {:data, data}}, state) do
     :ok =
-      File.open!(state.file_path, [:append], fn fd ->
+      File.open!(state.temp_file_path, [:append], fn fd ->
         IO.binwrite(fd, data)
       end)
 
@@ -137,6 +151,7 @@ defmodule NervesHubLink.ArchiveManager do
     uri = URI.parse(info.url)
     file_name = Path.basename(uri.path)
     file_path = Path.join(state.data_path, "archives/#{file_name}")
+    temp_file_path = Path.join(state.data_path, "archives/#{file_name}.download")
     directory = Path.dirname(file_path)
 
     pid = self()
@@ -146,14 +161,14 @@ defmodule NervesHubLink.ArchiveManager do
         {:ok, download} = Downloader.start_download(info.url, &send(pid, {:download, &1}))
 
         _ = File.mkdir_p(directory)
-        # delete the old one in case it was a failed download
-        _ = File.rm_rf(file_path)
-        _ = File.touch(file_path)
+        _ = File.rm_rf(temp_file_path)
+        _ = File.touch(temp_file_path)
 
         %__MODULE__{
           state
           | archive_info: info,
             file_path: file_path,
+            temp_file_path: temp_file_path,
             download: download,
             status: :downloading
         }
