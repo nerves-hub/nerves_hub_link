@@ -5,6 +5,7 @@ defmodule NervesHubLink.Socket do
 
   require Logger
 
+  alias NervesHubLink.ArchiveManager
   alias NervesHubLink.Client
   alias NervesHubLink.Configurator.SharedSecret
   alias NervesHubLink.UpdateManager
@@ -255,6 +256,12 @@ defmodule NervesHubLink.Socket do
 
   def handle_message(@device_topic, "identify", _params, socket) do
     Client.identify()
+    {:ok, socket}
+  end
+
+  def handle_message(@device_topic, "archive", params, socket) do
+    {:ok, info} = NervesHubLink.Message.ArchiveInfo.parse(params)
+    _ = ArchiveManager.apply_archive(info)
     {:ok, socket}
   end
 

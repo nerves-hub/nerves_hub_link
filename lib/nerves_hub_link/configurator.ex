@@ -3,7 +3,7 @@ defmodule NervesHubLink.Configurator do
   alias __MODULE__.{Config, Default}
   require Logger
 
-  @device_api_version "1.0.0"
+  @device_api_version "2.0.0"
   @console_version "2.0.0"
 
   defmodule Config do
