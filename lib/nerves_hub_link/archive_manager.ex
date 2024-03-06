@@ -22,6 +22,7 @@ defmodule NervesHubLink.ArchiveManager do
 
   @type t :: %__MODULE__{
           archive_info: nil | ArchiveInfo.t(),
+          archive_public_keys: [binary()],
           data_path: Path.t(),
           download: nil | GenServer.server(),
           file_path: Path.t(),
@@ -31,6 +32,7 @@ defmodule NervesHubLink.ArchiveManager do
         }
 
   defstruct archive_info: nil,
+            archive_public_keys: [],
             data_path: nil,
             download: nil,
             file_path: nil,
@@ -80,7 +82,12 @@ defmodule NervesHubLink.ArchiveManager do
 
   @impl GenServer
   def init(args) do
-    {:ok, %__MODULE__{data_path: args.data_path}}
+    state = %__MODULE__{
+      archive_public_keys: args.archive_public_keys,
+      data_path: args.data_path
+    }
+
+    {:ok, state}
   end
 
   @impl GenServer
@@ -114,7 +121,15 @@ defmodule NervesHubLink.ArchiveManager do
     _ = File.rm_rf(state.file_path)
     _ = File.rename(state.temp_file_path, state.file_path)
 
-    _ = Client.archive_ready(state.archive_info, state.file_path)
+    # validate the file
+
+    if valid_archive?(state.file_path, state.archive_public_keys) do
+      _ = Client.archive_ready(state.archive_info, state.file_path)
+    else
+      Logger.error(
+        "[NervesHubLink] Archive could not be validated, your public keys are configured wrong"
+      )
+    end
 
     {:noreply,
      %__MODULE__{
@@ -189,5 +204,18 @@ defmodule NervesHubLink.ArchiveManager do
     _ = Process.cancel_timer(timer)
 
     %{state | update_reschedule_timer: nil}
+  end
+
+  def valid_archive?(file_path, public_keys) do
+    args = ["-V", "-i", file_path]
+
+    args =
+      Enum.reduce(public_keys, args, fn public_key, args ->
+        args ++ ["--public-key", public_key]
+      end)
+
+    {_output, exit_code} = System.cmd("fwup", args)
+
+    exit_code == 0
   end
 end
