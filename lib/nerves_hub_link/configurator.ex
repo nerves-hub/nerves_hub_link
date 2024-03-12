@@ -13,6 +13,7 @@ defmodule NervesHubLink.Configurator do
               device_api_port: 443,
               device_api_sni: nil,
               fwup_public_keys: [],
+              archive_public_keys: [],
               fwup_devpath: "/dev/mmcblk0",
               fwup_env: [],
               nerves_key: [],
@@ -28,6 +29,7 @@ defmodule NervesHubLink.Configurator do
             device_api_port: String.t(),
             device_api_sni: charlist(),
             fwup_public_keys: [binary()],
+            archive_public_keys: [binary()],
             fwup_devpath: Path.t(),
             fwup_env: [{String.t(), String.t()}],
             nerves_key: any(),
@@ -48,6 +50,7 @@ defmodule NervesHubLink.Configurator do
     |> do_build()
     |> add_socket_opts()
     |> add_fwup_public_keys()
+    |> add_archive_public_keys()
   end
 
   defp add_socket_opts(config) do
@@ -135,5 +138,17 @@ defmodule NervesHubLink.Configurator do
     end
 
     %{config | fwup_public_keys: fwup_public_keys}
+  end
+
+  defp add_archive_public_keys(config) do
+    archive_public_keys = for key <- config.archive_public_keys, is_binary(key), do: key
+
+    if archive_public_keys == [] do
+      Logger.error("No archive public keys were configured for nerves_hub_link.")
+      Logger.error("This means that archive signatures are not being checked.")
+      Logger.error("nerves_hub_link will fail to download archives.")
+    end
+
+    %{config | archive_public_keys: archive_public_keys}
   end
 end
