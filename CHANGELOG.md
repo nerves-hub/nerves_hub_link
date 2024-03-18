@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.2.0] - 2024-03-18
+
+This update includes Archives, which is an extra fwup file that is downloaded as part
+of a deployment. This allows you to send an update for something smaller than the whole
+firmware. Archives are validated with separate public keys for safety.
+
+* Added
+  * Archive downloading and processing for extra packages
+
 ## [2.1.1] - 2024-02-05
 
 * Fixed
