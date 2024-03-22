@@ -43,7 +43,7 @@ defmodule NervesHubLink.MixProject do
         device_api_sni: nil,
         fwup_public_keys: []
       ],
-      extra_applications: [:logger, :iex, :inets],
+      extra_applications: [:logger, :iex, :inets, :sasl],
       mod: {NervesHubLink.Application, []}
     ]
   end
