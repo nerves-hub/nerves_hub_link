@@ -392,6 +392,17 @@ config :nerves_hub_link, remote_iex_timeout: 900 # 15 minutes
 
 You may also need additional permissions on NervesHub to see the device and to use the remote IEx feature.
 
+### Alarms 
+
+This application can set and clear the following alarms:
+
+* `NervesHubLink.Disconnected`
+  * set: An issue is preventing a connection to NervesHub or one just hasn't been made yet
+  * clear: Currently connected to NervesHub
+* `NervesHubLink.UpdateInProgress` 
+  * set: A new firmware update is being downloaded or applied
+  * clear: No updates are happening
+
 ### CA Certificates
 
 The CA certificates installed on the device are used by default.

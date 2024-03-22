@@ -90,6 +90,7 @@ defmodule NervesHubLink.Socket do
 
   @impl Slipstream
   def init(config) do
+    :alarm_handler.set_alarm({NervesHubLink.Disconnected, []})
     rejoin_after = Application.get_env(:nerves_hub_link, :rejoin_after, 5_000)
 
     opts = [
@@ -133,6 +134,7 @@ defmodule NervesHubLink.Socket do
       |> maybe_join_console()
       |> assign(connected_at: System.monotonic_time(:millisecond))
 
+    :alarm_handler.clear_alarm(NervesHubLink.Disconnected)
     {:ok, socket}
   end
 
@@ -406,7 +408,7 @@ defmodule NervesHubLink.Socket do
   @impl Slipstream
   def handle_disconnect(reason, socket) do
     _ = Client.handle_error(reason)
-
+    :alarm_handler.set_alarm({NervesHubLink.Disconnected, [reason: reason]})
     channel_config = %{socket.channel_config | reconnect_after_msec: Client.reconnect_backoff()}
 
     channel_config =
