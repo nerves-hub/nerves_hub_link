@@ -33,15 +33,22 @@ defmodule NervesHubLink.Certificate do
       Code.ensure_loaded?(ca_store) ->
         ca_store.ca_certs()
 
-      true ->
+      Code.ensure_loaded?(CAStore) ->
         Logger.warning(
-          "[NervesHubLink] Using CAStore dependency. Requests may fail if server certificate is not signed by globally trusted CA"
+          "[NervesHubLink] Using CAStore dependency. Requests may fail if the server certificate is not signed by a globally trusted CA."
         )
 
         CAStore.file_path()
         |> File.read!()
         |> X509.from_pem()
         |> Enum.map(&X509.Certificate.to_der/1)
+
+      true ->
+        Logger.warning(
+          "[NervesHubLink] Using default system certificates. Requests may fail if the server certificate is not signed by a globally trusted CA, or the installed system certificates are old."
+        )
+
+        :public_key.cacerts_get()
     end
   end
 
