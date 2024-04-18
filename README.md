@@ -48,17 +48,13 @@ large numbers of devices.
 ### Adding NervesHubLink to your project
 
 The first step is to add `nerves_hub_link` to your target dependencies in your
-project's `mix.exs`. Since NervesHub uses SSL certificates, the time must be set
-on the device or certificate validity checks will fail. If you're not already
-setting the time, add [`nerves_time`](https://hex.pm/packages/nerves_time) to
-your dependencies. For example:
+project's `mix.exs`. For example:
 
 ```elixir
   defp deps(target) do
     [
-      {:nerves_runtime, "~> 0.11"},
-      {:nerves_hub_link, "~> 0.11"},
-      {:nerves_time, "~> 0.4"},
+      {:nerves_runtime, "~> 0.13"},
+      {:nerves_hub_link, "~> 2.2"},
       ...
     ] ++ system(target)
   end

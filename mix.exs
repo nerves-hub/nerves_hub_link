@@ -103,6 +103,7 @@ defmodule NervesHubLink.MixProject do
       {:mox, "~> 1.0", only: :test},
       {:nerves_key, "~> 1.0 or ~> 0.5", optional: true},
       {:nerves_runtime, "~> 0.8"},
+      {:nerves_time, "~> 0.4"},
       {:plug_crypto, "~> 2.0"},
       {:plug_cowboy, "~> 2.0", only: :test},
       {:slipstream, "~> 1.0 or ~> 0.8"},
