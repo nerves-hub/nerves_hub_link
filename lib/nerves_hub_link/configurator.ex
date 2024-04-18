@@ -13,6 +13,7 @@ defmodule NervesHubLink.Configurator do
               device_api_port: 443,
               device_api_sni: nil,
               fwup_public_keys: [],
+              request_fwup_public_keys: false,
               archive_public_keys: [],
               fwup_devpath: "/dev/mmcblk0",
               fwup_env: [],
@@ -29,6 +30,7 @@ defmodule NervesHubLink.Configurator do
             device_api_port: String.t(),
             device_api_sni: charlist(),
             fwup_public_keys: [binary()],
+            request_fwup_public_keys: boolean(),
             archive_public_keys: [binary()],
             fwup_devpath: Path.t(),
             fwup_env: [{String.t(), String.t()}],
@@ -131,13 +133,15 @@ defmodule NervesHubLink.Configurator do
   defp add_fwup_public_keys(config) do
     fwup_public_keys = for key <- config.fwup_public_keys, is_binary(key), do: key
 
-    if fwup_public_keys == [] do
-      Logger.error("No fwup public keys were configured for nerves_hub_link.")
-      Logger.error("This means that firmware signatures are not being checked.")
-      Logger.error("nerves_hub_link will fail to apply firmware updates.")
-    end
+    if Enum.empty?(fwup_public_keys) || config.request_fwup_public_keys == true do
+      Logger.info("Requesting fwup public keys")
 
-    %{config | fwup_public_keys: fwup_public_keys}
+      params = Map.put(config.params, "fwup_public_keys", "on_connect")
+
+      %{config | params: params}
+    else
+      %{config | fwup_public_keys: fwup_public_keys}
+    end
   end
 
   defp add_archive_public_keys(config) do
