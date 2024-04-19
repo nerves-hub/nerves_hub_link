@@ -62,9 +62,7 @@ config :nerves_hub_link,
   ]
 ```
 
-You can also provide your own options to use for the NervesHub socket connection via the `:socket` and `:ssl` keys, which are forwarded on to `phoenix_client` when creating the socket connection (see [`PhoenixClient.Socket` module](https://github.com/mobileoverlord/phoenix_client/blob/main/lib/phoenix_client/socket.ex#L57-L91) for support options.
-
-Any [valid Erlang ssl socket option](http://erlang.org/doc/man/ssl.html#TLS/DTLS%20OPTION%20DESCRIPTIONS%20-%20COMMON%20for%20SERVER%20and%20CLIENT) can go in the `:ssl` key.
+For more information on how to generate device certificates, please read the  ["Initializing devices"](#initializing-devices) section.
 
 #### Shared secret device authentication (experimental)
 
@@ -114,6 +112,10 @@ config :nerves_hub_link, :nerves_key,
 config :nerves_hub_link,
   device_api_host: "your.nerveshub.host"
 ```
+
+#### Additional notes
+
+Any [valid Erlang ssl socket option](http://erlang.org/doc/man/ssl.html#TLS/DTLS%20OPTION%20DESCRIPTIONS%20-%20COMMON%20for%20SERVER%20and%20CLIENT) can go in the `:ssl` key. These options are passed to [Mint](https://hex.pm/packages/mint) by [Slipstream](https://hex.pm/packages/slipstream), which `NervesHubLink` uses for websocket connections.
 
 ### Runtime configuration
 
