@@ -4,7 +4,7 @@
 
 * Added
   * [NervesTime](https://hex.pm/packages/nerves_time) has been added as a dependency.
-  * Download current firmway signing keys on device connection. If no public firmware signing keys are defined if your config, NervesHubLink will request them from NervesHub when establishing a connection.
+  * Download current firmware public keys on device connection. If no public firmware signing keys are defined in your config, NervesHubLink will request them from NervesHub when establishing a connection.
 
 * Updated
   * `:public_key` CA certificates are used by default. If [CAStore](https://hex.pm/packages/castore) is included in your project it will be preferred.
