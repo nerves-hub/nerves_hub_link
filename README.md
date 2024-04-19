@@ -121,7 +121,7 @@ config :nerves_hub_link,
 
 This is useful for cases like:
 - selectively choosing which cert/key to use
-- reading a file stored on the device which isn't available during compilation
+- reading a certificate file stored on the device which isn't available during compilation
 
 For example:
 
