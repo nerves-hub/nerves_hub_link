@@ -72,7 +72,7 @@ _Important: Shared Secret authentication is a new feature under active developme
 
 Shared Secrets use [HMAC](https://en.wikipedia.org/wiki/HMAC) cryptography to generate an authentication token used during websocket connection.
 
-This been built with simple device registration in mind, an ideal fit for hobby projects or projects under early R&D.
+This has been built with simple device registration in mind, an ideal fit for hobby projects or projects under early R&D.
 
 You can generate a key and secret in your NervesHub Product settings which you then include in your NervesHubLink settings.
 
