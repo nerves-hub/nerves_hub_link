@@ -40,3 +40,5 @@ config :nerves_runtime,
        "nerves_fw_devpath" => "/tmp/fwup_bogus_path",
        "nerves_serial_number" => "test"
      }}
+
+config :nerves_time, :servers, []

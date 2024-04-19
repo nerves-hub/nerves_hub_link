@@ -2,6 +2,7 @@ defmodule NervesHubLink.MixProject do
   use Mix.Project
 
   @version "2.2.0"
+  @description "Manage your Nerves fleet by connecting it to NervesHub"
   @source_url "https://github.com/nerves-hub/nerves_hub_link"
 
   Application.put_env(
@@ -14,7 +15,7 @@ defmodule NervesHubLink.MixProject do
     [
       app: :nerves_hub_link,
       deps: deps(),
-      description: description(),
+      description: @description,
       dialyzer: dialyzer(),
       docs: docs(),
       elixir: "~> 1.11",
@@ -50,10 +51,6 @@ defmodule NervesHubLink.MixProject do
   defp elixirc_paths(:test), do: ["test/support", "lib"]
 
   defp elixirc_paths(_), do: ["lib"]
-
-  defp description do
-    "The NervesHub device application"
-  end
 
   defp dialyzer() do
     [
@@ -97,12 +94,12 @@ defmodule NervesHubLink.MixProject do
       {:ex_doc, "~> 0.18", only: :docs, runtime: false},
       {:extty, "~> 0.2"},
       {:fwup, "~> 1.0"},
-      {:hackney, "~> 1.10"},
       {:jason, "~> 1.0"},
       {:mint, "~> 1.2"},
       {:mox, "~> 1.0", only: :test},
       {:nerves_key, "~> 1.0 or ~> 0.5", optional: true},
       {:nerves_runtime, "~> 0.8"},
+      {:nerves_time, "~> 0.4"},
       {:plug_crypto, "~> 2.0"},
       {:plug_cowboy, "~> 2.0", only: :test},
       {:slipstream, "~> 1.0 or ~> 0.8"},
