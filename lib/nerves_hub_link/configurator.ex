@@ -148,9 +148,11 @@ defmodule NervesHubLink.Configurator do
     archive_public_keys = for key <- config.archive_public_keys, is_binary(key), do: key
 
     if archive_public_keys == [] do
-      Logger.error("No archive public keys were configured for nerves_hub_link.")
-      Logger.error("This means that archive signatures are not being checked.")
-      Logger.error("nerves_hub_link will fail to download archives.")
+      Logger.debug("""
+      No archive public keys were configured for nerves_hub_link.
+      This means that archive signatures are not being checked.
+      nerves_hub_link will fail to download archives.
+      """)
     end
 
     %{config | archive_public_keys: archive_public_keys}
