@@ -55,7 +55,7 @@ defmodule NervesHubLink.DownloaderTest do
 
   describe "idle timeout" do
     setup do
-      port = 5004
+      port = 6000
 
       {:ok, plug} =
         start_supervised(
@@ -83,7 +83,7 @@ defmodule NervesHubLink.DownloaderTest do
 
   describe "http error" do
     setup do
-      port = 5003
+      port = 6000
 
       {:ok, plug} =
         start_supervised({Plug.Cowboy, scheme: :http, plug: HTTPErrorPlug, options: [port: port]})
@@ -103,7 +103,7 @@ defmodule NervesHubLink.DownloaderTest do
 
   describe "range" do
     setup do
-      port = 5002
+      port = 6000
 
       {:ok, plug} =
         start_supervised(
@@ -128,7 +128,7 @@ defmodule NervesHubLink.DownloaderTest do
 
   describe "redirect" do
     setup do
-      port = 5001
+      port = 6000
 
       {:ok, plug} =
         start_supervised({Plug.Cowboy, scheme: :http, plug: RedirectPlug, options: [port: port]})
@@ -147,7 +147,7 @@ defmodule NervesHubLink.DownloaderTest do
 
   describe "xretry" do
     setup do
-      port = 5000
+      port = 6000
 
       {:ok, plug} =
         start_supervised(
