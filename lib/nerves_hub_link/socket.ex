@@ -247,7 +247,9 @@ defmodule NervesHubLink.Socket do
   # Device API messages
   #
   def handle_message(@device_topic, "fwup_public_keys", params, socket) do
-    Logger.info("Updating fwup public keys from NervesHubLink - #{Enum.count(params["keys"])} key(s) received")
+    Logger.info(
+      "Updating fwup public keys from NervesHubLink - #{Enum.count(params["keys"])} key(s) received"
+    )
 
     config = %{socket.assigns.config | fwup_public_keys: params["keys"]}
 
