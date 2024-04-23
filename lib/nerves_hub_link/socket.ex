@@ -348,6 +348,15 @@ defmodule NervesHubLink.Socket do
     {:ok, socket}
   end
 
+  ##
+  # Unknown message
+  #
+  def handle_message(topic, event, _params, _socket) do
+    Logger.warning("Unknown message (\"#{topic}:#{event}\") received")
+
+    {:ok, socket}
+  end
+
   @impl Slipstream
   def handle_info({:tty_data, data}, socket) do
     _ = push(socket, @console_topic, "up", %{data: data})
