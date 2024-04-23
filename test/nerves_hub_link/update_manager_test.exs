@@ -6,7 +6,7 @@ defmodule NervesHubLink.UpdateManagerTest do
 
   describe "fwup stream" do
     setup do
-      port = 6000
+      port = Enum.random(6000..7000)
       devpath = "/tmp/fwup_output"
 
       update_payload = %UpdateInfo{

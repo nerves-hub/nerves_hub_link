@@ -1,6 +1,6 @@
 defmodule NervesHubLink.Configurator do
   alias NervesHubLink.Backoff
-  alias __MODULE__.{Config, Default}
+  alias __MODULE__.Config
   require Logger
 
   @device_api_version "2.0.0"
@@ -14,13 +14,14 @@ defmodule NervesHubLink.Configurator do
               device_api_port: 443,
               device_api_sni: nil,
               fwup_public_keys: [],
-              request_fwup_public_keys: false,
               archive_public_keys: [],
               fwup_devpath: "/dev/mmcblk0",
               fwup_env: [],
               nerves_key: [],
               params: %{},
               remote_iex: false,
+              request_fwup_public_keys: false,
+              shared_secret: [],
               socket: [],
               ssl: []
 
@@ -39,6 +40,8 @@ defmodule NervesHubLink.Configurator do
             nerves_key: any(),
             params: map(),
             remote_iex: boolean(),
+            request_fwup_public_keys: boolean(),
+            shared_secret: [{String.t(), String.t()}],
             socket: any(),
             ssl: [:ssl.tls_client_option()]
           }
@@ -120,11 +123,15 @@ defmodule NervesHubLink.Configurator do
   end
 
   defp fetch_default() do
-    if Code.ensure_loaded?(NervesKey) do
-      NervesHubLink.Configurator.NervesKey
-    else
-      Default
-    end
+    default =
+      if Code.ensure_loaded?(NervesKey) do
+        NervesHubLink.Configurator.NervesKey
+      else
+        NervesHubLink.Configurator.SharedSecret
+      end
+
+    Application.put_env(:nerves_hub_link, :configurator, default)
+    default
   end
 
   defp fwup_version do
