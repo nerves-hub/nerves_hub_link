@@ -96,7 +96,6 @@ defmodule NervesHubLink.MixProject do
       {:fwup, "~> 1.0"},
       {:jason, "~> 1.0"},
       {:mint, "~> 1.2"},
-      {:mox, "~> 1.0", only: :test},
       {:nerves_key, "~> 1.0 or ~> 0.5", optional: true},
       {:nerves_runtime, "~> 0.8"},
       {:nerves_time, "~> 0.4"},

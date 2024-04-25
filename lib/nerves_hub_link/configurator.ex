@@ -7,7 +7,8 @@ defmodule NervesHubLink.Configurator do
   @console_version "2.0.0"
 
   defmodule Config do
-    defstruct connect: true,
+    defstruct client: NervesHubLink.Client.Default,
+              connect: true,
               data_path: "/data/nerves-hub",
               device_api_host: nil,
               device_api_port: 443,
@@ -24,6 +25,7 @@ defmodule NervesHubLink.Configurator do
               ssl: []
 
     @type t() :: %__MODULE__{
+            client: NervesHubLink.Client,
             connect: boolean(),
             data_path: Path.t(),
             device_api_host: String.t(),

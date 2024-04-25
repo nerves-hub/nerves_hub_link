@@ -2,7 +2,6 @@ defmodule NervesHubLink.Application do
   use Application
 
   alias NervesHubLink.ArchiveManager
-  alias NervesHubLink.Client
   alias NervesHubLink.Configurator
   alias NervesHubLink.Socket
   alias NervesHubLink.FwupConfig
@@ -15,8 +14,8 @@ defmodule NervesHubLink.Application do
       fwup_public_keys: config.fwup_public_keys,
       fwup_devpath: config.fwup_devpath,
       fwup_env: config.fwup_env,
-      handle_fwup_message: &Client.handle_fwup_message/1,
-      update_available: &Client.update_available/1
+      handle_fwup_message: &config.client.handle_fwup_message/1,
+      update_available: &config.client.update_available/1
     }
 
     children = children(config, fwup_config)

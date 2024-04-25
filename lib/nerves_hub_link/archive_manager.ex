@@ -12,7 +12,6 @@ defmodule NervesHubLink.ArchiveManager do
 
   use GenServer
 
-  alias NervesHubLink.Client
   alias NervesHubLink.Downloader
   alias NervesHubLink.Message.ArchiveInfo
 
@@ -23,6 +22,7 @@ defmodule NervesHubLink.ArchiveManager do
   @type t :: %__MODULE__{
           archive_info: nil | ArchiveInfo.t(),
           archive_public_keys: [binary()],
+          client: NervesHubLink.Client,
           data_path: Path.t(),
           download: nil | GenServer.server(),
           file_path: Path.t(),
@@ -33,6 +33,7 @@ defmodule NervesHubLink.ArchiveManager do
 
   defstruct archive_info: nil,
             archive_public_keys: [],
+            client: nil,
             data_path: nil,
             download: nil,
             file_path: nil,
@@ -84,6 +85,7 @@ defmodule NervesHubLink.ArchiveManager do
   def init(args) do
     state = %__MODULE__{
       archive_public_keys: args.archive_public_keys,
+      client: args.client,
       data_path: args.data_path
     }
 
@@ -124,7 +126,7 @@ defmodule NervesHubLink.ArchiveManager do
     # validate the file
 
     if valid_archive?(state.file_path, state.archive_public_keys) do
-      _ = Client.archive_ready(state.archive_info, state.file_path)
+      _ = state.client.archive_ready(state.archive_info, state.file_path)
     else
       Logger.error(
         "[NervesHubLink] Archive could not be validated, your public keys are configured wrong"
@@ -171,7 +173,7 @@ defmodule NervesHubLink.ArchiveManager do
 
     pid = self()
 
-    case Client.archive_available(info) do
+    case state.client.archive_available(info) do
       :download ->
         {:ok, download} = Downloader.start_download(info.url, &send(pid, {:download, &1}))
 

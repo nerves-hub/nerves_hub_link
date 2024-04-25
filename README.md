@@ -308,13 +308,15 @@ mix nerves_hub.firmware publish --key devkey --deploy qa_deployment
 
 ### Conditionally applying updates
 
-It's not always appropriate to apply a firmware update immediately. Custom logic can be added to the device by implementing the `NervesHubLink.Client` behaviour and telling the NervesHubLink OTP application about it.
+It's not always appropriate to apply a firmware update immediately. Custom logic can be added to the device by implementing the `NervesHubLink.Client` behaviour, or extending `NervesHubLink.Client`, and telling the `NervesHubLink` OTP application to use it.
+
+__It's recommended to extend `NervesHubLink.Client` by using `use NervesHubLink.Client` as this will allow you to override individual functions instead of needing to implement the entire behaviour.__
 
 Here's an example implementation:
 
 ```elixir
 defmodule MyApp.NervesHubLinkClient do
-   @behaviour NervesHubLink.Client
+   use NervesHubLink.Client
 
    # May return:
    #  * `:apply` - apply the action immediately
@@ -344,7 +346,8 @@ See the previous section for implementing a `client` behaviour.
 
 ```elixir
 defmodule MyApp.NervesHubLinkClient do
-  @behaviour NervesHubLink.Client
+  use NervesHubLink.Client
+
   #  argument can be:
   #   {:ok, non_neg_integer(), String.t()}
   #   {:warning, non_neg_integer(), String.t()}
@@ -392,14 +395,14 @@ config :nerves_hub_link, remote_iex_timeout: 900 # 15 minutes
 
 You may also need additional permissions on NervesHub to see the device and to use the remote IEx feature.
 
-### Alarms 
+### Alarms
 
 This application can set and clear the following alarms:
 
 * `NervesHubLink.Disconnected`
   * set: An issue is preventing a connection to NervesHub or one just hasn't been made yet
   * clear: Currently connected to NervesHub
-* `NervesHubLink.UpdateInProgress` 
+* `NervesHubLink.UpdateInProgress`
   * set: A new firmware update is being downloaded or applied
   * clear: No updates are happening
 
