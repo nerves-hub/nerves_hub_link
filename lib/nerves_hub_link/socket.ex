@@ -91,15 +91,6 @@ defmodule NervesHubLink.Socket do
   @impl Slipstream
   def init(config) do
     :alarm_handler.set_alarm({NervesHubLink.Disconnected, []})
-    rejoin_after = Application.get_env(:nerves_hub_link, :rejoin_after, 5_000)
-
-    opts = [
-      mint_opts: [protocols: [:http1], transport_opts: config.ssl],
-      headers: config.socket[:headers] || [],
-      uri: config.socket[:url],
-      rejoin_after_msec: [rejoin_after],
-      reconnect_after_msec: config.socket[:reconnect_after_msec]
-    ]
 
     socket =
       new_socket()
@@ -113,9 +104,12 @@ defmodule NervesHubLink.Socket do
       |> assign(started_at: System.monotonic_time(:millisecond))
       |> assign(connected_at: nil)
       |> assign(joined_at: nil)
-      |> connect!(opts)
 
-    Process.flag(:trap_exit, true)
+    Process.send_after(self(), :connect_after_wait, config.connect_wait)
+
+    Logger.info(
+      "[NervesHubLink.Socket] waiting #{config.connect_wait}ms before connecting to #{config.device_api_host}"
+    )
 
     {:ok, socket}
   end
@@ -349,6 +343,27 @@ defmodule NervesHubLink.Socket do
   end
 
   @impl Slipstream
+  def handle_info(:connect_after_wait, %{assigns: %{config: config}} = socket) do
+    Logger.info("[NervesHubLink.Socket] connecting to #{config.device_api_host}")
+
+    :alarm_handler.set_alarm({NervesHubLink.Disconnected, []})
+    rejoin_after = Application.get_env(:nerves_hub_link, :rejoin_after, 5_000)
+
+    opts = [
+      mint_opts: [protocols: [:http1], transport_opts: config.ssl],
+      headers: config.socket[:headers] || [],
+      uri: config.socket[:url],
+      rejoin_after_msec: [rejoin_after],
+      reconnect_after_msec: config.socket[:reconnect_after_msec]
+    ]
+
+    socket = connect!(socket, opts)
+
+    Process.flag(:trap_exit, true)
+
+    {:noreply, socket}
+  end
+
   def handle_info({:tty_data, data}, socket) do
     _ = push(socket, @console_topic, "up", %{data: data})
     {:noreply, set_iex_timer(socket)}

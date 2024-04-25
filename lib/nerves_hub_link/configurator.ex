@@ -8,6 +8,7 @@ defmodule NervesHubLink.Configurator do
 
   defmodule Config do
     defstruct connect: true,
+              connect_wait: 15_000,
               data_path: "/data/nerves-hub",
               device_api_host: nil,
               device_api_port: 443,
@@ -25,6 +26,7 @@ defmodule NervesHubLink.Configurator do
 
     @type t() :: %__MODULE__{
             connect: boolean(),
+            connect_wait: integer(),
             data_path: Path.t(),
             device_api_host: String.t(),
             device_api_port: String.t(),
