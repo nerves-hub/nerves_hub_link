@@ -1,17 +1,24 @@
 defmodule NervesHubLink.Client do
   @moduledoc """
-  A behaviour module for customizing if and when firmware updates get applied.
+  A behaviour module for customizing:
+  - if and when firmware updates get applied
+  - if and when archives get applied
+  - reconnection backoff logic
+  - and customizing how a device is identified and rebooted
 
   By default NervesHubLink applies updates as soon as it knows about them from the
   NervesHubLink server and doesn't give warning before rebooting. This let's
   devices hook into the decision making process and monitor the update's
   progress.
 
+  You can either implement all the callbacks for the `NervesHubLink.Client` behaviour,
+  or you can `use NervesHubLink.Client` and override the default implementation.
+
   # Example
 
   ```elixir
   defmodule MyApp.NervesHubLinkClient do
-    @behaviour NervesHubLink.Client
+    use NervesHubLink.Client
 
     # May return:
     #  * `:apply` - apply the action immediately
@@ -99,10 +106,7 @@ defmodule NervesHubLink.Client do
   @callback handle_error(any()) :: :ok
 
   @doc """
-  Optional callback when the socket disconnected, before starting to reconnect.
-
-  The return value is used to reset the next socket's retry timeout. `nil` uses
-  the default. The default is a call to `NervesHubLink.Backoff.delay_list/3`.
+  Callback when the socket disconnected, before starting to reconnect.
 
   You may wish to use this to dynamically change the reconnect backoffs. For instance,
   during a NervesHub deploy you may wish to change the reconnect based on your
@@ -118,139 +122,116 @@ defmodule NervesHubLink.Client do
   @callback identify() :: :ok
 
   @doc """
-  Optional callback to reboot the device when a firmware update completes
-
-  The default behavior is to call `Nerves.Runtime.reboot/0` after a successful update. This
-  is useful for testing and for doing additional work like notifying users in a UI that a reboot
-  will happen soon. It is critical that a reboot does happen.
+  Callback to reboot the device when a firmware update completes
   """
   @callback reboot() :: no_return()
 
-  @optional_callbacks [reconnect_backoff: 0, reboot: 0]
+  defmacro __using__(_opts) do
+    quote do
+      @behaviour NervesHubLink.Client
+      require Logger
 
-  @doc """
-  This function is called internally by NervesHubLink to notify clients.
-  """
-  @spec update_available(update_data()) :: update_response()
-  def update_available(data) do
-    case apply_wrap(mod(), :update_available, [data]) do
-      :apply ->
-        :apply
+      @impl NervesHubLink.Client
+      def update_available(update_info) do
+        if update_info.firmware_meta.uuid == Nerves.Runtime.KV.get_active("nerves_fw_uuid") do
+          Logger.info("""
+          [NervesHubLink.Client] Ignoring request to update to the same firmware
 
-      :ignore ->
-        :ignore
+          #{inspect(update_info)}
+          """)
 
-      {:reschedule, timeout} when timeout > 0 ->
-        {:reschedule, timeout}
-
-      wrong ->
-        Logger.error(
-          "[NervesHubLink] Client: #{inspect(mod())}.update_available/1 bad return value: #{inspect(wrong)} Applying update."
-        )
-
-        :apply
-    end
-  end
-
-  @spec archive_available(archive_data()) :: archive_response()
-  def archive_available(data) do
-    apply_wrap(mod(), :archive_available, [data])
-  end
-
-  @spec archive_ready(archive_data(), Path.t()) :: :ok
-  def archive_ready(data, file_path) do
-    _ = apply_wrap(mod(), :archive_ready, [data, file_path])
-
-    :ok
-  end
-
-  @doc """
-  This function is called internally by NervesHubLink to notify clients of fwup progress.
-  """
-  @spec handle_fwup_message(fwup_message()) :: :ok
-  def handle_fwup_message(data) do
-    _ = apply_wrap(mod(), :handle_fwup_message, [data])
-
-    # TODO: nasty side effects here. Consider moving somewhere else
-    case data do
-      {:progress, percent} ->
-        NervesHubLink.send_update_progress(percent)
-
-      {:error, _, message} ->
-        NervesHubLink.send_update_status("fwup error #{message}")
-
-      {:ok, 0, _message} ->
-        initiate_reboot()
-
-      _ ->
-        :ok
-    end
-  end
-
-  @doc """
-  This function is called internally by NervesHubLink to identify a device.
-  """
-  def identify() do
-    apply_wrap(mod(), :identify, [])
-  end
-
-  @doc """
-  This function is called internally by NervesHubLink to initiate a reboot.
-
-  After a successful firmware update, NervesHubLink calls this to start the
-  reboot process. It calls `c:reboot/0` if supplied or
-  `Nerves.Runtime.reboot/0`.
-  """
-  @spec initiate_reboot() :: :ok
-  def initiate_reboot() do
-    client = mod()
-
-    {mod, fun, args} =
-      if function_exported?(client, :reboot, 0),
-        do: {client, :reboot, []},
-        else: {Nerves.Runtime, :reboot, []}
-
-    _ = spawn(mod, fun, args)
-    :ok
-  end
-
-  @doc """
-  This function is called internally by NervesHubLink to notify clients of fwup errors.
-  """
-  @spec handle_error(any()) :: :ok
-  def handle_error(data) do
-    _ = apply_wrap(mod(), :handle_error, [data])
-  end
-
-  @doc """
-  This function is called internally by NervesHubLink to notify clients of disconnects.
-  """
-  @spec reconnect_backoff() :: [integer()]
-  def reconnect_backoff() do
-    backoff =
-      if function_exported?(mod(), :reconnect_backoff, 0) do
-        apply_wrap(mod(), :reconnect_backoff, [])
-      else
-        nil
+          :ignore
+        else
+          :apply
+        end
       end
 
-    if is_list(backoff) do
-      backoff
-    else
-      NervesHubLink.Backoff.delay_list(1000, 60000, 0.50)
+      @impl NervesHubLink.Client
+      def archive_available(archive_info) do
+        Logger.info(
+          "[NervesHubLink.Client] Archive is available for downloading #{inspect(archive_info)}"
+        )
+
+        :ignore
+      end
+
+      @impl NervesHubLink.Client
+      def archive_ready(archive_info, file_path) do
+        Logger.info(
+          "[NervesHubLink.Client] Archive is ready for processing #{inspect(archive_info)} at #{inspect(file_path)}"
+        )
+
+        :ok
+      end
+
+      @impl NervesHubLink.Client
+      def handle_fwup_message({:progress, percent}) do
+        Logger.debug("FWUP PROG: #{percent}%")
+        NervesHubLink.send_update_progress(percent)
+        :ok
+      end
+
+      def handle_fwup_message({:error, _, message}) do
+        Logger.error("FWUP ERROR: #{message}")
+        NervesHubLink.send_update_status("fwup error #{message}")
+        :ok
+      end
+
+      def handle_fwup_message({:warning, _, message}) do
+        Logger.warning("FWUP WARN: #{message}")
+        :ok
+      end
+
+      def handle_fwup_message({:ok, status, message}) do
+        Logger.info("FWUP SUCCESS: #{status} #{message}")
+        reboot()
+        :ok
+      end
+
+      def handle_fwup_message(fwup_message) do
+        Logger.warning("Unknown FWUP message: #{inspect(fwup_message)}")
+        :ok
+      end
+
+      @impl NervesHubLink.Client
+      def handle_error(error) do
+        Logger.warning("[NervesHubLink] error: #{inspect(error)}")
+      end
+
+      @doc """
+      The default implementation checks if the `:reconnect_after_msec` config has been
+      configured, and is a list of values, otherwise `NervesHubLink.Backoff.delay_list/3`
+      is used with a minimum value of 1 second, maximum value of 60 seconds, and a 50% jitter.
+      """
+      @impl NervesHubLink.Client
+      def reconnect_backoff() do
+        socket_config = Application.get_env(:nerves_hub_link, :socket, [])
+
+        backoff = socket_config[:reconnect_after_msec]
+
+        if is_list(backoff) do
+          backoff
+        else
+          NervesHubLink.Backoff.delay_list(1000, 60000, 0.50)
+        end
+      end
+
+      @doc """
+      The default implementation calls `Nerves.Runtime.reboot/0` after a successful update. This
+      is useful for testing and for doing additional work like notifying users in a UI that a reboot
+      will happen soon. It is critical that a reboot does happen.
+      """
+      @impl NervesHubLink.Client
+      def reboot() do
+        _ = spawn(Nerves.Runtime, :reboot, [])
+      end
+
+      @impl NervesHubLink.Client
+      def identify() do
+        Logger.info("[NervesHubLink] identifying")
+      end
+
+      defoverridable NervesHubLink.Client
     end
-  end
-
-  # Catches exceptions and exits
-  defp apply_wrap(mod, function, args) do
-    apply(mod, function, args)
-  catch
-    :error, reason -> {:error, reason}
-    :exit, reason -> {:exit, reason}
-    err -> err
-  end
-
-  defp mod() do
-    Application.get_env(:nerves_hub_link, :client, NervesHubLink.Client.Default)
   end
 end

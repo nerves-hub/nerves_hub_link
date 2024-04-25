@@ -17,7 +17,7 @@ config :nerves_hub_link,
   ]
 
 config :nerves_hub_link,
-  client: NervesHubLink.ClientMock,
+  client: NervesHubLink.Support.TestClient,
   rejoin_after: 0,
   remote_iex: true
 
