@@ -392,14 +392,14 @@ config :nerves_hub_link, remote_iex_timeout: 900 # 15 minutes
 
 You may also need additional permissions on NervesHub to see the device and to use the remote IEx feature.
 
-### Alarms 
+### Alarms
 
 This application can set and clear the following alarms:
 
 * `NervesHubLink.Disconnected`
   * set: An issue is preventing a connection to NervesHub or one just hasn't been made yet
   * clear: Currently connected to NervesHub
-* `NervesHubLink.UpdateInProgress` 
+* `NervesHubLink.UpdateInProgress`
   * set: A new firmware update is being downloaded or applied
   * clear: No updates are happening
 
@@ -420,6 +420,16 @@ Or if you have the certificates in DER format, you can also explicitly set them 
 ```elixir
 my_der_list = [<<213, 34, 234, 53, 83, 8, 2, ...>>]
 config :nerves_hub_link, ssl: [cacerts: my_der_list]
+```
+
+### Verifying network availability
+
+`NervesHubLink` will attempt to verify that the network is available before initiating the first connection attempt. This is done by checking if the `NervesHub` host address (`config.device_api_host`) can be resolved. If the network isn't available then the check will be run again in 2 seconds.
+
+You can disable this behaviour with the following config:
+
+```elixir
+config :nerves_hub_link, connect_wait_for_network: false
 ```
 
 ## Debugging errors
