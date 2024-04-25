@@ -351,7 +351,7 @@ defmodule NervesHubLink.Socket do
   ##
   # Unknown message
   #
-  def handle_message(topic, event, _params, _socket) do
+  def handle_message(topic, event, _params, socket) do
     Logger.warning("Unknown message (\"#{topic}:#{event}\") received")
 
     {:ok, socket}
