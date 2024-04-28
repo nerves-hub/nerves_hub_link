@@ -121,7 +121,9 @@ defmodule NervesHubLink.Socket do
   end
 
   @impl Slipstream
-  def handle_connect(socket) do
+  def handle_connect(%{assigns: %{config: config}} = socket) do
+    Logger.info("[NervesHubLink] connection to #{config.device_api_host} succeeded")
+
     currently_downloading_uuid = UpdateManager.currently_downloading_uuid()
 
     device_join_params =
@@ -249,8 +251,10 @@ defmodule NervesHubLink.Socket do
   # Device API messages
   #
   def handle_message(@device_topic, "fwup_public_keys", params, socket) do
+    count = Enum.count(params["keys"])
+
     Logger.info(
-      "Updating fwup public keys from NervesHubLink - #{Enum.count(params["keys"])} key(s) received"
+      "[NervesHubLink] Updating fwup public keys from NervesHubLink - #{count} key(s) received"
     )
 
     config = %{socket.assigns.config | fwup_public_keys: params["keys"]}
@@ -259,7 +263,7 @@ defmodule NervesHubLink.Socket do
   end
 
   def handle_message(@device_topic, "reboot", _params, socket) do
-    Logger.warning("Reboot Request from NervesHubLink")
+    Logger.warning("[NervesHubLink] Reboot Request from NervesHub")
     _ = push(socket, @device_topic, "rebooting", %{})
     # TODO: Maybe allow delayed reboot
     Nerves.Runtime.reboot()
@@ -284,7 +288,10 @@ defmodule NervesHubLink.Socket do
         {:ok, socket}
 
       error ->
-        Logger.error("Error parsing update data: #{inspect(update)} error: #{inspect(error)}")
+        Logger.error(
+          "[NervesHubLink] Error parsing update data: #{inspect(update)} error: #{inspect(error)}"
+        )
+
         {:ok, socket}
     end
   end
@@ -366,7 +373,7 @@ defmodule NervesHubLink.Socket do
   def handle_info({:EXIT, iex_pid, reason}, %{assigns: %{iex_pid: iex_pid}} = socket) do
     msg = "\r******* Remote IEx stopped: #{inspect(reason)} *******\r"
     _ = push(socket, @console_topic, "up", %{data: msg})
-    Logger.warning(msg)
+    Logger.warning("[NervesHubLink] #{msg}")
 
     socket =
       socket
@@ -449,7 +456,10 @@ defmodule NervesHubLink.Socket do
         UpdateManager.apply_update(info)
 
       error ->
-        Logger.error("Error parsing update data: #{inspect(update)} error: #{inspect(error)}")
+        Logger.error(
+          "[NervesHubLink] Error parsing update data: #{inspect(update)} error: #{inspect(error)}"
+        )
+
         :noop
     end
   end
