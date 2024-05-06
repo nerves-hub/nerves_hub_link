@@ -59,9 +59,11 @@ defmodule NervesHubLink.HTTPFwupStream do
     fwup_public_keys = NervesHubLink.Certificate.fwup_public_keys()
 
     if fwup_public_keys == [] do
-      Logger.error("No fwup public keys were configured for nerves_hub_link.")
-      Logger.error("This means that firmware signatures are not being checked.")
-      Logger.error("nerves_hub won't allow this in the future.")
+      Logger.error("[NervesHubLink] No fwup public keys were configured.")
+
+      Logger.debug(
+        "[NervesHubLink] New firmware cannot be download and installed as signatures cannot be verified."
+      )
     end
 
     args =
@@ -106,7 +108,7 @@ defmodule NervesHubLink.HTTPFwupStream do
 
   @impl GenServer
   def handle_info({:http, {_, :stream_start, headers}}, s) do
-    Logger.debug("Stream Start: #{inspect(headers)}")
+    Logger.debug("[NervesHubLink] Stream Start: #{inspect(headers)}")
 
     {:noreply, s}
   end
@@ -117,14 +119,14 @@ defmodule NervesHubLink.HTTPFwupStream do
   end
 
   def handle_info({:http, {_, :stream_end, _headers}}, s) do
-    Logger.debug("Stream End")
+    Logger.debug("[NervesHubLink] Stream End")
     GenServer.reply(s.caller, :ok)
     {:noreply, %{s | url: nil}}
   end
 
   def handle_info({:http, {_ref, {{_, status_code, _}, headers, body}}}, s)
       when status_code in @redirect_status_codes do
-    Logger.debug("Redirect")
+    Logger.debug("[NervesHubLink] Redirect")
 
     case get_header(headers, ~c"location") do
       nil ->
@@ -141,17 +143,17 @@ defmodule NervesHubLink.HTTPFwupStream do
   end
 
   def handle_info({:http, {_ref, {{_, status_code, _}, _headers, body}}}, s) do
-    Logger.error("Error: #{status_code} #{inspect(body)}")
+    Logger.error("[NervesHubLink] Error: #{status_code} #{inspect(body)}")
     {:stop, {:error, {:http_error, {status_code, body}}}, s}
   end
 
   def handle_info({:http, {_ref, {:error, error}}}, state) do
-    Logger.error("HTTP Stream Error: #{inspect(error)}")
+    Logger.error("[NervesHubLink] HTTP Stream Error: #{inspect(error)}")
     {:stop, {:error, {:http_error, error}}, state}
   end
 
   def handle_info(:timeout, s) do
-    Logger.error("Error: timeout")
+    Logger.error("[NervesHubLink] Error: timeout")
     {:stop, {:error, {:http_error, :timeout}}, s}
   end
 

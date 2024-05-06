@@ -136,7 +136,7 @@ defmodule NervesHubLink.Configurator do
     fwup_public_keys = for key <- config.fwup_public_keys, is_binary(key), do: key
 
     if Enum.empty?(fwup_public_keys) || config.request_fwup_public_keys == true do
-      Logger.info("Requesting fwup public keys")
+      Logger.debug("[NervesHubLink] Requesting fwup public keys during connection")
 
       params = Map.put(config.params, "fwup_public_keys", "on_connect")
 
@@ -150,11 +150,11 @@ defmodule NervesHubLink.Configurator do
     archive_public_keys = for key <- config.archive_public_keys, is_binary(key), do: key
 
     if archive_public_keys == [] do
-      Logger.debug("""
-      No archive public keys were configured for nerves_hub_link.
-      This means that archive signatures are not being checked.
-      nerves_hub_link will fail to download archives.
-      """)
+      Logger.info("[NervesHubLink] No archive public keys were configured.")
+
+      Logger.debug(
+        "[NervesHubLink] Archive signatures cannot be checked and archives will fail to download."
+      )
     end
 
     %{config | archive_public_keys: archive_public_keys}

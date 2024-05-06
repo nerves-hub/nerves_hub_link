@@ -432,6 +432,16 @@ You can disable this behaviour with the following config:
 config :nerves_hub_link, connect_wait_for_network: false
 ```
 
+### Disable `NervesHubLink` during testing
+
+To disable `NervesHubLink` connecting to `NervesHub` when testing, you can add:
+
+```elixir
+config :nerves_hub_link, connect: false
+```
+
+to your `config/test.exs`
+
 ## Debugging errors
 
 ### TLS client errors

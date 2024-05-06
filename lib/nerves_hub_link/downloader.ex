@@ -281,7 +281,7 @@ defmodule NervesHubLink.Downloader do
       )
       when status >= 300 and status < 400 do
     location = fetch_location(headers)
-    Logger.info("Redirecting to #{location}")
+    Logger.info("[NervesHubLink] Redirecting to #{location}")
 
     state = reset(state)
 
@@ -311,7 +311,7 @@ defmodule NervesHubLink.Downloader do
       ) do
     case fetch_accept_ranges(headers) do
       accept_ranges when accept_ranges in ["none", nil] ->
-        Logger.error("HTTP Server does not support the Range header")
+        Logger.error("[NervesHubLink] HTTP Server does not support the Range header")
 
       _ ->
         :ok
@@ -371,7 +371,7 @@ defmodule NervesHubLink.Downloader do
     # like this. There may be a better way to do this..
     path = if query, do: "#{path}?#{query}", else: path
 
-    Logger.info("Resuming download attempt number #{state.retry_number} #{uri}")
+    Logger.info("[NervesHubLink] Resuming download attempt number #{state.retry_number} #{uri}")
 
     with {:ok, conn} <- Mint.HTTP.connect(String.to_existing_atom(scheme), host, port),
          {:ok, conn, request_ref} <- Mint.HTTP.request(conn, "GET", path, request_headers, nil) do
