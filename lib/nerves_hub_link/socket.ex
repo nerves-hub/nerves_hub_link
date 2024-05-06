@@ -91,15 +91,6 @@ defmodule NervesHubLink.Socket do
   @impl Slipstream
   def init(config) do
     :alarm_handler.set_alarm({NervesHubLink.Disconnected, []})
-    rejoin_after = Application.get_env(:nerves_hub_link, :rejoin_after, 5_000)
-
-    opts = [
-      mint_opts: [protocols: [:http1], transport_opts: config.ssl],
-      headers: config.socket[:headers] || [],
-      uri: config.socket[:url],
-      rejoin_after_msec: [rejoin_after],
-      reconnect_after_msec: config.socket[:reconnect_after_msec]
-    ]
 
     socket =
       new_socket()
@@ -113,11 +104,34 @@ defmodule NervesHubLink.Socket do
       |> assign(started_at: System.monotonic_time(:millisecond))
       |> assign(connected_at: nil)
       |> assign(joined_at: nil)
-      |> connect!(opts)
+
+    if config.connect_wait_for_network do
+      schedule_network_availability_check()
+      {:ok, socket}
+    else
+      {:ok, socket, {:continue, :connect}}
+    end
+  end
+
+  @impl Slipstream
+  def handle_continue(:connect, %{assigns: %{config: config}} = socket) do
+    Logger.info("[NervesHubLink] connecting to #{config.device_api_host}")
+
+    rejoin_after = Application.get_env(:nerves_hub_link, :rejoin_after, 5_000)
+
+    opts = [
+      mint_opts: [protocols: [:http1], transport_opts: config.ssl],
+      headers: config.socket[:headers] || [],
+      uri: config.socket[:url],
+      rejoin_after_msec: [rejoin_after],
+      reconnect_after_msec: config.socket[:reconnect_after_msec]
+    ]
+
+    socket = connect!(socket, opts)
 
     Process.flag(:trap_exit, true)
 
-    {:ok, socket}
+    {:noreply, socket}
   end
 
   @impl Slipstream
@@ -365,6 +379,18 @@ defmodule NervesHubLink.Socket do
   end
 
   @impl Slipstream
+  def handle_info(:connect_check_network_availability, socket) do
+    case :inet.gethostbyname(to_charlist(socket.assigns.config.device_api_host)) do
+      {:ok, _} ->
+        {:noreply, socket, {:continue, :connect}}
+
+      _ ->
+        Logger.info("[NervesHubLink] waiting for network to become available")
+        schedule_network_availability_check(2_000)
+        {:noreply, socket}
+    end
+  end
+
   def handle_info({:tty_data, data}, socket) do
     _ = push(socket, @console_topic, "up", %{data: data})
     {:noreply, set_iex_timer(socket)}
@@ -448,6 +474,10 @@ defmodule NervesHubLink.Socket do
   @impl Slipstream
   def terminate(_reason, socket) do
     disconnect(socket)
+  end
+
+  defp schedule_network_availability_check(delay \\ 100) do
+    Process.send_after(self(), :connect_check_network_availability, delay)
   end
 
   defp handle_join_reply(%{"firmware_url" => url} = update) when is_binary(url) do
