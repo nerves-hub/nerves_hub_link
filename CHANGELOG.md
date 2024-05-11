@@ -2,6 +2,14 @@
 
 ## unreleased
 
+## [2.3.0] - 2024-05-11
+
+* Added
+  * check for network connectivity before connecting (#181)
+* Updated
+  * Log unknown messages from NervesHub
+  * Clearer and more consistent logging
+
 ## [2.2.1] - 2024-04-19
 
 * Added
