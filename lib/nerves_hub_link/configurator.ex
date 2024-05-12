@@ -15,6 +15,7 @@ defmodule NervesHubLink.Configurator do
               device_api_sni: nil,
               fwup_public_keys: [],
               archive_public_keys: [],
+              request_archive_public_keys: false,
               fwup_devpath: "/dev/mmcblk0",
               fwup_env: [],
               nerves_key: [],
@@ -35,6 +36,7 @@ defmodule NervesHubLink.Configurator do
             fwup_public_keys: [binary()],
             request_fwup_public_keys: boolean(),
             archive_public_keys: [binary()],
+            request_archive_public_keys: boolean(),
             fwup_devpath: Path.t(),
             fwup_env: [{String.t(), String.t()}],
             nerves_key: any(),
@@ -133,13 +135,19 @@ defmodule NervesHubLink.Configurator do
   defp add_fwup_public_keys(config) do
     fwup_public_keys = for key <- config.fwup_public_keys, is_binary(key), do: key
 
-    if Enum.empty?(fwup_public_keys) || config.request_fwup_public_keys == true do
-      Logger.debug("[NervesHubLink] Requesting fwup public keys during connection")
+    if Enum.empty?(fwup_public_keys) || config.request_fwup_public_keys do
+      Logger.debug(
+        "[NervesHubLink] Requesting public keys for firmware verification during socket connection"
+      )
 
       params = Map.put(config.params, "fwup_public_keys", "on_connect")
 
       %{config | params: params}
     else
+      Logger.debug(
+        "[NervesHubLink] #{Enum.count(fwup_public_keys)} public key(s) for firmware verification configured"
+      )
+
       %{config | fwup_public_keys: fwup_public_keys}
     end
   end
@@ -147,14 +155,40 @@ defmodule NervesHubLink.Configurator do
   defp add_archive_public_keys(config) do
     archive_public_keys = for key <- config.archive_public_keys, is_binary(key), do: key
 
-    if archive_public_keys == [] do
-      Logger.info("[NervesHubLink] No archive public keys were configured.")
+    cond do
+      config.request_archive_public_keys ->
+        Logger.debug(
+          "[NervesHubLink] Requesting public keys for archive verification during socket connection"
+        )
 
-      Logger.debug(
-        "[NervesHubLink] Archive signatures cannot be checked and archives will fail to download."
-      )
+        archive_public_keys_on_connect_config(config)
+
+      Enum.any?(archive_public_keys) ->
+        Logger.debug(
+          "[NervesHubLink] #{Enum.count(archive_public_keys)} public key(s) for archive verification configured"
+        )
+
+        %{config | archive_public_keys: archive_public_keys}
+
+      Enum.any?(config.fwup_public_keys) ->
+        Logger.debug(
+          "[NervesHubLink] No public keys for archive verification configured, using public keys configured in `fwup_public_keys`"
+        )
+
+        %{config | archive_public_keys: config.fwup_public_keys}
+
+      true ->
+        Logger.debug(
+          "[NervesHubLink] No public keys for archive verification configured, requesting public keys for archive verification during socket connection"
+        )
+
+        archive_public_keys_on_connect_config(config)
     end
+  end
 
-    %{config | archive_public_keys: archive_public_keys}
+  defp archive_public_keys_on_connect_config(config) do
+    params = Map.put(config.params, "archive_public_keys", "on_connect")
+
+    %{config | params: params}
   end
 end

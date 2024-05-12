@@ -70,7 +70,7 @@ defmodule NervesHubLink.UpdateManager do
   end
 
   @doc """
-  Add a FWUP Public key
+  Add a FWUP public key
   """
   @spec add_fwup_public_key(GenServer.server(), String.t()) :: :ok
   def add_fwup_public_key(manager \\ __MODULE__, pubkey) do
@@ -83,6 +83,14 @@ defmodule NervesHubLink.UpdateManager do
   @spec remove_fwup_public_key(GenServer.server(), String.t()) :: :ok
   def remove_fwup_public_key(manager \\ __MODULE__, pubkey) do
     GenServer.call(manager, {:fwup_public_key, :remove, pubkey})
+  end
+
+  @doc """
+  Update all FWUP public keys
+  """
+  @spec update_fwup_public_keys(GenServer.server(), [String.t()]) :: :ok
+  def update_fwup_public_keys(manager \\ __MODULE__, pubkeys) do
+    GenServer.call(manager, {:fwup_public_keys, :update, pubkeys})
   end
 
   @doc false
@@ -136,6 +144,13 @@ defmodule NervesHubLink.UpdateManager do
       end
 
     state = put_in(state.fwup_config.fwup_public_keys, Enum.uniq(updated))
+    {:reply, :ok, state}
+  end
+
+  def handle_call({:fwup_public_keys, :update, pubkeys}, _from, %State{} = state) do
+    keys = Enum.map(pubkeys, fn key -> String.trim(key) end)
+
+    state = put_in(state.fwup_config.fwup_public_keys, keys)
     {:reply, :ok, state}
   end
 

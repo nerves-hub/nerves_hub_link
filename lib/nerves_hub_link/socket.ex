@@ -252,11 +252,37 @@ defmodule NervesHubLink.Socket do
   def handle_message(@device_topic, "fwup_public_keys", params, socket) do
     count = Enum.count(params["keys"])
 
-    Logger.info(
-      "[NervesHubLink] Updating fwup public keys from NervesHubLink - #{count} key(s) received"
-    )
-
     config = %{socket.assigns.config | fwup_public_keys: params["keys"]}
+
+    UpdateManager.update_fwup_public_keys(params["keys"])
+
+    if count == 0 do
+      Logger.warning("[NervesHubLink] No public keys for firmware verification received")
+      Logger.warning("[NervesHubLink] Firmware updates cannot be verified and installed")
+    else
+      Logger.info(
+        "[NervesHubLink] Public keys for firmware verification updated - #{count} key(s) received"
+      )
+    end
+
+    {:ok, assign(socket, config: config)}
+  end
+
+  def handle_message(@device_topic, "archive_public_keys", params, socket) do
+    count = Enum.count(params["keys"])
+
+    config = %{socket.assigns.config | archive_public_keys: params["keys"]}
+
+    ArchiveManager.update_archive_public_keys(params["keys"])
+
+    if count == 0 do
+      Logger.warning("[NervesHubLink] No public keys for archive verification received")
+      Logger.warning("[NervesHubLink] Archive updates cannot be verified and installed")
+    else
+      Logger.info(
+        "[NervesHubLink] Public keys for archive verification updated - #{count} key(s) received"
+      )
+    end
 
     {:ok, assign(socket, config: config)}
   end

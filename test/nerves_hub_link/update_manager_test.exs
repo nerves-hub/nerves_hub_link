@@ -111,6 +111,20 @@ defmodule NervesHubLink.UpdateManagerTest do
     assert keys == []
   end
 
+  test "update all fwup public keys" do
+    config = default_config()
+    {:ok, manager} = start_supervised({UpdateManager, config})
+
+    assert config.fwup_public_keys == :sys.get_state(manager).fwup_config.fwup_public_keys
+
+    UpdateManager.update_fwup_public_keys(manager, ["test", "testtest", "testtesttest"])
+
+    keys = :sys.get_state(manager).fwup_config.fwup_public_keys
+
+    refute config.fwup_public_keys == keys
+    assert keys == ["test", "testtest", "testtesttest"]
+  end
+
   defp default_config() do
     test_pid = self()
     fwup_fun = &send(test_pid, {:fwup, &1})

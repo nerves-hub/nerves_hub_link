@@ -50,6 +50,14 @@ defmodule NervesHubLink.ArchiveManager do
   end
 
   @doc """
+  Update all archive public keys
+  """
+  @spec update_archive_public_keys(GenServer.server(), [String.t()]) :: :ok
+  def update_archive_public_keys(manager \\ __MODULE__, pubkeys) do
+    GenServer.call(manager, {:update_archive_public_keys, pubkeys})
+  end
+
+  @doc """
   Returns the current status of the archive manager
   """
   @spec status(GenServer.server()) :: status()
@@ -96,6 +104,14 @@ defmodule NervesHubLink.ArchiveManager do
     {:reply, state.status, state}
   end
 
+  def handle_call({:update_archive_public_keys, pubkeys}, _from, %__MODULE__{} = state) do
+    keys = Enum.map(pubkeys, fn key -> String.trim(key) end)
+
+    state = put_in(state.archive_public_keys, keys)
+
+    {:reply, state.status, state}
+  end
+
   def handle_call(:currently_downloading_uuid, _from, %__MODULE__{archive_info: nil} = state) do
     {:reply, nil, state}
   end
@@ -127,7 +143,7 @@ defmodule NervesHubLink.ArchiveManager do
       _ = Client.archive_ready(state.archive_info, state.file_path)
     else
       Logger.error(
-        "[NervesHubLink] Archive could not be validated, your public keys are configured wrong"
+        "[NervesHubLink] Archive could not be validated, your public signing keys maybe be incorrectly configured"
       )
     end
 
