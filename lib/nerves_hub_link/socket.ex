@@ -11,22 +11,6 @@ defmodule NervesHubLink.Socket do
   alias NervesHubLink.UpdateManager
   alias NervesHubLink.UploadFile
 
-  defmodule State do
-    @type t :: %__MODULE__{
-            channel: pid(),
-            connected?: boolean(),
-            params: map(),
-            socket: pid(),
-            topic: String.t()
-          }
-
-    defstruct socket: nil,
-              topic: "device",
-              channel: nil,
-              params: %{},
-              connected?: false
-  end
-
   @console_topic "console"
   @device_topic "device"
 
