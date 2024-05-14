@@ -1,5 +1,5 @@
 defmodule NervesHubLink.BackoffTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
   alias NervesHubLink.Backoff
 
   test "no jitter" do

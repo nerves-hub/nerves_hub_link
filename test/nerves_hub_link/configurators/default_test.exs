@@ -1,5 +1,5 @@
 defmodule NervesHubLink.Configurator.DefaultTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
 
   alias NervesHubLink.Configurator.{Config, Default}
 
