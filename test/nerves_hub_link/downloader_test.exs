@@ -1,5 +1,5 @@
 defmodule NervesHubLink.DownloaderTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
 
   alias NervesHubLink.Support.{
     HTTPErrorPlug,
@@ -55,7 +55,7 @@ defmodule NervesHubLink.DownloaderTest do
 
   describe "idle timeout" do
     setup do
-      port = 6000
+      port = 7010
 
       {:ok, plug} =
         start_supervised(
@@ -83,7 +83,7 @@ defmodule NervesHubLink.DownloaderTest do
 
   describe "http error" do
     setup do
-      port = 6000
+      port = 7020
 
       {:ok, plug} =
         start_supervised({Plug.Cowboy, scheme: :http, plug: HTTPErrorPlug, options: [port: port]})
@@ -103,7 +103,7 @@ defmodule NervesHubLink.DownloaderTest do
 
   describe "range" do
     setup do
-      port = 6000
+      port = 7030
 
       {:ok, plug} =
         start_supervised(
@@ -128,10 +128,12 @@ defmodule NervesHubLink.DownloaderTest do
 
   describe "redirect" do
     setup do
-      port = 6000
+      port = 7040
 
       {:ok, plug} =
-        start_supervised({Plug.Cowboy, scheme: :http, plug: RedirectPlug, options: [port: port]})
+        start_supervised(
+          {Plug.Cowboy, scheme: :http, plug: {RedirectPlug, port: port}, options: [port: port]}
+        )
 
       {:ok, [plug: plug, url: "http://localhost:#{port}/redirect"]}
     end
@@ -147,7 +149,7 @@ defmodule NervesHubLink.DownloaderTest do
 
   describe "xretry" do
     setup do
-      port = 6000
+      port = 7050
 
       {:ok, plug} =
         start_supervised(
