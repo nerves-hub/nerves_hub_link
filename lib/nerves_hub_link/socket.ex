@@ -356,7 +356,7 @@ defmodule NervesHubLink.Socket do
   def handle_message(@console_topic, "file-data", params, socket) do
     path = Path.join(socket.assigns.data_path, params["filename"])
 
-    {:ok, _res} =
+    _res =
       File.open!(path, [:append], fn fd ->
         chunk = Base.decode64!(params["data"])
         IO.binwrite(fd, chunk)
