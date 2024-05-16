@@ -3,8 +3,7 @@ import Config
 # Device HTTP connection.
 config :nerves_hub_link,
   device_api_host: "0.0.0.0",
-  device_api_port: 4001,
-  configurator: NervesHubLink.Configurator.Default
+  device_api_port: 4001
 
 # nerves_runtime needs to disable
 # and mock out some parts.

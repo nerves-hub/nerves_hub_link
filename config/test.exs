@@ -5,7 +5,6 @@ config :nerves_hub_link,
   connect: false,
   device_api_host: "0.0.0.0",
   device_api_port: 4001,
-  configurator: NervesHubLink.Configurator.Default,
   fwup_public_keys: ["a key"],
   # SSL values are used in a test.
   ssl: [

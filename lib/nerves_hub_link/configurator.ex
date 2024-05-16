@@ -53,11 +53,27 @@ defmodule NervesHubLink.Configurator do
 
   @spec build :: Config.t()
   def build() do
-    Application.get_env(:nerves_hub_link, :configurator, fetch_default())
-    |> do_build()
+    configurator = fetch_configurator()
+
+    base_config()
+    |> configurator.build()
     |> add_socket_opts()
     |> add_fwup_public_keys()
     |> add_archive_public_keys()
+  end
+
+  @spec fetch_configurator :: atom()
+  def fetch_configurator() do
+    cond do
+      configurator = Application.get_env(:nerves_hub_link, :configurator) ->
+        configurator
+
+      Code.ensure_loaded?(NervesKey) ->
+        NervesHubLink.Configurator.NervesKey
+
+      true ->
+        NervesHubLink.Configurator.SharedSecret
+    end
   end
 
   defp add_socket_opts(config) do
@@ -107,31 +123,6 @@ defmodule NervesHubLink.Configurator do
       |> Map.put("console_version", @console_version)
 
     %{base | params: params, socket: socket, ssl: ssl, fwup_devpath: fwup_devpath}
-  end
-
-  defp do_build(configurator) when is_atom(configurator) do
-    base_config()
-    |> configurator.build()
-  end
-
-  defp do_build({m, f, a}) when is_atom(m) and is_atom(f) and is_list(a) do
-    apply(m, f, [base_config() | a])
-  end
-
-  defp do_build(configurator) do
-    raise "[NervesHubLink] Bad Configurator - #{inspect(configurator)}"
-  end
-
-  defp fetch_default() do
-    default =
-      if Code.ensure_loaded?(NervesKey) do
-        NervesHubLink.Configurator.NervesKey
-      else
-        NervesHubLink.Configurator.SharedSecret
-      end
-
-    Application.put_env(:nerves_hub_link, :configurator, default)
-    default
   end
 
   defp fwup_version do
