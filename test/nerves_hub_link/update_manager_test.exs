@@ -1,5 +1,5 @@
 defmodule NervesHubLink.UpdateManagerTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case
   alias NervesHubLink.{FwupConfig, UpdateManager}
   alias NervesHubLink.Message.{FirmwareMetadata, UpdateInfo}
   alias NervesHubLink.Support.FWUPStreamPlug
