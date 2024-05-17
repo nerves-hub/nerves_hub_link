@@ -41,7 +41,7 @@ defmodule NervesHubLink.Configurator do
             params: map(),
             remote_iex: boolean(),
             request_fwup_public_keys: boolean(),
-            shared_secret: [{String.t(), String.t()}],
+            shared_secret: [product_key: String.t(), product_secret: String.t()],
             socket: any(),
             ssl: [:ssl.tls_client_option()]
           }
