@@ -16,8 +16,4 @@ defmodule NervesHubLink.CertificateTest do
     assert certs == ["Everyone", "gets", "a", "CA"]
     for cert <- certs, do: assert(is_binary(cert))
   end
-
-  test "fwup_public_keys/0" do
-    assert is_list(Certificate.fwup_public_keys())
-  end
 end

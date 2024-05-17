@@ -3,9 +3,10 @@ import Config
 # Device HTTP connection.
 config :nerves_hub_link,
   connect: false,
+  client: NervesHubLink.ClientMock,
+  configurator: NervesHubLink.Configurator.Default,
   device_api_host: "0.0.0.0",
   device_api_port: 4001,
-  configurator: NervesHubLink.Configurator.Default,
   fwup_public_keys: ["a key"],
   # SSL values are used in a test.
   ssl: [
@@ -14,12 +15,10 @@ config :nerves_hub_link,
     cacerts: ["Everyone", "gets", "a", "CA"],
     server_name_indication: "waddup",
     verify: :verify_peer
-  ]
-
-config :nerves_hub_link,
-  client: NervesHubLink.ClientMock,
+  ],
   rejoin_after: 0,
-  remote_iex: true
+  remote_iex: true,
+  ensure_reboot: false
 
 config :nerves_runtime,
   target: "host",

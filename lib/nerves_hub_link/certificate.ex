@@ -51,8 +51,4 @@ defmodule NervesHubLink.Certificate do
         :public_key.cacerts_get()
     end
   end
-
-  def fwup_public_keys() do
-    Application.get_env(:nerves_hub_link, :fwup_public_keys)
-  end
 end
