@@ -47,24 +47,7 @@ project's `mix.exs`. For example:
 
 ### Connecting your device to NervesHub
 
-#### Certificate device authentication
-
-_Important: This is recommended for production device fleets._
-
-The following example shows how to configure NervesHubLink to use certificates for device authentication:
-
-```elixir
-config :nerves_hub_link,
-  device_api_host: "your.nerveshub.host",
-  ssl: [
-    cert: "some_cert_der",
-    key: "path/to/keyfile"
-  ]
-```
-
-For more information on how to generate device certificates, please read the  ["Initializing devices"](#initializing-devices) section.
-
-#### Shared secret device authentication (experimental)
+#### Shared secret device authentication
 
 _Important: Shared Secret authentication is a new feature under active development._
 
@@ -72,25 +55,24 @@ Shared Secrets use [HMAC](https://en.wikipedia.org/wiki/HMAC) cryptography to ge
 
 This has been built with simple device registration in mind, an ideal fit for hobby projects or projects under early R&D.
 
-You can generate a key and secret in your NervesHub Product settings which you then include in your NervesHubLink settings.
+You can generate a key and secret in your NervesHub Product settings which you then include in your `NervesHubLink` settings.
 
 A full example config:
 
 ```elixir
 config :nerves_hub_link,
-  configurator: NervesHubLink.Configurator.SharedSecret,
   device_api_host: "your.nerveshub.host",
-  socket: [
-    shared_secret: [
-      product_key: "<product_key>",
-      product_secret: "<product_secret>",
-    ]
+  shared_secret: [
+    product_key: "<product_key>",
+    product_secret: "<product_secret>",
   ]
 ```
 
 #### NervesKey (with cert based auth)
 
-If your project is using [NervesKey](https://github.com/nerves-hub/nerves_key), you can tell `NervesHubLink` to read those certificates and key from the chip and assign the SSL options for you by enabling add it as a dependency:
+_Important: This is recommended for production device fleets._
+
+If your project is using [NervesKey](https://github.com/nerves-hub/nerves_key), you can tell `NervesHubLink` to read those certificates and key from the chip and assign the SSL options for you by adding it as a dependency:
 
 ```elixir
 def deps() do
@@ -98,6 +80,13 @@ def deps() do
     {:nerves_key, "~> 1.2"}
   ]
 end
+```
+
+This allows your config to be simplified to:
+
+```elixir
+config :nerves_hub_link,
+  device_api_host: "your.nerveshub.host"
 ```
 
 NervesKey will default to using I2C bus 1 and the `:primary` certificate pair (`:primary` is one-time configurable and `:aux` may be updated).  You can customize these options to use a different bus and certificate pair:
@@ -108,10 +97,29 @@ config :nerves_hub_link, :nerves_key,
   i2c_bus: 0
 ```
 
+#### Certificate device authentication
+
+If you would like to use certificate device authentication, but you are not using `NervesKey`, you can tell `NervesHubLink` to read the certificate and key from the file system by using:
+
 ```elixir
 config :nerves_hub_link,
-  device_api_host: "your.nerveshub.host"
+  device_api_host: "your.nerveshub.host",
+  configurator: NervesHubLink.Configurator.CertKey
 ```
+
+By default the configurator will use a certificate found at `/data/nerves_hub/cert.pem` and a key found at `/data/nerves_hub/key.pem`. If these are stored somewhere differently then you can specify `certfile` and `keyfile` in the `ssl` config, e.g.:
+
+```elixir
+config :nerves_hub_link,
+  device_api_host: "your.nerveshub.host",
+  configurator: NervesHubLink.Configurator.CertKey,
+  ssl: [
+    certfile: "/path/to/certfile.pem",
+    keyfile: "/path/to/keyfile.key"
+  ]
+```
+
+For more information on how to generate device certificates, please read the  ["Initializing devices"](#https://github.com/nerves-hub/nerves_hub_cli#initializing-devices) section in the `NervesHubCLI` readme.
 
 #### Additional notes
 
@@ -143,165 +151,6 @@ Then you specify which configurator `NervesHubLink` should use in `config.exs`:
 
 ```elixir
 config :nerves_hub_link, configurator: MyApp.Configurator
-```
-
-### Workflow examples
-
-#### Creating a NervesHub product
-
-A NervesHub product groups devices that run the same kind of firmware. All devices and firmware images have a product. NervesHub provides finer grain mechanisms for grouping devices, but a product is needed to get started.
-
-By default, NervesHub uses the `:app` name in your `mix.exs` for the product name. If you would like it to use a different name, add a `:name` field to your `Mix.Project.config()`. For example, NervesHub would use "My Example" instead of "example" for the following project:
-
-```elixir
-  def project do
-    [
-      app: :example,
-      name: "My Example"
-    ]
-  end
-```
-
-For the remainder of this document, though, we will not use the `:name` field and simply use the product name `example`.
-
-Create a new product on NervesHub by running:
-
-```bash
-mix nerves_hub.product create
-```
-
-#### Creating NervesHub firmware signing keys
-
-NervesHub requires cryptographic signatures on all managed firmware. Devices receiving firmware from NervesHub validate signatures. Since firmware is signed before uploading to NervesHub, NervesHub or any service NervesHub uses cannot modify it.
-
-Firmware authentication uses [Ed25519 digital signatures](https://en.wikipedia.org/wiki/EdDSA#Ed25519). You need to create at least one public/private key pair and copy the public key part to NervesHub and to devices. NervesHub tooling helps with both. A typical setup has multiple signing keys to support key rotation and "development" keys that are not as protected.
-
-Start by creating a `devkey` firmware signing key pair:
-
-```bash
-mix nerves_hub.key create devkey
-```
-
-On success, you'll see the public key. You can confirm using the NervesHub web interface that the public key exists. Private keys are never sent to the NervesHub server. NervesHub requires valid signatures from known keys on all firmware it distributes.
-
-While not shown here, you can export keys for safe storage. Additionally, key creation and firmware signing can be done outside of the `mix` tooling.
-
-When your Nerves device connects to NervesHub it will request all public firmware signing keys. You can override this behaviour by specifying the firmware signing keys your device should use in the config. If any keys are specified, keys will not be requested by the device. You specify a default key in the settings as well as opting-in to NervesHub sending all current publich keys available.
-
-Defining keys to be used:
-
-```elixir
-config :nerves_hub_link,
-  fwup_public_keys: [
-    "bM/O9+ykZhCWx8uZVgx0sU3f0JJX7mqnAVU9VGeuHr4="
-  ]
-```
-
-Defining keys to be used, and opting-in for updates:
-
-```elixir
-config :nerves_hub_link,
-  request_fwup_public_keys: true,
-  fwup_public_keys: [
-    "bM/O9+ykZhCWx8uZVgx0sU3f0JJX7mqnAVU9VGeuHr4="
-  ]
-```
-
-#### Publishing firmware
-
-Uploading firmware to NervesHub is called publishing. To publish firmware start by calling:
-
-```bash
-mix firmware
-```
-
-Firmware can only be published if has been signed. You can sign the firmware by running.
-
-```bash
-mix nerves_hub.firmware sign --key devkey
-```
-
-Firmware can also be signed while publishing:
-
-```bash
-mix nerves_hub.firmware publish --key devkey
-```
-
-#### Initializing devices
-
-*This step is not required for Shared Secret authentication*
-
-In this example we will create a device with a hardware identifier `1234`.  The device will also be tagged with `qa` so we can target it in our deployment group. We will select `y` when asked if we would like to generate device certificates. Device certificates are required for a device to establish a connection with the NervesHub server. However, if you are using [NervesKey](https://github.com/nerves-hub/nerves_key), you can select `n` to skip generating device certificates.
-
-```bash
-$ mix nerves_hub.device create
-
-NervesHub organization: nerveshub
-identifier: 1234
-description: test-1234
-tags: qa
-Local user password:
-Device 1234 created
-Would you like to generate certificates? [Yn] y
-Creating certificate for 1234
-Finished
-```
-
-It is important to note that device certificate private keys are generated and stay on your host computer. A certificate signing request is sent to the server, and a signed public key is passed back. Generated certificates will be placed in a folder titled `nerves-hub` in the current working directory. You can specify a different location by passing `--path /path/to/certs` to NervesHubCLI mix commands.
-
-NervesHub certificates and hardware identifiers are persisted to the firmware when the firmware is burned to the SD card. To make this process easier, you can call `nerves_hub.device burn IDENTIFIER`. In this example, we are going to burn the firmware and certificates for device `1234` that we created.
-
-```bash
-mix nerves_hub.device burn 1234
-```
-
-Your device will now connect to NervesHub when it boots and establishes an network connection.
-
-#### Creating deployments
-
-Deployments associate firmware images to devices. NervesHub won't send firmware to a device until you create a deployment. First find the UUID of the firmware. You can list the firmware on NervesHub by calling:
-
-```bash
-mix nerves_hub.firmware list
-
-Firmwares:
-------------
-  product:      example
-  version:      0.3.0
-  platform:     rpi3
-  architecture: arm
-  uuid:         1cbecdbb-aa7d-5aee-4ba2-864d518417df
-```
-
-In this example we will create a new deployment for our test group using firmware
-`1cbecdbb-aa7d-5aee-4ba2-864d518417df`.
-
-```bash
-mix nerves_hub.deployment create
-
-NervesHub organization: nerveshub
-Deployment name: qa_deployment
-firmware uuid: 1cbecdbb-aa7d-5aee-4ba2-864d518417df
-version condition:
-tags: qa
-Local user password:
-Deployment test created
-```
-
-Here we create a new deployment called `qa_deployment`. In the conditions of this deployment we left the `version condition` unspecified and the `tags` set to only `qa`.  This means that in order for a device to qualify for an update, it needs to have at least the tags `[qa]` and the device can be coming from any version.
-
-At this point we can try to update the connected device.
-
-Start by bumping the application version number from `0.1.0` to `0.1.1`. Then, create new firmware:
-
-```bash
-mix firmware
-```
-
-We can publish, sign, and deploy firmware in a single command now.
-
-```bash
-mix nerves_hub.firmware publish --key devkey --deploy qa_deployment
 ```
 
 ## Advanced features

@@ -1,6 +1,6 @@
 defmodule NervesHubLink.Configurator do
   alias NervesHubLink.Backoff
-  alias __MODULE__.{Config, Default}
+  alias __MODULE__.Config
   require Logger
 
   @device_api_version "2.0.0"
@@ -14,13 +14,14 @@ defmodule NervesHubLink.Configurator do
               device_api_port: 443,
               device_api_sni: nil,
               fwup_public_keys: [],
-              request_fwup_public_keys: false,
               archive_public_keys: [],
               fwup_devpath: "/dev/mmcblk0",
               fwup_env: [],
               nerves_key: [],
               params: %{},
               remote_iex: false,
+              request_fwup_public_keys: false,
+              shared_secret: [],
               socket: [],
               ssl: []
 
@@ -39,6 +40,8 @@ defmodule NervesHubLink.Configurator do
             nerves_key: any(),
             params: map(),
             remote_iex: boolean(),
+            request_fwup_public_keys: boolean(),
+            shared_secret: [product_key: String.t(), product_secret: String.t()],
             socket: any(),
             ssl: [:ssl.tls_client_option()]
           }
@@ -50,11 +53,27 @@ defmodule NervesHubLink.Configurator do
 
   @spec build :: Config.t()
   def build() do
-    Application.get_env(:nerves_hub_link, :configurator, fetch_default())
-    |> do_build()
+    configurator = fetch_configurator()
+
+    base_config()
+    |> configurator.build()
     |> add_socket_opts()
     |> add_fwup_public_keys()
     |> add_archive_public_keys()
+  end
+
+  @spec fetch_configurator :: atom()
+  def fetch_configurator() do
+    cond do
+      configurator = Application.get_env(:nerves_hub_link, :configurator) ->
+        configurator
+
+      Code.ensure_loaded?(NervesKey) ->
+        NervesHubLink.Configurator.NervesKey
+
+      true ->
+        NervesHubLink.Configurator.SharedSecret
+    end
   end
 
   defp add_socket_opts(config) do
@@ -104,27 +123,6 @@ defmodule NervesHubLink.Configurator do
       |> Map.put("console_version", @console_version)
 
     %{base | params: params, socket: socket, ssl: ssl, fwup_devpath: fwup_devpath}
-  end
-
-  defp do_build(configurator) when is_atom(configurator) do
-    base_config()
-    |> configurator.build()
-  end
-
-  defp do_build({m, f, a}) when is_atom(m) and is_atom(f) and is_list(a) do
-    apply(m, f, [base_config() | a])
-  end
-
-  defp do_build(configurator) do
-    raise "[NervesHubLink] Bad Configurator - #{inspect(configurator)}"
-  end
-
-  defp fetch_default() do
-    if Code.ensure_loaded?(NervesKey) do
-      NervesHubLink.Configurator.NervesKey
-    else
-      Default
-    end
   end
 
   defp fwup_version do

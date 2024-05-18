@@ -1,7 +1,7 @@
 defmodule NervesHubLink.Configurator.DefaultTest do
   use ExUnit.Case, async: true
 
-  alias NervesHubLink.Configurator.{Config, Default}
+  alias NervesHubLink.Configurator.{Config, LocalCertKey}
 
   test "prefers already supplied values" do
     config = %Config{
@@ -13,12 +13,12 @@ defmodule NervesHubLink.Configurator.DefaultTest do
       ]
     }
 
-    new_config = NervesHubLink.Configurator.Default.build(config)
+    new_config = LocalCertKey.build(config)
     assert new_config.ssl == config.ssl
   end
 
   test "reads values from Nerves.Runtime.KV" do
-    config = Default.build(%Config{})
+    config = LocalCertKey.build(%Config{})
 
     ssl = config.ssl
 

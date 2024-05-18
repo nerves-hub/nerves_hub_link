@@ -7,6 +7,7 @@ defmodule NervesHubLink.Socket do
 
   alias NervesHubLink.ArchiveManager
   alias NervesHubLink.Client
+  alias NervesHubLink.Configurator
   alias NervesHubLink.Configurator.SharedSecret
   alias NervesHubLink.UpdateManager
   alias NervesHubLink.UploadFile
@@ -438,7 +439,7 @@ defmodule NervesHubLink.Socket do
     channel_config = %{socket.channel_config | reconnect_after_msec: Client.reconnect_backoff()}
 
     channel_config =
-      case Application.get_env(:nerves_hub_link, :configurator) do
+      case Configurator.fetch_configurator() do
         SharedSecret ->
           # TODO: I don't know when reconnect/1 actually gets valudated. It could be that
           # the signature we create here will be too old before the headers are used

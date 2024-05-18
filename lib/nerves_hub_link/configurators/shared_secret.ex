@@ -21,9 +21,9 @@ defmodule NervesHubLink.Configurator.SharedSecret do
   Generate headers for Shared Secret Auth
   """
   @spec headers(Config.t()) :: [{String.t(), String.t()}]
-  def headers(%{socket: socket}) do
+  def headers(%{shared_secret: shared_secret}) do
     opts =
-      (socket[:shared_secret] || [])
+      (shared_secret || [])
       |> Keyword.put_new(:key_digest, :sha256)
       |> Keyword.put_new(:key_iterations, 1000)
       |> Keyword.put_new(:key_length, 32)
