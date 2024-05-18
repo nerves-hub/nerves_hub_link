@@ -12,8 +12,8 @@ defmodule NervesHubLink.Application do
     config = Configurator.build()
 
     fwup_config = %FwupConfig{
-      fwup_public_keys: config.fwup_public_keys,
       fwup_devpath: config.fwup_devpath,
+      fwup_task: config.fwup_task,
       fwup_env: config.fwup_env,
       handle_fwup_message: &Client.handle_fwup_message/1,
       update_available: &Client.update_available/1

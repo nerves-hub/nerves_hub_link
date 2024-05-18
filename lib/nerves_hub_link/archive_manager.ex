@@ -22,7 +22,6 @@ defmodule NervesHubLink.ArchiveManager do
 
   @type t :: %__MODULE__{
           archive_info: nil | ArchiveInfo.t(),
-          archive_public_keys: [binary()],
           data_path: Path.t(),
           download: nil | GenServer.server(),
           file_path: Path.t(),
@@ -32,7 +31,6 @@ defmodule NervesHubLink.ArchiveManager do
         }
 
   defstruct archive_info: nil,
-            archive_public_keys: [],
             data_path: nil,
             download: nil,
             file_path: nil,
@@ -44,17 +42,9 @@ defmodule NervesHubLink.ArchiveManager do
   Must be called when an archive payload is dispatched from
   NervesHub. the map must contain a `"url"` key.
   """
-  @spec apply_archive(GenServer.server(), ArchiveInfo.t()) :: status()
-  def apply_archive(manager \\ __MODULE__, %ArchiveInfo{} = archive_info) do
-    GenServer.call(manager, {:apply_archive, archive_info})
-  end
-
-  @doc """
-  Update all archive public keys
-  """
-  @spec update_archive_public_keys(GenServer.server(), [String.t()]) :: :ok
-  def update_archive_public_keys(manager \\ __MODULE__, pubkeys) do
-    GenServer.call(manager, {:update_archive_public_keys, pubkeys})
+  @spec apply_archive(GenServer.server(), ArchiveInfo.t(), [binary()]) :: status()
+  def apply_archive(manager \\ __MODULE__, %ArchiveInfo{} = archive_info, verification_keys) do
+    GenServer.call(manager, {:apply_archive, archive_info, verification_keys})
   end
 
   @doc """
@@ -91,7 +81,6 @@ defmodule NervesHubLink.ArchiveManager do
   @impl GenServer
   def init(args) do
     state = %__MODULE__{
-      archive_public_keys: args.archive_public_keys,
       data_path: args.data_path
     }
 
@@ -99,16 +88,12 @@ defmodule NervesHubLink.ArchiveManager do
   end
 
   @impl GenServer
-  def handle_call({:apply_archive, %ArchiveInfo{} = info}, _from, %__MODULE__{} = state) do
-    state = maybe_update_archive(info, state)
-    {:reply, state.status, state}
-  end
-
-  def handle_call({:update_archive_public_keys, pubkeys}, _from, %__MODULE__{} = state) do
-    keys = Enum.map(pubkeys, fn key -> String.trim(key) end)
-
-    state = put_in(state.archive_public_keys, keys)
-
+  def handle_call(
+        {:apply_archive, %ArchiveInfo{} = info, verification_keys},
+        _from,
+        %__MODULE__{} = state
+      ) do
+    state = maybe_update_archive(info, verification_keys, state)
     {:reply, state.status, state}
   end
 
@@ -125,12 +110,16 @@ defmodule NervesHubLink.ArchiveManager do
   end
 
   @impl GenServer
-  def handle_info({:update_reschedule, response}, state) do
-    {:noreply, maybe_update_archive(response, %__MODULE__{state | update_reschedule_timer: nil})}
+  def handle_info({:update_reschedule, response, verification_keys}, state) do
+    {:noreply,
+     maybe_update_archive(response, verification_keys, %__MODULE__{
+       state
+       | update_reschedule_timer: nil
+     })}
   end
 
   # messages from Downloader
-  def handle_info({:download, :complete}, state) do
+  def handle_info({:download, :complete, verification_keys}, state) do
     Logger.info("[NervesHubLink] Archive Download complete")
 
     # Clear a potential old file since we finished downloading
@@ -139,7 +128,7 @@ defmodule NervesHubLink.ArchiveManager do
 
     # validate the file
 
-    if valid_archive?(state.file_path, state.archive_public_keys) do
+    if valid_archive?(state.file_path, verification_keys) do
       _ = Client.archive_ready(state.archive_info, state.file_path)
     else
       Logger.error(
@@ -158,13 +147,13 @@ defmodule NervesHubLink.ArchiveManager do
      }}
   end
 
-  def handle_info({:download, {:error, reason}}, state) do
+  def handle_info({:download, {:error, reason}, _verification_keys}, state) do
     Logger.error("[NervesHubLink] Nonfatal HTTP download error: #{inspect(reason)}")
     {:noreply, state}
   end
 
   # Data from the downloader
-  def handle_info({:download, {:data, data}}, state) do
+  def handle_info({:download, {:data, data}, _verification_keys}, state) do
     :ok =
       File.open!(state.temp_file_path, [:append], fn fd ->
         IO.binwrite(fd, data)
@@ -173,7 +162,7 @@ defmodule NervesHubLink.ArchiveManager do
     {:noreply, state}
   end
 
-  defp maybe_update_archive(info, state) do
+  defp maybe_update_archive(info, verification_keys, state) do
     # Cancel an existing timer if it exists.
     # This prevents rescheduled updates`
     # from compounding.
@@ -189,7 +178,8 @@ defmodule NervesHubLink.ArchiveManager do
 
     case Client.archive_available(info) do
       :download ->
-        {:ok, download} = Downloader.start_download(info.url, &send(pid, {:download, &1}))
+        {:ok, download} =
+          Downloader.start_download(info.url, &send(pid, {:download, &1, verification_keys}))
 
         _ = File.mkdir_p(directory)
         _ = File.rm_rf(temp_file_path)
@@ -208,7 +198,7 @@ defmodule NervesHubLink.ArchiveManager do
         state
 
       {:reschedule, ms} ->
-        timer = Process.send_after(self(), {:update_reschedule, info}, ms)
+        timer = Process.send_after(self(), {:update_reschedule, info, verification_keys}, ms)
         Logger.info("[NervesHubLink] rescheduling archive in #{ms} milliseconds")
         %{state | status: :update_rescheduled, update_reschedule_timer: timer}
     end
