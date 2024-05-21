@@ -17,8 +17,8 @@ Devices connect to the server by joining a long-lived Phoenix channel (for HTTP 
 
 NervesHub does impose some requirements on devices and firmware that may require changes to your Nerves projects:
 
-* Firmware images are cryptographically signed (both NervesHub and devices validate signatures)
-* Devices are identified by a unique serial number
+- Firmware images are cryptographically signed (both NervesHub and devices validate signatures)
+- Devices are identified by a unique serial number
 
 When using client certificate authentication, each device will also require its own SSL certificate for authentication with NervesHub.
 
@@ -89,7 +89,7 @@ config :nerves_hub_link,
   device_api_host: "your.nerveshub.host"
 ```
 
-NervesKey will default to using I2C bus 1 and the `:primary` certificate pair (`:primary` is one-time configurable and `:aux` may be updated).  You can customize these options to use a different bus and certificate pair:
+NervesKey will default to using I2C bus 1 and the `:primary` certificate pair (`:primary` is one-time configurable and `:aux` may be updated). You can customize these options to use a different bus and certificate pair:
 
 ```elixir
 config :nerves_hub_link, :nerves_key,
@@ -104,7 +104,7 @@ If you would like to use certificate device authentication, but you are not usin
 ```elixir
 config :nerves_hub_link,
   device_api_host: "your.nerveshub.host",
-  configurator: NervesHubLink.Configurator.CertKey
+  configurator: NervesHubLink.Configurator.LocalCertKey
 ```
 
 By default the configurator will use a certificate found at `/data/nerves_hub/cert.pem` and a key found at `/data/nerves_hub/key.pem`. If these are stored somewhere differently then you can specify `certfile` and `keyfile` in the `ssl` config, e.g.:
@@ -112,14 +112,14 @@ By default the configurator will use a certificate found at `/data/nerves_hub/ce
 ```elixir
 config :nerves_hub_link,
   device_api_host: "your.nerveshub.host",
-  configurator: NervesHubLink.Configurator.CertKey,
+  configurator: NervesHubLink.Configurator.LocalCertKey,
   ssl: [
     certfile: "/path/to/certfile.pem",
     keyfile: "/path/to/keyfile.key"
   ]
 ```
 
-For more information on how to generate device certificates, please read the  ["Initializing devices"](#https://github.com/nerves-hub/nerves_hub_cli#initializing-devices) section in the `NervesHubCLI` readme.
+For more information on how to generate device certificates, please read the ["Initializing devices"](#https://github.com/nerves-hub/nerves_hub_cli#initializing-devices) section in the `NervesHubCLI` readme.
 
 #### Additional notes
 
@@ -130,6 +130,7 @@ Any [valid Erlang ssl socket option](http://erlang.org/doc/man/ssl.html#TLS/DTLS
 `NervesHubLink` also supports runtime configuration via the `NervesHubLink.Configurator` behavior. This is called during application startup to build the configuration that is to be used for the connection. When implementing the behavior, you'll receive the initial default config read in from the application environment and you can modify it however you need.
 
 This is useful for cases like:
+
 - selectively choosing which cert/key to use
 - reading a certificate file stored on the device which isn't available during compilation
 
@@ -245,12 +246,12 @@ You may also need additional permissions on NervesHub to see the device and to u
 
 This application can set and clear the following alarms:
 
-* `NervesHubLink.Disconnected`
-  * set: An issue is preventing a connection to NervesHub or one just hasn't been made yet
-  * clear: Currently connected to NervesHub
-* `NervesHubLink.UpdateInProgress`
-  * set: A new firmware update is being downloaded or applied
-  * clear: No updates are happening
+- `NervesHubLink.Disconnected`
+  - set: An issue is preventing a connection to NervesHub or one just hasn't been made yet
+  - clear: Currently connected to NervesHub
+- `NervesHubLink.UpdateInProgress`
+  - set: A new firmware update is being downloaded or applied
+  - clear: No updates are happening
 
 ### CA Certificates
 

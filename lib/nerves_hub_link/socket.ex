@@ -255,8 +255,9 @@ defmodule NervesHubLink.Socket do
     config = %{socket.assigns.config | fwup_public_keys: params["keys"]}
 
     if count == 0 do
-      Logger.warning("[NervesHubLink] No public keys for firmware verification received")
-      Logger.warning("[NervesHubLink] Firmware updates cannot be verified and installed")
+      Logger.warning(
+        "[NervesHubLink] No public keys for firmware verification received : firmware updates cannot be verified and installed"
+      )
     else
       Logger.info(
         "[NervesHubLink] Public keys for firmware verification updated - #{count} key(s) received"
@@ -272,8 +273,9 @@ defmodule NervesHubLink.Socket do
     config = %{socket.assigns.config | archive_public_keys: params["keys"]}
 
     if count == 0 do
-      Logger.warning("[NervesHubLink] No public keys for archive verification received")
-      Logger.warning("[NervesHubLink] Archive updates cannot be verified and installed")
+      Logger.warning(
+        "[NervesHubLink] No public keys for archive verification received : archive updates cannot be verified and installed"
+      )
     else
       Logger.info(
         "[NervesHubLink] Public keys for archive verification updated - #{count} key(s) received"
