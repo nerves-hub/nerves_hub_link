@@ -35,7 +35,7 @@ defmodule NervesHubLink.Certificate do
 
       Code.ensure_loaded?(CAStore) ->
         Logger.debug(
-          "[NervesHubLink] Using CAStore dependency. Requests may fail if the NervesHub server certificate is not signed by a globally trusted CA."
+          "[NervesHubLink] Using CAStore: Requests may fail if the NervesHub server certificate is not signed by a globally trusted CA."
         )
 
         CAStore.file_path()

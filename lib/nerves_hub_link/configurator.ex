@@ -173,14 +173,14 @@ defmodule NervesHubLink.Configurator do
 
       Enum.any?(config.fwup_public_keys) ->
         Logger.debug(
-          "[NervesHubLink] No public keys for archive verification configured, using public keys configured in `fwup_public_keys`"
+          "[NervesHubLink] Using public keys configured in `fwup_public_keys` for archive verification"
         )
 
         %{config | archive_public_keys: config.fwup_public_keys}
 
       true ->
         Logger.debug(
-          "[NervesHubLink] No public keys for archive verification configured, requesting public keys for archive verification during socket connection"
+          "[NervesHubLink] Requesting public keys for archive verification during socket connection (no public keys configured)"
         )
 
         archive_public_keys_on_connect_config(config)
