@@ -48,9 +48,9 @@ defmodule NervesHubLink.UpdateManager do
   Must be called when an update payload is dispatched from
   NervesHub. the map must contain a `"firmware_url"` key.
   """
-  @spec apply_update(GenServer.server(), UpdateInfo.t()) :: State.status()
-  def apply_update(manager \\ __MODULE__, %UpdateInfo{} = update_info) do
-    GenServer.call(manager, {:apply_update, update_info})
+  @spec apply_update(GenServer.server(), UpdateInfo.t(), list(String.t())) :: State.status()
+  def apply_update(manager \\ __MODULE__, %UpdateInfo{} = update_info, fwup_public_keys) do
+    GenServer.call(manager, {:apply_update, update_info, fwup_public_keys})
   end
 
   @doc """
@@ -67,22 +67,6 @@ defmodule NervesHubLink.UpdateManager do
   @spec currently_downloading_uuid(GenServer.server()) :: uuid :: String.t() | nil
   def currently_downloading_uuid(manager \\ __MODULE__) do
     GenServer.call(manager, :currently_downloading_uuid)
-  end
-
-  @doc """
-  Add a FWUP Public key
-  """
-  @spec add_fwup_public_key(GenServer.server(), String.t()) :: :ok
-  def add_fwup_public_key(manager \\ __MODULE__, pubkey) do
-    GenServer.call(manager, {:fwup_public_key, :add, pubkey})
-  end
-
-  @doc """
-  Remove a FWUP public key
-  """
-  @spec remove_fwup_public_key(GenServer.server(), String.t()) :: :ok
-  def remove_fwup_public_key(manager \\ __MODULE__, pubkey) do
-    GenServer.call(manager, {:fwup_public_key, :remove, pubkey})
   end
 
   @doc false
@@ -108,8 +92,12 @@ defmodule NervesHubLink.UpdateManager do
   end
 
   @impl GenServer
-  def handle_call({:apply_update, %UpdateInfo{} = update}, _from, %State{} = state) do
-    state = maybe_update_firmware(update, state)
+  def handle_call(
+        {:apply_update, %UpdateInfo{} = update, fwup_public_keys},
+        _from,
+        %State{} = state
+      ) do
+    state = maybe_update_firmware(update, fwup_public_keys, state)
     {:reply, state.status, state}
   end
 
@@ -125,23 +113,13 @@ defmodule NervesHubLink.UpdateManager do
     {:reply, state.status, state}
   end
 
-  def handle_call({:fwup_public_key, action, pubkey}, _from, %State{} = state) do
-    pubkey = String.trim(pubkey)
-    keys = state.fwup_config.fwup_public_keys
-
-    updated =
-      case action do
-        :add -> [pubkey | keys]
-        :remove -> for i <- keys, i != pubkey, do: i
-      end
-
-    state = put_in(state.fwup_config.fwup_public_keys, Enum.uniq(updated))
-    {:reply, :ok, state}
-  end
-
   @impl GenServer
-  def handle_info({:update_reschedule, response}, state) do
-    {:noreply, maybe_update_firmware(response, %State{state | update_reschedule_timer: nil})}
+  def handle_info({:update_reschedule, response, fwup_public_keys}, state) do
+    {:noreply,
+     maybe_update_firmware(response, fwup_public_keys, %State{
+       state
+       | update_reschedule_timer: nil
+     })}
   end
 
   # messages from FWUP
@@ -183,9 +161,10 @@ defmodule NervesHubLink.UpdateManager do
     {:noreply, state}
   end
 
-  @spec maybe_update_firmware(UpdateInfo.t(), State.t()) :: State.t()
+  @spec maybe_update_firmware(UpdateInfo.t(), [binary()], State.t()) :: State.t()
   defp maybe_update_firmware(
          %UpdateInfo{} = _update_info,
+         _fwup_public_keys,
          %State{status: {:updating, _percent}} = state
        ) do
     # Received an update message from NervesHub, but we're already in progress.
@@ -197,7 +176,7 @@ defmodule NervesHubLink.UpdateManager do
     state
   end
 
-  defp maybe_update_firmware(%UpdateInfo{} = update_info, %State{} = state) do
+  defp maybe_update_firmware(%UpdateInfo{} = update_info, fwup_public_keys, %State{} = state) do
     # Cancel an existing timer if it exists.
     # This prevents rescheduled updates`
     # from compounding.
@@ -209,19 +188,21 @@ defmodule NervesHubLink.UpdateManager do
     # note: update_available is a behaviour function
     case state.fwup_config.update_available.(update_info) do
       :apply ->
-        start_fwup_stream(update_info, state)
+        start_fwup_stream(update_info, fwup_public_keys, state)
 
       :ignore ->
         state
 
       {:reschedule, ms} ->
-        timer = Process.send_after(self(), {:update_reschedule, update_info}, ms)
+        timer =
+          Process.send_after(self(), {:update_reschedule, update_info, fwup_public_keys}, ms)
+
         Logger.info("[NervesHubLink] rescheduling firmware update in #{ms} milliseconds")
         %{state | status: :update_rescheduled, update_reschedule_timer: timer}
     end
   end
 
-  defp maybe_update_firmware(_, state), do: state
+  defp maybe_update_firmware(_, _, state), do: state
 
   defp maybe_cancel_timer(%{update_reschedule_timer: nil} = state), do: state
 
@@ -231,14 +212,16 @@ defmodule NervesHubLink.UpdateManager do
     %{state | update_reschedule_timer: nil}
   end
 
-  @spec start_fwup_stream(UpdateInfo.t(), State.t()) :: State.t()
-  defp start_fwup_stream(%UpdateInfo{} = update_info, state) do
+  @spec start_fwup_stream(UpdateInfo.t(), [binary()], State.t()) :: State.t()
+  defp start_fwup_stream(%UpdateInfo{} = update_info, [] = fwup_public_keys, state) do
     pid = self()
     fun = &send(pid, {:download, &1})
     {:ok, download} = Downloader.start_download(update_info.firmware_url, fun)
 
     {:ok, fwup} =
-      Fwup.stream(pid, fwup_args(state.fwup_config), fwup_env: state.fwup_config.fwup_env)
+      Fwup.stream(pid, fwup_args(state.fwup_config, fwup_public_keys),
+        fwup_env: state.fwup_config.fwup_env
+      )
 
     Logger.info("[NervesHubLink] Downloading firmware: #{update_info.firmware_url}")
     :alarm_handler.set_alarm({NervesHubLink.UpdateInProgress, []})
@@ -252,11 +235,11 @@ defmodule NervesHubLink.UpdateManager do
     }
   end
 
-  @spec fwup_args(FwupConfig.t()) :: [String.t()]
-  defp fwup_args(%FwupConfig{} = config) do
+  @spec fwup_args(FwupConfig.t(), list(String.t())) :: [String.t()]
+  defp fwup_args(%FwupConfig{} = config, [] = fwup_public_keys) do
     args = ["--apply", "--no-unmount", "-d", config.fwup_devpath, "--task", config.fwup_task]
 
-    Enum.reduce(config.fwup_public_keys, args, fn public_key, args ->
+    Enum.reduce(fwup_public_keys, args, fn public_key, args ->
       args ++ ["--public-key", public_key]
     end)
   end

@@ -5,10 +5,9 @@ defmodule NervesHubLink.FwupConfig do
   """
   alias NervesHubLink.Message.UpdateInfo
 
-  defstruct fwup_public_keys: [],
-            fwup_devpath: "/dev/mmcblk0",
+  defstruct fwup_devpath: "",
             fwup_env: [],
-            fwup_task: "upgrade",
+            fwup_task: "",
             handle_fwup_message: nil,
             update_available: nil
 
@@ -33,7 +32,6 @@ defmodule NervesHubLink.FwupConfig do
           (UpdateInfo.t() -> :ignore | {:reschedule, timeout()} | :apply)
 
   @type t :: %__MODULE__{
-          fwup_public_keys: [String.t()],
           fwup_devpath: Path.t(),
           fwup_task: String.t(),
           fwup_env: [{String.t(), String.t()}],
@@ -45,24 +43,30 @@ defmodule NervesHubLink.FwupConfig do
   @spec validate!(t()) :: t()
   def validate!(%__MODULE__{} = args) do
     args
-    |> validate_fwup_public_keys!()
     |> validate_fwup_devpath!()
+    |> validate_fwup_task!()
     |> validate_fwup_env!()
     |> validate_handle_fwup_message!()
     |> validate_update_available!()
   end
-
-  defp validate_fwup_public_keys!(%__MODULE__{fwup_public_keys: list} = args) when is_list(list),
-    do: args
-
-  defp validate_fwup_public_keys!(%__MODULE__{}),
-    do: raise(ArgumentError, message: "invalid arg: fwup_public_keys")
 
   defp validate_fwup_devpath!(%__MODULE__{fwup_devpath: devpath} = args) when is_binary(devpath),
     do: args
 
   defp validate_fwup_devpath!(%__MODULE__{}),
     do: raise(ArgumentError, message: "invalid arg: fwup_devpath")
+
+  defp validate_fwup_task!(%__MODULE__{fwup_task: task} = args) when is_binary(task),
+    do: args
+
+  defp validate_fwup_task!(%__MODULE__{}),
+    do: raise(ArgumentError, message: "invalid arg: fwup_task")
+
+  defp validate_fwup_env!(%__MODULE__{fwup_env: list} = args) when is_list(list),
+    do: args
+
+  defp validate_fwup_env!(%__MODULE__{}),
+    do: raise(ArgumentError, message: "invalid arg: fwup_env")
 
   defp validate_handle_fwup_message!(%__MODULE__{handle_fwup_message: handle_fwup_message} = args)
        when is_function(handle_fwup_message, 1),
@@ -77,10 +81,4 @@ defmodule NervesHubLink.FwupConfig do
 
   defp validate_update_available!(%__MODULE__{}),
     do: raise(ArgumentError, message: "update_available function signature incorrect")
-
-  defp validate_fwup_env!(%__MODULE__{fwup_env: list} = args) when is_list(list),
-    do: args
-
-  defp validate_fwup_env!(%__MODULE__{}),
-    do: raise(ArgumentError, message: "invalid arg: fwup_env")
 end

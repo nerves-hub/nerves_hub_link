@@ -28,7 +28,7 @@ defmodule NervesHubLink.UpdateManagerTest do
       fwup_config = %{default_config() | fwup_devpath: devpath}
 
       {:ok, manager} = UpdateManager.start_link(fwup_config)
-      assert UpdateManager.apply_update(manager, update_payload) == {:updating, 0}
+      assert UpdateManager.apply_update(manager, update_payload, []) == {:updating, 0}
 
       assert_receive {:fwup, {:progress, 0}}
       assert_receive {:fwup, {:progress, 100}}
@@ -57,7 +57,7 @@ defmodule NervesHubLink.UpdateManagerTest do
       }
 
       {:ok, manager} = UpdateManager.start_link(fwup_config)
-      assert UpdateManager.apply_update(manager, update_payload) == :update_rescheduled
+      assert UpdateManager.apply_update(manager, update_payload, []) == :update_rescheduled
       assert_received :rescheduled
       refute_received {:fwup, _}
 
@@ -79,36 +79,12 @@ defmodule NervesHubLink.UpdateManagerTest do
       # If setting SUPER_SECRET in the environment doesn't happen, then test fails
       # due to fwup getting a bad aes key.
       {:ok, manager} = UpdateManager.start_link(fwup_config)
-      assert UpdateManager.apply_update(manager, update_payload) == {:updating, 0}
+      assert UpdateManager.apply_update(manager, update_payload, []) == {:updating, 0}
 
       assert_receive {:fwup, {:progress, 0}}
       assert_receive {:fwup, {:progress, 100}}
       assert_receive {:fwup, {:ok, 0, ""}}
     end
-  end
-
-  test "add fwup public key" do
-    config = default_config()
-    {:ok, manager} = start_supervised({UpdateManager, config})
-
-    assert config.fwup_public_keys == :sys.get_state(manager).fwup_config.fwup_public_keys
-
-    UpdateManager.add_fwup_public_key(manager, "test")
-    keys = :sys.get_state(manager).fwup_config.fwup_public_keys
-    refute config.fwup_public_keys == keys
-    assert keys == ["test"]
-  end
-
-  test "remove fwup public key" do
-    config = %{default_config() | fwup_public_keys: ["test"]}
-    {:ok, manager} = start_supervised({UpdateManager, config})
-
-    assert config.fwup_public_keys == :sys.get_state(manager).fwup_config.fwup_public_keys
-
-    UpdateManager.remove_fwup_public_key(manager, "test")
-    keys = :sys.get_state(manager).fwup_config.fwup_public_keys
-    refute config.fwup_public_keys == keys
-    assert keys == []
   end
 
   defp default_config() do

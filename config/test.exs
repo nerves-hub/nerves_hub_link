@@ -2,9 +2,9 @@ import Config
 
 # Device HTTP connection.
 config :nerves_hub_link,
+  archive_public_keys: ["a key?"],
   connect: false,
   client: NervesHubLink.ClientMock,
-  configurator: NervesHubLink.Configurator.Default,
   device_api_host: "0.0.0.0",
   device_api_port: 4001,
   fwup_public_keys: ["a key"],

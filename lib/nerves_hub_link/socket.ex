@@ -142,7 +142,7 @@ defmodule NervesHubLink.Socket do
   @impl Slipstream
   def handle_join(@device_topic, reply, socket) do
     Logger.debug("[#{inspect(__MODULE__)}] Joined Device channel")
-    _ = handle_join_reply(reply)
+    _ = handle_join_reply(reply, socket)
     {:ok, assign(socket, joined_at: System.monotonic_time(:millisecond))}
   end
 
@@ -252,11 +252,33 @@ defmodule NervesHubLink.Socket do
   def handle_message(@device_topic, "fwup_public_keys", params, socket) do
     count = Enum.count(params["keys"])
 
-    Logger.info(
-      "[NervesHubLink] Updating fwup public keys from NervesHubLink - #{count} key(s) received"
-    )
-
     config = %{socket.assigns.config | fwup_public_keys: params["keys"]}
+
+    if count == 0 do
+      Logger.warning("[NervesHubLink] No public keys for firmware verification received")
+      Logger.warning("[NervesHubLink] Firmware updates cannot be verified and installed")
+    else
+      Logger.info(
+        "[NervesHubLink] Public keys for firmware verification updated - #{count} key(s) received"
+      )
+    end
+
+    {:ok, assign(socket, config: config)}
+  end
+
+  def handle_message(@device_topic, "archive_public_keys", params, socket) do
+    count = Enum.count(params["keys"])
+
+    config = %{socket.assigns.config | archive_public_keys: params["keys"]}
+
+    if count == 0 do
+      Logger.warning("[NervesHubLink] No public keys for archive verification received")
+      Logger.warning("[NervesHubLink] Archive updates cannot be verified and installed")
+    else
+      Logger.info(
+        "[NervesHubLink] Public keys for archive verification updated - #{count} key(s) received"
+      )
+    end
 
     {:ok, assign(socket, config: config)}
   end
@@ -276,14 +298,14 @@ defmodule NervesHubLink.Socket do
 
   def handle_message(@device_topic, "archive", params, socket) do
     {:ok, info} = NervesHubLink.Message.ArchiveInfo.parse(params)
-    _ = ArchiveManager.apply_archive(info)
+    _ = ArchiveManager.apply_archive(info, socket.assigns.config.archive_public_keys)
     {:ok, socket}
   end
 
   def handle_message(@device_topic, "update", update, socket) do
     case NervesHubLink.Message.UpdateInfo.parse(update) do
       {:ok, %NervesHubLink.Message.UpdateInfo{} = info} ->
-        _ = UpdateManager.apply_update(info)
+        _ = UpdateManager.apply_update(info, socket.assigns.config.fwup_public_keys)
         {:ok, socket}
 
       error ->
@@ -465,10 +487,10 @@ defmodule NervesHubLink.Socket do
     Process.send_after(self(), :connect_check_network_availability, delay)
   end
 
-  defp handle_join_reply(%{"firmware_url" => url} = update) when is_binary(url) do
+  defp handle_join_reply(%{"firmware_url" => url} = update, socket) when is_binary(url) do
     case NervesHubLink.Message.UpdateInfo.parse(update) do
       {:ok, %NervesHubLink.Message.UpdateInfo{} = info} ->
-        UpdateManager.apply_update(info)
+        UpdateManager.apply_update(info, socket.assigns.config.fwup_public_keys)
 
       error ->
         Logger.error(
@@ -479,7 +501,7 @@ defmodule NervesHubLink.Socket do
     end
   end
 
-  defp handle_join_reply(_), do: :noop
+  defp handle_join_reply(_, _), do: :noop
 
   defp maybe_join_console(socket) do
     if socket.assigns.remote_iex do
