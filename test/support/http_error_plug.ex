@@ -10,7 +10,6 @@ defmodule NervesHubLink.Support.HTTPErrorPlug do
 
   @impl Plug
   def call(conn, _opts) do
-    conn
-    |> send_resp(416, "Range Not Satisfiable")
+    send_resp(conn, 416, "Range Not Satisfiable")
   end
 end

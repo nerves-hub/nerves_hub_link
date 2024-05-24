@@ -3,6 +3,7 @@ defmodule NervesHubLink.DownloaderTest do
 
   alias NervesHubLink.Support.{
     HTTPErrorPlug,
+    HTTPUnauthorizedErrorPlug,
     IdleTimeoutPlug,
     RangeRequestPlug,
     RedirectPlug,
@@ -99,6 +100,35 @@ defmodule NervesHubLink.DownloaderTest do
       {:ok, download} = Downloader.start_download(url, handler_fun, @short_retry_args)
       assert_receive {:error, %Mint.HTTPError{reason: {:http_error, 416}}}, 1000
       assert_receive {:EXIT, ^download, {:http_error, 416}}
+    end
+  end
+
+  describe "unauthorized http error" do
+    setup do
+      port = 7025
+
+      {:ok, plug} =
+        start_supervised(
+          {Plug.Cowboy,
+           scheme: :http,
+           plug: {HTTPUnauthorizedErrorPlug, report_pid: self()},
+           options: [port: port]}
+        )
+
+      {:ok, [plug: plug, url: "http://localhost:#{port}/test"]}
+    end
+
+    test "exits when an HTTP error occurs", %{url: url} do
+      test_pid = self()
+      handler_fun = &send(test_pid, &1)
+
+      Process.flag(:trap_exit, true)
+
+      {:ok, download} = Downloader.start_download(url, handler_fun)
+
+      assert_receive :request_error, 1000
+      assert_receive {:error, %Mint.HTTPError{reason: {:http_error, 401}}}, 1000
+      assert_receive {:EXIT, ^download, {:http_error, 401}}
     end
   end
 

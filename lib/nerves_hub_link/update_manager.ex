@@ -9,7 +9,7 @@ defmodule NervesHubLink.UpdateManager do
   """
   use GenServer
 
-  alias NervesHubLink.{Downloader, FwupConfig}
+  alias NervesHubLink.{Downloader, FwupConfig, Socket}
   alias NervesHubLink.Message.UpdateInfo
 
   require Logger
@@ -27,13 +27,17 @@ defmodule NervesHubLink.UpdateManager do
             | :update_rescheduled
             | {:updating, integer()}
 
+    @type previous_update :: :complete | :failed
+
     @type t :: %__MODULE__{
             status: status(),
             update_reschedule_timer: nil | :timer.tref(),
             download: nil | GenServer.server(),
             fwup: nil | GenServer.server(),
             fwup_config: FwupConfig.t(),
-            update_info: nil | UpdateInfo.t()
+            update_info: nil | UpdateInfo.t(),
+            retrying: boolean(),
+            previous_update: nil | previous_update()
           }
 
     defstruct status: :idle,
@@ -41,7 +45,9 @@ defmodule NervesHubLink.UpdateManager do
               fwup: nil,
               download: nil,
               fwup_config: nil,
-              update_info: nil
+              update_info: nil,
+              retrying: false,
+              previous_update: nil
   end
 
   @doc """
@@ -59,6 +65,14 @@ defmodule NervesHubLink.UpdateManager do
   @spec status(GenServer.server()) :: State.status()
   def status(manager \\ __MODULE__) do
     GenServer.call(manager, :status)
+  end
+
+  @doc """
+  Returns the previous status of the update manager
+  """
+  @spec previous_update(GenServer.server()) :: State.previous_update()
+  def previous_update(manager \\ __MODULE__) do
+    GenServer.call(manager, :previous_update)
   end
 
   @doc """
@@ -113,6 +127,10 @@ defmodule NervesHubLink.UpdateManager do
     {:reply, state.status, state}
   end
 
+  def handle_call(:previous_update, _from, %State{} = state) do
+    {:reply, state.previous_update, state}
+  end
+
   @impl GenServer
   def handle_info({:update_reschedule, response, fwup_public_keys}, state) do
     {:noreply,
@@ -145,19 +163,52 @@ defmodule NervesHubLink.UpdateManager do
   end
 
   # messages from Downloader
-  def handle_info({:download, :complete}, state) do
+  def handle_info({:download, :complete, _fwup_public_keys}, state) do
     Logger.info("[NervesHubLink] Firmware Download complete")
-    {:noreply, %State{state | download: nil}}
+
+    {:noreply, %State{state | status: :idle, retrying: false, previous_update: :complete}}
   end
 
-  def handle_info({:download, {:error, reason}}, state) do
-    Logger.error("[NervesHubLink] Nonfatal HTTP download error: #{inspect(reason)}")
+  def handle_info(
+        {:download, {:error, %Mint.HTTPError{reason: {:http_error, 401}}}, _fwup_public_keys},
+        %State{retrying: true} = state
+      ) do
+    Logger.error("[NervesHubLink] Firmware download error: 401 after retry")
+    {:noreply, %State{state | status: :idle, retrying: false, previous_update: :failed}}
+  end
+
+  def handle_info(
+        {:download, {:error, %Mint.HTTPError{reason: {:http_error, 401}}}, fwup_public_keys},
+        state
+      ) do
+    Logger.error(
+      "[NervesHubLink] Firmware download URL signature may have expired. Requesting new URL and retrying."
+    )
+
+    GenServer.stop(Fwup.Stream)
+
+    update_info = Socket.check_update_available()
+    updated_state = %State{state | status: :idle, retrying: true, fwup: nil}
+    state = maybe_update_firmware(update_info, fwup_public_keys, updated_state)
     {:noreply, state}
   end
 
+  def handle_info({:download, {:error, reason}, _fwup_public_keys}, state) do
+    Logger.error("[NervesHubLink] Nonfatal HTTP download error: #{inspect(reason)}")
+    {:noreply, %State{state | status: :idle, retrying: false}}
+  end
+
   # Data from the downloader is sent to fwup
-  def handle_info({:download, {:data, data}}, state) do
+  def handle_info({:download, {:data, data}, _fwup_public_keys}, state) do
     _ = Fwup.Stream.send_chunk(state.fwup, data)
+    {:noreply, state}
+  end
+
+  def handle_info({:EXIT, _pid, {:http_error, 401}}, state) do
+    {:noreply, %State{state | download: nil}}
+  end
+
+  def handle_info({:EXIT, _pid, :normal}, state) do
     {:noreply, state}
   end
 
@@ -215,7 +266,10 @@ defmodule NervesHubLink.UpdateManager do
   @spec start_fwup_stream(UpdateInfo.t(), [binary()], State.t()) :: State.t()
   defp start_fwup_stream(%UpdateInfo{} = update_info, [] = fwup_public_keys, state) do
     pid = self()
-    fun = &send(pid, {:download, &1})
+
+    Process.flag(:trap_exit, true)
+
+    fun = &send(pid, {:download, &1, fwup_public_keys})
     {:ok, download} = Downloader.start_download(update_info.firmware_url, fun)
 
     {:ok, fwup} =
