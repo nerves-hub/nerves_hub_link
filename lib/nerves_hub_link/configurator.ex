@@ -9,7 +9,6 @@ defmodule NervesHubLink.Configurator do
   defmodule Config do
     defstruct archive_public_keys: [],
               connect: true,
-              connect_wait_for_network: true,
               data_path: "/data/nerves-hub",
               device_api_host: nil,
               device_api_port: 443,
@@ -25,12 +24,13 @@ defmodule NervesHubLink.Configurator do
               request_fwup_public_keys: false,
               shared_secret: [],
               socket: [],
-              ssl: []
+              ssl: [],
+              wait_for_network: true,
+              wait_for_time_sync: true
 
     @type t() :: %__MODULE__{
             archive_public_keys: [binary()],
             connect: boolean(),
-            connect_wait_for_network: boolean(),
             data_path: Path.t(),
             device_api_host: String.t(),
             device_api_port: String.t(),
@@ -46,7 +46,9 @@ defmodule NervesHubLink.Configurator do
             request_fwup_public_keys: boolean(),
             shared_secret: [product_key: String.t(), product_secret: String.t()],
             socket: any(),
-            ssl: [:ssl.tls_client_option()]
+            ssl: [:ssl.tls_client_option()],
+            wait_for_network: boolean(),
+            wait_for_time_sync: boolean()
           }
   end
 

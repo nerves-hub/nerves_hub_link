@@ -90,12 +90,8 @@ defmodule NervesHubLink.Socket do
       |> assign(connected_at: nil)
       |> assign(joined_at: nil)
 
-    if config.connect_wait_for_network do
-      schedule_network_availability_check()
-      {:ok, socket}
-    else
-      {:ok, socket, {:continue, :connect}}
-    end
+    schedule_preconnect_checks()
+    {:ok, socket}
   end
 
   @impl Slipstream
@@ -388,15 +384,25 @@ defmodule NervesHubLink.Socket do
   end
 
   @impl Slipstream
-  def handle_info(:connect_check_network_availability, socket) do
-    case :inet.gethostbyname(to_charlist(socket.assigns.config.device_api_host)) do
-      {:ok, _} ->
+  def handle_info(:preconnect_checks, socket) do
+    network? = network_connected?(socket)
+    time? = time_synchronized?(socket)
+
+    cond do
+      network? && time? ->
         {:noreply, socket, {:continue, :connect}}
 
-      _ ->
-        Logger.info("[NervesHubLink] waiting for network to become available")
-        schedule_network_availability_check(2_000)
-        {:noreply, socket}
+      !network? ->
+        log_and_reschedule_checks(
+          "[NervesHubLink] waiting for network to become available",
+          socket
+        )
+
+      !time? ->
+        log_and_reschedule_checks(
+          "[NervesHubLink] waiting for time to sync",
+          socket
+        )
     end
   end
 
@@ -447,6 +453,33 @@ defmodule NervesHubLink.Socket do
     {:noreply, socket}
   end
 
+  defp network_connected?(%{assigns: %{config: config}}) do
+    if config.wait_for_network do
+      host = to_charlist(config.device_api_host)
+
+      case :inet.gethostbyname(host) do
+        {:ok, _} -> true
+        _ -> false
+      end
+    else
+      true
+    end
+  end
+
+  defp time_synchronized?(%{assigns: %{config: config}}) do
+    if config.wait_for_time_sync do
+      NervesTime.synchronized?()
+    else
+      true
+    end
+  end
+
+  defp log_and_reschedule_checks(msg, socket) do
+    Logger.info(msg)
+    schedule_preconnect_checks(2_000)
+    {:noreply, socket}
+  end
+
   @impl Slipstream
   def handle_topic_close(topic, reason, socket) when reason != :left do
     if topic == @device_topic do
@@ -485,8 +518,8 @@ defmodule NervesHubLink.Socket do
     disconnect(socket)
   end
 
-  defp schedule_network_availability_check(delay \\ 100) do
-    Process.send_after(self(), :connect_check_network_availability, delay)
+  defp schedule_preconnect_checks(delay \\ 100) do
+    Process.send_after(self(), :preconnect_checks, delay)
   end
 
   defp handle_join_reply(%{"firmware_url" => url} = update, socket) when is_binary(url) do
