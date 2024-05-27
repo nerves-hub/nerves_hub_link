@@ -109,10 +109,7 @@ defmodule NervesHubLink.DownloaderTest do
 
       {:ok, plug} =
         start_supervised(
-          {Plug.Cowboy,
-           scheme: :http,
-           plug: {HTTPUnauthorizedErrorPlug, report_pid: self()},
-           options: [port: port]}
+          {Plug.Cowboy, scheme: :http, plug: HTTPUnauthorizedErrorPlug, options: [port: port]}
         )
 
       {:ok, [plug: plug, url: "http://localhost:#{port}/test"]}
@@ -126,7 +123,6 @@ defmodule NervesHubLink.DownloaderTest do
 
       {:ok, download} = Downloader.start_download(url, handler_fun)
 
-      assert_receive :request_error, 1000
       assert_receive {:error, %Mint.HTTPError{reason: {:http_error, 401}}}, 1000
       assert_receive {:EXIT, ^download, {:http_error, 401}}
     end

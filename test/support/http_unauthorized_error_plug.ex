@@ -9,9 +9,7 @@ defmodule NervesHubLink.Support.HTTPUnauthorizedErrorPlug do
   def init(options), do: options
 
   @impl Plug
-  def call(conn, opts) do
-    send(opts[:report_pid], :request_error)
-
+  def call(conn, _opts) do
     send_resp(conn, 401, "Unauthorized")
   end
 end

@@ -55,10 +55,6 @@ defmodule NervesHubLink.Socket do
     GenServer.call(pid, {:finish_uploading, filename})
   end
 
-  def check_update_available(pid \\ __MODULE__) do
-    GenServer.call(pid, :check_update_available)
-  end
-
   @doc """
   Cancel an ongoing upload
 
@@ -167,12 +163,6 @@ defmodule NervesHubLink.Socket do
 
   def handle_call({:check_connection, :socket}, _from, socket) do
     {:reply, connected?(socket), socket}
-  end
-
-  def handle_call(:check_update_available, _from, socket) do
-    {:ok, ref} = push(socket, @device_topic, "check_update_available", socket.assigns.params)
-
-    {:reply, await_reply(ref), socket}
   end
 
   def handle_call(:console_active?, _from, socket) do
@@ -451,6 +441,12 @@ defmodule NervesHubLink.Socket do
     _ = push(socket, @console_topic, "up", %{data: msg})
 
     {:noreply, stop_iex(socket)}
+  end
+
+  def handle_info({:update_manager, result}, socket) do
+    _ = push(socket, @device_topic, "update:status", result)
+
+    {:noreply, socket}
   end
 
   def handle_info(msg, socket) do

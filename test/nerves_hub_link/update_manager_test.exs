@@ -3,7 +3,7 @@ defmodule NervesHubLink.UpdateManagerTest do
 
   alias NervesHubLink.{FwupConfig, UpdateManager}
   alias NervesHubLink.Message.{FirmwareMetadata, UpdateInfo}
-  alias NervesHubLink.Support.{FWUPStreamPlug, Utils}
+  alias NervesHubLink.Support.{FWUPStreamPlug, HTTPUnauthorizedErrorPlug, Utils}
 
   import Mock
 
@@ -102,10 +102,7 @@ defmodule NervesHubLink.UpdateManagerTest do
 
       {:ok, plug} =
         start_supervised(
-          {Plug.Cowboy,
-           scheme: :http,
-           plug: {NervesHubLink.Support.HTTPUnauthorizedErrorPlug, report_pid: self()},
-           options: [port: port]}
+          {Plug.Cowboy, scheme: :http, plug: HTTPUnauthorizedErrorPlug, options: [port: port]}
         )
 
       {:ok, [plug: plug, update_payload: update_payload]}
@@ -120,15 +117,11 @@ defmodule NervesHubLink.UpdateManagerTest do
 
       {:ok, manager} = UpdateManager.start_link(fwup_config)
 
-      with_mock NervesHubLink.Socket, check_update_available: fn -> update_payload end do
-        assert UpdateManager.apply_update(manager, update_payload, []) == {:updating, 0}
+      assert UpdateManager.apply_update(manager, update_payload, []) == {:updating, 0}
 
-        assert_receive {:fwup, {:progress, 0}}, 1_000
-        assert_receive :request_error, 1_000
-        assert_receive :request_error, 1_000
-
-        assert UpdateManager.previous_update(manager) == :failed
-      end
+      assert_receive {:update_manager, :starting}, 1_000
+      assert_receive {:fwup, {:progress, 0}}, 1_000
+      assert_receive {:update_manager, {:error, :download_unauthorized}}
     end
   end
 
