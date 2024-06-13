@@ -5,12 +5,9 @@ defmodule NervesHubLink.UpdateManagerTest do
   alias NervesHubLink.Message.{FirmwareMetadata, UpdateInfo}
   alias NervesHubLink.Support.{FWUPStreamPlug, HTTPUnauthorizedErrorPlug, Utils}
 
-  import Mock
-
   describe "fwup stream" do
     setup do
       port = Utils.unique_port_number()
-      devpath = "/tmp/fwup_output"
 
       update_payload = %UpdateInfo{
         firmware_url: "http://localhost:#{port}/test.fw",
