@@ -91,32 +91,32 @@ defmodule NervesHubLink.HealthCheck.DefaultReport do
     defp vof(val), do: val
 
     defp metadata_from_config do
-        case Application.get_env(:nerves_hub_link, :health) do
-            %{metadata: metadata} ->
+        case Application.get_env(:nerves_hub_link, :health, [])[:metadata] do
+            nil -> %{}
+            metadata ->
                 for {key, val_or_fun} <- metadata, into: %{} do
-                    {key, vof(val_or_fun)}
+                    {inspect(key), vof(val_or_fun)}
                 end
-            _ -> %{}
         end
     end
 
     defp metrics_from_config do
-        case Application.get_env(:nerves_hub_link, :health) do
-            %{metrics: metrics} ->
+        case Application.get_env(:nerves_hub_link, :health, [])[:metrics] do
+            nil -> %{}
+            metrics ->
                 for {key, val_or_fun} <- metrics, into: %{} do
-                    {key, vof(val_or_fun)}
+                    {inspect(key), vof(val_or_fun)}
                 end
-            _ -> %{}
         end
     end
 
     defp peripherals_from_config do
-        case Application.get_env(:nerves_hub_link, :health) do
-            %{peripherals: peripherals} ->
+        case Application.get_env(:nerves_hub_link, :health, [])[:peripherals] do
+            nil -> %{}
+            peripherals ->
                 for {key, val_or_fun} <- peripherals, into: %{} do
-                    {key, vof(val_or_fun)}
+                    {inspect(key), vof(val_or_fun)}
                 end
-            _ -> %{}
         end
     end
 end
