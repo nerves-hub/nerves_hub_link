@@ -2,11 +2,11 @@ defmodule NervesHubLink.UpdateManagerTest do
   use ExUnit.Case
   alias NervesHubLink.{FwupConfig, UpdateManager}
   alias NervesHubLink.Message.{FirmwareMetadata, UpdateInfo}
-  alias NervesHubLink.Support.FWUPStreamPlug
+  alias NervesHubLink.Support.{FWUPStreamPlug, Utils}
 
   describe "fwup stream" do
     setup do
-      port = 6000
+      port = Utils.unique_port_number()
       devpath = "/tmp/fwup_output"
 
       update_payload = %UpdateInfo{
