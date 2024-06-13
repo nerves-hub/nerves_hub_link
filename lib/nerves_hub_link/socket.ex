@@ -444,7 +444,14 @@ defmodule NervesHubLink.Socket do
   end
 
   def handle_info({:update_manager, result}, socket) do
-    _ = push(socket, @device_topic, "update:status", result)
+    formatted =
+      if is_atom(result) do
+        %{result: result}
+      else
+        %{result: elem(result, 0), reason: elem(result, 1)}
+      end
+
+    _ = push(socket, @device_topic, "update:status", formatted)
 
     {:noreply, socket}
   end
