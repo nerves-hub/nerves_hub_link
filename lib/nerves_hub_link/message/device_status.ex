@@ -5,7 +5,7 @@ defmodule NervesHubLink.Message.DeviceStatus do
 
   @derive Jason.Encoder
   defstruct device_id: "",
-            timestamp: "",
+            timestamp: DateTime.utc_now(),
             metadata: %{},
             alarms: %{},
             metrics: %{},
@@ -16,11 +16,23 @@ defmodule NervesHubLink.Message.DeviceStatus do
 
   @type t() :: %__MODULE__{
     device_id: String.t(),
-    timestamp: String.t(), # iso8601
+    timestamp: DateTime.t(),
     metadata: %{String.t() => String.t()},
     alarms: %{alarm_id() => alarm_description()},
     metrics: %{String.t() => number()},
     peripherals: %{String.t() => DeviceStatus.Peripheral.t()}
   }
 
+  alias __MODULE__, as: DS
+
+  def new(kv) do
+    %DS{
+        device_id: kv[:device_id],
+        timestamp: kv[:timestamp],
+        metadata: kv[:metadata],
+        alarms: kv[:alarms],
+        metrics: kv[:metrics],
+        peripherals: kv[:peripherals]
+    }
+  end
 end
