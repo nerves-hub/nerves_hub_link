@@ -121,6 +121,38 @@ config :nerves_hub_link,
 
 For more information on how to generate device certificates, please read the ["Initializing devices"](#https://github.com/nerves-hub/nerves_hub_cli#initializing-devices) section in the `NervesHubCLI` readme.
 
+#### Health checks
+
+Health checks allow you to get information about how your device runs.
+
+By default your health checks are requested by NervesHub at a configured
+interval and include a number of generic metrics suitable for most devices.
+
+Ideally you add your own important metrics. You can also add peripheral status
+information about parts and subsystems.
+
+Default config means not adding anything extra.
+
+Overriding config could be small:
+
+```
+config :nerves_hub_link, :health,
+    metadata: [organisation: "Biscuits Inc.", flavor: "chocolate"]
+```
+
+Slightly more dynamic:
+
+```
+config :nerves_hub_link, :health,
+    metrics: [special_number: {System, :unique_integer, []}]
+```
+
+Or completely custom, by implementing the Report behaviour:
+
+```
+config :nerves_hub_link, :health, report: BiscuitBoard.HealthReport
+```
+
 #### Additional notes
 
 Any [valid Erlang ssl socket option](http://erlang.org/doc/man/ssl.html#TLS/DTLS%20OPTION%20DESCRIPTIONS%20-%20COMMON%20for%20SERVER%20and%20CLIENT) can go in the `:ssl` key. These options are passed to [Mint](https://hex.pm/packages/mint) by [Slipstream](https://hex.pm/packages/slipstream), which `NervesHubLink` uses for websocket connections.

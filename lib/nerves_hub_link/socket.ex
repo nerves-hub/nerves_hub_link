@@ -11,6 +11,7 @@ defmodule NervesHubLink.Socket do
   alias NervesHubLink.Configurator.SharedSecret
   alias NervesHubLink.UpdateManager
   alias NervesHubLink.UploadFile
+  alias NervesHubLink.Message.DeviceStatus
 
   @console_topic "console"
   @device_topic "device"
@@ -29,6 +30,10 @@ defmodule NervesHubLink.Socket do
 
   def send_update_status(status) do
     GenServer.cast(__MODULE__, {:send_update_status, status})
+  end
+
+  def send_health_check(%DeviceStatus{} = device_status) do
+    GenServer.cast(__MODULE__, {:send_health_check, device_status})
   end
 
   def check_connection(type) do
@@ -253,6 +258,11 @@ defmodule NervesHubLink.Socket do
     {:noreply, socket}
   end
 
+  def handle_cast({:send_health_check, device_status}, socket) do
+    _ = push(socket, @device_topic, "health_check_report", %{value: device_status})
+    {:noreply, socket}
+  end
+
   @impl Slipstream
   ##
   # Device API messages
@@ -325,6 +335,21 @@ defmodule NervesHubLink.Socket do
 
         {:ok, socket}
     end
+  end
+
+  def handle_message(@device_topic, "check_health", _, socket) do
+    case Client.check_health() do
+      %DeviceStatus{} = ds ->
+        send_health_check(ds)
+
+      {:error, reason} ->
+        Logger.error("Failed to call health check: #{inspect(reason)}")
+
+      nil ->
+        Logger.error("Health check returned a nil value.")
+    end
+
+    {:ok, socket}
   end
 
   ##

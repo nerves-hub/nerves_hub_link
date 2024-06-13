@@ -6,6 +6,8 @@ defmodule NervesHubLink.Client.Default do
   """
 
   @behaviour NervesHubLink.Client
+
+  alias NervesHubLink.Message.DeviceStatus
   require Logger
 
   @impl NervesHubLink.Client
@@ -76,5 +78,36 @@ defmodule NervesHubLink.Client.Default do
   @impl NervesHubLink.Client
   def identify() do
     Logger.info("[NervesHubLink] identifying")
+  end
+
+  @impl NervesHubLink.Client
+  def check_health() do
+    config = Application.get_env(:nerves_hub_link, :health)
+
+    if config == false do
+      # No check at all, disabled
+      nil
+    else
+      report = config[:report] || NervesHubLink.HealthCheck.DefaultReport
+
+      DeviceStatus.new(
+        timestamp: report.timestamp(),
+        metadata: report.metadata(),
+        alarms: report.alarms(),
+        metrics: report.metrics(),
+        peripherals: report.peripherals()
+      )
+    end
+  rescue
+    _ ->
+      :alarm_handler.set_alarm({NervesHubLink.HealthCheckFailed, []})
+
+      DeviceStatus.new(
+        timestamp: DateTime.utc_now(),
+        metadata: %{},
+        alarms: %{to_string(NervesHubLink.HealthCheckFailed) => []},
+        metrics: %{},
+        peripherals: %{}
+      )
   end
 end
