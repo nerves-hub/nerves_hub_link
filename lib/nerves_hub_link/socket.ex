@@ -109,7 +109,8 @@ defmodule NervesHubLink.Socket do
       headers: config.socket[:headers] || [],
       uri: config.socket[:url],
       rejoin_after_msec: [rejoin_after],
-      reconnect_after_msec: config.socket[:reconnect_after_msec]
+      reconnect_after_msec: config.socket[:reconnect_after_msec],
+      heartbeat_interval_msec: config.socket[:heartbeat_interval_msec]
     ]
 
     socket = connect!(socket, opts)
