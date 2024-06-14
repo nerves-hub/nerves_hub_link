@@ -90,7 +90,7 @@ defmodule NervesHubLink.UpdateManagerTest do
 
   describe "401 retry" do
     setup do
-      port = 6543
+      port = Utils.unique_port_number()
 
       update_payload = %UpdateInfo{
         firmware_url: "http://localhost:#{port}/test.fw",

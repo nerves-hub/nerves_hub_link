@@ -105,7 +105,7 @@ defmodule NervesHubLink.DownloaderTest do
 
   describe "unauthorized http error" do
     setup do
-      port = 7025
+      port = Utils.unique_port_number()
 
       {:ok, plug} =
         start_supervised(
