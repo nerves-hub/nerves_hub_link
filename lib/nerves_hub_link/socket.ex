@@ -445,10 +445,22 @@ defmodule NervesHubLink.Socket do
 
   def handle_info({:update_manager, result}, socket) do
     formatted =
-      if is_atom(result) do
-        %{result: result}
-      else
-        %{result: elem(result, 0), reason: elem(result, 1)}
+      case result do
+        result when is_atom(result) ->
+          %{result: result}
+
+        {:error, reason} ->
+          %{result: :error, reason: reason}
+
+        {:rescheduled, ms, ts} ->
+          %{result: :rescheduled, delay: ms, until: ts}
+
+        result ->
+          Logger.warning(
+            "[#{inspect(__MODULE__)}] Unrecognized message from UpdateManager: #{inspect(result)}"
+          )
+
+          %{result: :unrecognized_status}
       end
 
     _ = push(socket, @device_topic, "update:status", formatted)
