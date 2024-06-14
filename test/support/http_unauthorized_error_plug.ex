@@ -1,4 +1,4 @@
-defmodule NervesHubLink.Support.HTTPErrorPlug do
+defmodule NervesHubLink.Support.HTTPUnauthorizedErrorPlug do
   @moduledoc false
 
   @behaviour Plug
@@ -10,6 +10,6 @@ defmodule NervesHubLink.Support.HTTPErrorPlug do
 
   @impl Plug
   def call(conn, _opts) do
-    send_resp(conn, 416, "Range Not Satisfiable")
+    send_resp(conn, 401, "Unauthorized")
   end
 end

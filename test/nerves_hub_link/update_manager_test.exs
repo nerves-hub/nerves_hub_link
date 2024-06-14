@@ -1,13 +1,13 @@
 defmodule NervesHubLink.UpdateManagerTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: false
+
   alias NervesHubLink.{FwupConfig, UpdateManager}
   alias NervesHubLink.Message.{FirmwareMetadata, UpdateInfo}
-  alias NervesHubLink.Support.{FWUPStreamPlug, Utils}
+  alias NervesHubLink.Support.{FWUPStreamPlug, HTTPUnauthorizedErrorPlug, Utils}
 
   describe "fwup stream" do
     setup do
       port = Utils.unique_port_number()
-      devpath = "/tmp/fwup_output"
 
       update_payload = %UpdateInfo{
         firmware_url: "http://localhost:#{port}/test.fw",
@@ -19,13 +19,12 @@ defmodule NervesHubLink.UpdateManagerTest do
           {Plug.Cowboy, scheme: :http, plug: FWUPStreamPlug, options: [port: port]}
         )
 
-      File.rm(devpath)
-
-      {:ok, [plug: plug, update_payload: update_payload, devpath: "/tmp/fwup_output"]}
+      {:ok, [plug: plug, update_payload: update_payload]}
     end
 
-    test "apply", %{update_payload: update_payload, devpath: devpath} do
-      fwup_config = %{default_config() | fwup_devpath: devpath}
+    @tag :tmp_dir
+    test "apply", %{update_payload: update_payload, tmp_dir: tmp_dir} do
+      fwup_config = %{default_config() | fwup_devpath: Path.join(tmp_dir, "fwup_output")}
 
       {:ok, manager} = UpdateManager.start_link(fwup_config)
       assert UpdateManager.apply_update(manager, update_payload, []) == {:updating, 0}
@@ -35,7 +34,8 @@ defmodule NervesHubLink.UpdateManagerTest do
       assert_receive {:fwup, {:ok, 0, ""}}
     end
 
-    test "reschedule", %{update_payload: update_payload, devpath: devpath} do
+    @tag :tmp_dir
+    test "reschedule", %{update_payload: update_payload, tmp_dir: tmp_dir} do
       test_pid = self()
 
       update_available_fun = fn _ ->
@@ -52,7 +52,7 @@ defmodule NervesHubLink.UpdateManagerTest do
 
       fwup_config = %{
         default_config()
-        | fwup_devpath: devpath,
+        | fwup_devpath: Path.join(tmp_dir, "fwup_output"),
           update_available: update_available_fun
       }
 
@@ -66,10 +66,11 @@ defmodule NervesHubLink.UpdateManagerTest do
       assert_receive {:fwup, {:ok, 0, ""}}
     end
 
-    test "apply with fwup environment", %{update_payload: update_payload, devpath: devpath} do
+    @tag :tmp_dir
+    test "apply with fwup environment", %{update_payload: update_payload, tmp_dir: tmp_dir} do
       fwup_config = %{
         default_config()
-        | fwup_devpath: devpath,
+        | fwup_devpath: Path.join(tmp_dir, "fwup_output"),
           fwup_task: "secret_upgrade",
           fwup_env: [
             {"SUPER_SECRET", "1234567890123456789012345678901234567890123456789012345678901234"}
@@ -84,6 +85,40 @@ defmodule NervesHubLink.UpdateManagerTest do
       assert_receive {:fwup, {:progress, 0}}
       assert_receive {:fwup, {:progress, 100}}
       assert_receive {:fwup, {:ok, 0, ""}}
+    end
+  end
+
+  describe "401 retry" do
+    setup do
+      port = Utils.unique_port_number()
+
+      update_payload = %UpdateInfo{
+        firmware_url: "http://localhost:#{port}/test.fw",
+        firmware_meta: %FirmwareMetadata{}
+      }
+
+      {:ok, plug} =
+        start_supervised(
+          {Plug.Cowboy, scheme: :http, plug: HTTPUnauthorizedErrorPlug, options: [port: port]}
+        )
+
+      {:ok, [plug: plug, update_payload: update_payload]}
+    end
+
+    @tag :tmp_dir
+    test "retries firmware updates once", %{
+      update_payload: update_payload,
+      tmp_dir: tmp_dir
+    } do
+      fwup_config = %{default_config() | fwup_devpath: Path.join(tmp_dir, "fwup_output")}
+
+      {:ok, manager} = UpdateManager.start_link(fwup_config)
+
+      assert UpdateManager.apply_update(manager, update_payload, []) == {:updating, 0}
+
+      assert_receive {:update_manager, :starting}, 1_000
+      assert_receive {:fwup, {:progress, 0}}, 1_000
+      assert_receive {:update_manager, {:error, :download_unauthorized}}
     end
   end
 

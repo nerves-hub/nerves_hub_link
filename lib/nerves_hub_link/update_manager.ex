@@ -27,13 +27,17 @@ defmodule NervesHubLink.UpdateManager do
             | :update_rescheduled
             | {:updating, integer()}
 
+    @type previous_update :: :complete | :failed
+
     @type t :: %__MODULE__{
             status: status(),
             update_reschedule_timer: nil | :timer.tref(),
             download: nil | GenServer.server(),
             fwup: nil | GenServer.server(),
             fwup_config: FwupConfig.t(),
-            update_info: nil | UpdateInfo.t()
+            update_info: nil | UpdateInfo.t(),
+            retrying: boolean(),
+            previous_update: nil | previous_update()
           }
 
     defstruct status: :idle,
@@ -41,7 +45,9 @@ defmodule NervesHubLink.UpdateManager do
               fwup: nil,
               download: nil,
               fwup_config: nil,
-              update_info: nil
+              update_info: nil,
+              retrying: false,
+              previous_update: nil
   end
 
   @doc """
@@ -59,6 +65,14 @@ defmodule NervesHubLink.UpdateManager do
   @spec status(GenServer.server()) :: State.status()
   def status(manager \\ __MODULE__) do
     GenServer.call(manager, :status)
+  end
+
+  @doc """
+  Returns the previous status of the update manager
+  """
+  @spec previous_update(GenServer.server()) :: State.previous_update()
+  def previous_update(manager \\ __MODULE__) do
+    GenServer.call(manager, :previous_update)
   end
 
   @doc """
@@ -94,10 +108,10 @@ defmodule NervesHubLink.UpdateManager do
   @impl GenServer
   def handle_call(
         {:apply_update, %UpdateInfo{} = update, fwup_public_keys},
-        _from,
+        from,
         %State{} = state
       ) do
-    state = maybe_update_firmware(update, fwup_public_keys, state)
+    state = maybe_update_firmware(update, fwup_public_keys, elem(from, 0), state)
     {:reply, state.status, state}
   end
 
@@ -113,10 +127,14 @@ defmodule NervesHubLink.UpdateManager do
     {:reply, state.status, state}
   end
 
+  def handle_call(:previous_update, _from, %State{} = state) do
+    {:reply, state.previous_update, state}
+  end
+
   @impl GenServer
-  def handle_info({:update_reschedule, response, fwup_public_keys}, state) do
+  def handle_info({:update_reschedule, response, fwup_public_keys, reporting_pid}, state) do
     {:noreply,
-     maybe_update_firmware(response, fwup_public_keys, %State{
+     maybe_update_firmware(response, fwup_public_keys, reporting_pid, %State{
        state
        | update_reschedule_timer: nil
      })}
@@ -145,26 +163,48 @@ defmodule NervesHubLink.UpdateManager do
   end
 
   # messages from Downloader
-  def handle_info({:download, :complete}, state) do
+  def handle_info({:download, :complete, _fwup_public_keys, reporting_pid}, state) do
     Logger.info("[NervesHubLink] Firmware Download complete")
-    {:noreply, %State{state | download: nil}}
+    send(reporting_pid, {:update_manager, :complete})
+    {:noreply, %State{state | status: :idle}}
   end
 
-  def handle_info({:download, {:error, reason}}, state) do
+  def handle_info(
+        {:download, {:error, %Mint.HTTPError{reason: {:http_error, 401}}}, _fwup_public_keys,
+         reporting_pid},
+        state
+      ) do
+    Logger.error("[NervesHubLink] Firmware download error: 401")
+    send(reporting_pid, {:update_manager, {:error, :download_unauthorized}})
+    {:noreply, %State{state | status: :idle}}
+  end
+
+  def handle_info({:download, {:error, reason}, _fwup_public_keys, reporting_pid}, state) do
     Logger.error("[NervesHubLink] Nonfatal HTTP download error: #{inspect(reason)}")
-    {:noreply, state}
+    send(reporting_pid, {:update_manager, {:error, :non_fatal}})
+    {:noreply, %State{state | status: :idle}}
   end
 
   # Data from the downloader is sent to fwup
-  def handle_info({:download, {:data, data}}, state) do
+  def handle_info({:download, {:data, data}, _fwup_public_keys, _reporting_pid}, state) do
     _ = Fwup.Stream.send_chunk(state.fwup, data)
     {:noreply, state}
   end
 
-  @spec maybe_update_firmware(UpdateInfo.t(), [binary()], State.t()) :: State.t()
+  def handle_info({:EXIT, _pid, {:http_error, 401}}, state) do
+    {:noreply, %State{state | download: nil}}
+  end
+
+  def handle_info({:EXIT, _pid, :normal}, state) do
+    {:noreply, state}
+  end
+
+  @spec maybe_update_firmware(UpdateInfo.t(), [binary()], pid(), State.t()) ::
+          State.t()
   defp maybe_update_firmware(
          %UpdateInfo{} = _update_info,
          _fwup_public_keys,
+         _reporting_pid,
          %State{status: {:updating, _percent}} = state
        ) do
     # Received an update message from NervesHub, but we're already in progress.
@@ -176,7 +216,12 @@ defmodule NervesHubLink.UpdateManager do
     state
   end
 
-  defp maybe_update_firmware(%UpdateInfo{} = update_info, fwup_public_keys, %State{} = state) do
+  defp maybe_update_firmware(
+         %UpdateInfo{} = update_info,
+         fwup_public_keys,
+         reporting_pid,
+         %State{} = state
+       ) do
     # Cancel an existing timer if it exists.
     # This prevents rescheduled updates`
     # from compounding.
@@ -188,21 +233,34 @@ defmodule NervesHubLink.UpdateManager do
     # note: update_available is a behaviour function
     case state.fwup_config.update_available.(update_info) do
       :apply ->
-        start_fwup_stream(update_info, fwup_public_keys, state)
+        send(reporting_pid, {:update_manager, :starting})
+        start_fwup_stream(update_info, fwup_public_keys, reporting_pid, state)
 
       :ignore ->
+        send(reporting_pid, {:update_manager, :ignored})
         state
 
       {:reschedule, ms} ->
         timer =
-          Process.send_after(self(), {:update_reschedule, update_info, fwup_public_keys}, ms)
+          Process.send_after(
+            self(),
+            {:update_reschedule, update_info, fwup_public_keys, reporting_pid},
+            ms
+          )
 
         Logger.info("[NervesHubLink] rescheduling firmware update in #{ms} milliseconds")
+        send(reporting_pid, {:update_manager, {:rescheduled, ms, rescheduled_to(ms)}})
         %{state | status: :update_rescheduled, update_reschedule_timer: timer}
     end
   end
 
-  defp maybe_update_firmware(_, _, state), do: state
+  defp maybe_update_firmware(_, _, _, state), do: state
+
+  defp rescheduled_to(ms) do
+    Time.utc_now()
+    |> Time.truncate(:millisecond)
+    |> Time.add(ms, :millisecond)
+  end
 
   defp maybe_cancel_timer(%{update_reschedule_timer: nil} = state), do: state
 
@@ -212,10 +270,13 @@ defmodule NervesHubLink.UpdateManager do
     %{state | update_reschedule_timer: nil}
   end
 
-  @spec start_fwup_stream(UpdateInfo.t(), [binary()], State.t()) :: State.t()
-  defp start_fwup_stream(%UpdateInfo{} = update_info, [] = fwup_public_keys, state) do
+  @spec start_fwup_stream(UpdateInfo.t(), [binary()], pid(), State.t()) :: State.t()
+  defp start_fwup_stream(%UpdateInfo{} = update_info, [] = fwup_public_keys, reporting_pid, state) do
     pid = self()
-    fun = &send(pid, {:download, &1})
+
+    Process.flag(:trap_exit, true)
+
+    fun = &send(pid, {:download, &1, fwup_public_keys, reporting_pid})
     {:ok, download} = Downloader.start_download(update_info.firmware_url, fun)
 
     {:ok, fwup} =
