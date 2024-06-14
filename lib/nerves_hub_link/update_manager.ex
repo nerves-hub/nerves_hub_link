@@ -11,6 +11,7 @@ defmodule NervesHubLink.UpdateManager do
 
   alias NervesHubLink.{Downloader, FwupConfig}
   alias NervesHubLink.Message.UpdateInfo
+  alias NervesHubLink.Socket
 
   require Logger
 
@@ -165,7 +166,7 @@ defmodule NervesHubLink.UpdateManager do
   # messages from Downloader
   def handle_info({:download, :complete, _fwup_public_keys, reporting_pid}, state) do
     Logger.info("[NervesHubLink] Firmware Download complete")
-    send(reporting_pid, {:update_manager, :complete})
+    Socket.send_update_status(reporting_pid, :complete)
     {:noreply, %State{state | status: :idle}}
   end
 
@@ -175,13 +176,13 @@ defmodule NervesHubLink.UpdateManager do
         state
       ) do
     Logger.error("[NervesHubLink] Firmware download error: 401")
-    send(reporting_pid, {:update_manager, {:error, :download_unauthorized}})
+    Socket.send_update_status(reporting_pid, {:error, :download_unauthorized})
     {:noreply, %State{state | status: :idle}}
   end
 
   def handle_info({:download, {:error, reason}, _fwup_public_keys, reporting_pid}, state) do
     Logger.error("[NervesHubLink] Nonfatal HTTP download error: #{inspect(reason)}")
-    send(reporting_pid, {:update_manager, {:error, :non_fatal}})
+    Socket.send_update_status(reporting_pid, {:error, :non_fatal})
     {:noreply, %State{state | status: :idle}}
   end
 
@@ -233,11 +234,11 @@ defmodule NervesHubLink.UpdateManager do
     # note: update_available is a behaviour function
     case state.fwup_config.update_available.(update_info) do
       :apply ->
-        send(reporting_pid, {:update_manager, :starting})
+        Socket.send_update_status(reporting_pid, :starting)
         start_fwup_stream(update_info, fwup_public_keys, reporting_pid, state)
 
       :ignore ->
-        send(reporting_pid, {:update_manager, :ignored})
+        Socket.send_update_status(reporting_pid, :ignored)
         state
 
       {:reschedule, ms} ->
@@ -249,7 +250,7 @@ defmodule NervesHubLink.UpdateManager do
           )
 
         Logger.info("[NervesHubLink] rescheduling firmware update in #{ms} milliseconds")
-        send(reporting_pid, {:update_manager, {:rescheduled, ms, rescheduled_to(ms)}})
+        Socket.send_update_status(reporting_pid, {:rescheduled, ms, rescheduled_to(ms)})
         %{state | status: :update_rescheduled, update_reschedule_timer: timer}
     end
   end

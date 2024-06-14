@@ -116,9 +116,9 @@ defmodule NervesHubLink.UpdateManagerTest do
 
       assert UpdateManager.apply_update(manager, update_payload, []) == {:updating, 0}
 
-      assert_receive {:update_manager, :starting}, 1_000
+      assert_receive {:"$gen_cast", {:send_update_status, :starting}}, 1_000
       assert_receive {:fwup, {:progress, 0}}, 1_000
-      assert_receive {:update_manager, {:error, :download_unauthorized}}
+      assert_receive {:"$gen_cast", {:send_update_status, {:error, :download_unauthorized}}}
     end
   end
 

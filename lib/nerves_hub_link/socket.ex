@@ -27,8 +27,15 @@ defmodule NervesHubLink.Socket do
     GenServer.cast(__MODULE__, {:send_update_progress, progress})
   end
 
-  def send_update_status(status) do
-    GenServer.cast(__MODULE__, {:send_update_status, status})
+  @type update_status ::
+          :starting
+          | :ignored
+          | {:rescheduled, pos_integer(), Time.t()}
+          | :complete
+          | {:error, :download_unauthorized | :non_fatal}
+  @spec send_update_status(GenServer.server(), update_status()) :: :ok
+  def send_update_status(socket \\ __MODULE__, status) do
+    GenServer.cast(socket, {:send_update_status, status})
   end
 
   def check_connection(type) do
@@ -242,7 +249,20 @@ defmodule NervesHubLink.Socket do
   end
 
   def handle_cast({:send_update_status, status}, socket) do
-    _ = push(socket, @device_topic, "status_update", %{status: status})
+    formatted =
+      case status do
+        {:error, reason} ->
+          %{result: :error, reason: reason}
+
+        {:rescheduled, ms, ts} ->
+          %{result: :rescheduled, delay: ms, until: ts}
+
+        result ->
+          %{result: result}
+      end
+
+    _ = push(socket, @device_topic, "update:status", formatted)
+
     {:noreply, socket}
   end
 
@@ -441,31 +461,6 @@ defmodule NervesHubLink.Socket do
     _ = push(socket, @console_topic, "up", %{data: msg})
 
     {:noreply, stop_iex(socket)}
-  end
-
-  def handle_info({:update_manager, result}, socket) do
-    formatted =
-      case result do
-        result when is_atom(result) ->
-          %{result: result}
-
-        {:error, reason} ->
-          %{result: :error, reason: reason}
-
-        {:rescheduled, ms, ts} ->
-          %{result: :rescheduled, delay: ms, until: ts}
-
-        result ->
-          Logger.warning(
-            "[#{inspect(__MODULE__)}] Unrecognized message from UpdateManager: #{inspect(result)}"
-          )
-
-          %{result: :unrecognized_status}
-      end
-
-    _ = push(socket, @device_topic, "update:status", formatted)
-
-    {:noreply, socket}
   end
 
   def handle_info(msg, socket) do
