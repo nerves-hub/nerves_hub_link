@@ -69,6 +69,19 @@ defmodule NervesHubLink.UpdateManager do
     GenServer.call(manager, :currently_downloading_uuid)
   end
 
+  # Private API for reporting download progress. This wraps a GenServer.call so
+  # that it can apply backpressure to the downloader if applying the update is
+  # slow.
+  defp report_download(manager, message) do
+    # 60 seconds is arbitrary, but currently matches the `fwup` library's
+    # default timeout. Having fwup take longer than 5 seconds to perform a
+    # write operation seems remote except for perhaps an exceptionally well
+    # compressed delta update. The consequences of crashing here because fwup
+    # doesn't have enough time are severe, though, since they prevent an
+    # update.
+    GenServer.call(manager, {:download, message}, 60_000)
+  end
+
   @doc false
   @spec child_spec(FwupConfig.t()) :: Supervisor.child_spec()
   def child_spec(%FwupConfig{} = args) do
@@ -113,6 +126,23 @@ defmodule NervesHubLink.UpdateManager do
     {:reply, state.status, state}
   end
 
+  # messages from Downloader
+  def handle_call({:download, :complete}, _from, state) do
+    Logger.info("[NervesHubLink] Firmware Download complete")
+    {:reply, :ok, %State{state | download: nil}}
+  end
+
+  def handle_call({:download, {:error, reason}}, _from, state) do
+    Logger.error("[NervesHubLink] Nonfatal HTTP download error: #{inspect(reason)}")
+    {:reply, :ok, state}
+  end
+
+  # Data from the downloader is sent to fwup
+  def handle_call({:download, {:data, data}}, _from, state) do
+    _ = Fwup.Stream.send_chunk(state.fwup, data)
+    {:reply, :ok, state}
+  end
+
   @impl GenServer
   def handle_info({:update_reschedule, response, fwup_public_keys}, state) do
     {:noreply,
@@ -142,23 +172,6 @@ defmodule NervesHubLink.UpdateManager do
       _ ->
         {:noreply, state}
     end
-  end
-
-  # messages from Downloader
-  def handle_info({:download, :complete}, state) do
-    Logger.info("[NervesHubLink] Firmware Download complete")
-    {:noreply, %State{state | download: nil}}
-  end
-
-  def handle_info({:download, {:error, reason}}, state) do
-    Logger.error("[NervesHubLink] Nonfatal HTTP download error: #{inspect(reason)}")
-    {:noreply, state}
-  end
-
-  # Data from the downloader is sent to fwup
-  def handle_info({:download, {:data, data}}, state) do
-    _ = Fwup.Stream.send_chunk(state.fwup, data)
-    {:noreply, state}
   end
 
   @spec maybe_update_firmware(UpdateInfo.t(), [binary()], State.t()) :: State.t()
@@ -215,7 +228,7 @@ defmodule NervesHubLink.UpdateManager do
   @spec start_fwup_stream(UpdateInfo.t(), [binary()], State.t()) :: State.t()
   defp start_fwup_stream(%UpdateInfo{} = update_info, [] = fwup_public_keys, state) do
     pid = self()
-    fun = &send(pid, {:download, &1})
+    fun = &report_download(pid, &1)
     {:ok, download} = Downloader.start_download(update_info.firmware_url, fun)
 
     {:ok, fwup} =
