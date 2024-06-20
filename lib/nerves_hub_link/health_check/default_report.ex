@@ -13,6 +13,7 @@ defmodule NervesHubLink.HealthCheck.DefaultReport do
   def metadata do
     # A lot of typical metadata is included in the join
     # we can skip that here
+    # NervesHub is responsible for joining that into the stored data
     metadata_from_config()
   end
 
@@ -30,49 +31,13 @@ defmodule NervesHubLink.HealthCheck.DefaultReport do
 
   @impl Report
   def metrics do
-    report = %{}
-
-    # TODO: Replace MOTD implementations for direct ones, fewer deps, less err handling
-    cpu = NervesMOTD.Runtime.Target.cpu_temperature()
-
-    report =
-      case cpu do
-        :error ->
-          report
-
-        {:ok, val} ->
-          Map.put(report, :cpu_temperature, val)
-      end
-
-    mem = NervesMOTD.Runtime.Target.memory_stats()
-
-    report =
-      case mem do
-        :error ->
-          Logger.warning("Could not fetch memory stats for health check metrics.")
-          report
-
-        {:ok, %{size_mb: size_mb, used_mb: used_mb, used_percent: used_percent}} ->
-          Map.merge(report, %{
-            memory_size_mb: size_mb,
-            memory_used_mb: used_mb,
-            memory_used_percent: used_percent
-          })
-      end
-
-    load = NervesMOTD.Runtime.Target.load_average()
-
-    report =
-      case load do
-        :error ->
-          Logger.warning("Could not fetch load average stats for health check metrics.")
-          report
-
-        {:ok, [l1min, l5min, l15min]} ->
-          Map.merge(report, %{load_1min: l1min, load_5min: l5min, load_15min: l15min})
-      end
-
-    Map.merge(report, metrics_from_config())
+    [
+      metrics_from_config(),
+      cpu_temperature(),
+      load_averages(),
+      memory()
+    ]
+    |> Enum.reduce(%{}, &Map.merge/2)
   end
 
   @impl Report
@@ -117,5 +82,35 @@ defmodule NervesHubLink.HealthCheck.DefaultReport do
           {inspect(key), vof(val_or_fun)}
         end
     end
+  end
+
+  defp cpu_temperature do
+    with {:ok, content} <- File.read("/sys/class/thermal/thermal_zone0/temp"),
+         {millidegree_c, _} <- Integer.parse(content) do
+      %{cpu_temp: millidegree_c / 1000}
+    else
+      _ -> %{}
+    end
+  end
+
+  defp load_averages do
+    with {:ok, data_str} <- File.read("/proc/loadavg"),
+         [min1, min5, min15] <- String.split(data_str, " ") do
+      %{load_1min: min1, load_5min: min5, load_15min: min15}
+    else
+      _ -> %{}
+    end
+  end
+
+  defp memory do
+    {free_output, 0} = System.cmd("free", [])
+    [_title_row, memory_row | _] = String.split(free_output, "\n")
+    [_title_column | memory_columns] = String.split(memory_row)
+    [size_kb, used_kb, _, _, _, _] = Enum.map(memory_columns, &String.to_integer/1)
+    size_mb = round(size_kb / 1000)
+    used_mb = round(used_kb / 1000)
+    used_percent = round(used_mb / size_mb * 100)
+
+    %{size_mb: size_mb, used_mb: used_mb, used_percent: used_percent}
   end
 end

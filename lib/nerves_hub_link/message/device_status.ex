@@ -4,8 +4,7 @@ defmodule NervesHubLink.Message.DeviceStatus do
   """
 
   @derive Jason.Encoder
-  defstruct device_id: "",
-            timestamp: DateTime.utc_now(),
+  defstruct timestamp: DateTime.utc_now(),
             metadata: %{},
             alarms: %{},
             metrics: %{},
@@ -26,7 +25,6 @@ defmodule NervesHubLink.Message.DeviceStatus do
 
   def new(kv) do
     %DS{
-      device_id: kv[:device_id],
       timestamp: kv[:timestamp],
       metadata: kv[:metadata],
       alarms: kv[:alarms],

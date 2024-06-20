@@ -1,4 +1,6 @@
 defmodule NervesHubLink do
+  alias NervesHubLink.Client
+  alias NervesHubLink.Message
   alias NervesHubLink.Socket
 
   @doc """
@@ -55,4 +57,20 @@ defmodule NervesHubLink do
   """
   @spec send_file(Path.t()) :: :ok | {:error, :too_large | File.posix()}
   defdelegate send_file(file_path), to: Socket
+
+  @doc """
+  Send a health check to NervesHub
+  """
+  @spec send_health_check() :: Message.DeviceStatus.t()
+  def send_health_check() do
+    device_status = Client.check_health()
+    Socket.send_health_check(device_status)
+    device_status
+  end
+
+  @doc """
+  Run a local health check
+  """
+  @spec check_health() :: Message.DeviceStatus.t()
+  defdelegate check_health(), to: Client
 end
