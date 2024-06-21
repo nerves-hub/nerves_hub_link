@@ -91,11 +91,10 @@ defmodule NervesHubLink.Client.Default do
       report = config[:report] || NervesHubLink.HealthCheck.DefaultReport
 
       DeviceStatus.new(
-        device_id: report.device_id(),
         timestamp: report.timestamp(),
         metadata: report.metadata(),
         alarms: report.alarms(),
-        metrics: report.alarms(),
+        metrics: report.metrics(),
         peripherals: report.peripherals()
       )
     end

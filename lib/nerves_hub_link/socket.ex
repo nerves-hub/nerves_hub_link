@@ -334,6 +334,9 @@ defmodule NervesHubLink.Socket do
       %DeviceStatus{} = ds ->
         send_health_check(ds)
 
+      {:error, reason} ->
+        Logger.error("Failed to call health check: #{inspect(reason)}")
+
       nil ->
         Logger.error("Health check returned a nil value.")
     end
