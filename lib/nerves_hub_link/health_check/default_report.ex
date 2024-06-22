@@ -95,7 +95,7 @@ defmodule NervesHubLink.HealthCheck.DefaultReport do
 
   defp load_averages do
     with {:ok, data_str} <- File.read("/proc/loadavg"),
-         [min1, min5, min15] <- String.split(data_str, " ") do
+         [min1, min5, min15, _, _] <- String.split(data_str, " ") do
       %{load_1min: min1, load_5min: min5, load_15min: min15}
     else
       _ -> %{}
