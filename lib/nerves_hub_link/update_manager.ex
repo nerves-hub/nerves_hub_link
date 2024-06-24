@@ -226,7 +226,7 @@ defmodule NervesHubLink.UpdateManager do
   end
 
   @spec start_fwup_stream(UpdateInfo.t(), [binary()], State.t()) :: State.t()
-  defp start_fwup_stream(%UpdateInfo{} = update_info, [] = fwup_public_keys, state) do
+  defp start_fwup_stream(%UpdateInfo{} = update_info, fwup_public_keys, state) do
     pid = self()
     fun = &report_download(pid, &1)
     {:ok, download} = Downloader.start_download(update_info.firmware_url, fun)
@@ -249,7 +249,7 @@ defmodule NervesHubLink.UpdateManager do
   end
 
   @spec fwup_args(FwupConfig.t(), list(String.t())) :: [String.t()]
-  defp fwup_args(%FwupConfig{} = config, [] = fwup_public_keys) do
+  defp fwup_args(%FwupConfig{} = config, fwup_public_keys) do
     args = ["--apply", "--no-unmount", "-d", config.fwup_devpath, "--task", config.fwup_task]
 
     Enum.reduce(fwup_public_keys, args, fn public_key, args ->
