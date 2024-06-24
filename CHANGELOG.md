@@ -2,6 +2,16 @@
 
 ## unreleased
 
+## [2.4.0] - 2024-06-24
+
+* Added
+  * Configure heartbeat msec (#197)
+  * Apply backpressure to downloader on slow updates (#202)
+* Updated
+  * Fix no match error when uploading files (#190)
+  * Make shared secret auth the default (#176)
+  * Archive public keys can default to fwup public keys if not configured (#187)
+
 ## [2.3.0] - 2024-05-11
 
 * Added
