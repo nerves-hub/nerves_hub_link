@@ -9,6 +9,7 @@ defmodule NervesHubLink.Socket do
   alias NervesHubLink.Client
   alias NervesHubLink.Configurator
   alias NervesHubLink.Configurator.SharedSecret
+  alias NervesHubLink.Script
   alias NervesHubLink.UpdateManager
   alias NervesHubLink.UploadFile
 
@@ -296,6 +297,19 @@ defmodule NervesHubLink.Socket do
 
   def handle_message(@device_topic, "identify", _params, socket) do
     Client.identify()
+    {:ok, socket}
+  end
+
+  def handle_message(@device_topic, "scripts/run", params, socket) do
+    {return, output} = Script.capture(params["text"])
+
+    _ =
+      push(socket, @device_topic, "scripts/run", %{
+        ref: params["ref"],
+        output: output,
+        return: inspect(return, pretty: true)
+      })
+
     {:ok, socket}
   end
 
