@@ -36,6 +36,8 @@ defmodule NervesHubLink.Client do
   ```
   """
 
+  alias NervesHubLink.Message.DeviceStatus
+
   require Logger
 
   @typedoc "Update that comes over a socket."
@@ -126,6 +128,13 @@ defmodule NervesHubLink.Client do
   """
   @callback reboot() :: no_return()
 
+  @doc """
+  Callback for running a health check on the device.
+
+  Used both for automated and manual health checks.
+  """
+  @callback check_health() :: DeviceStatus.t() | nil
+
   @optional_callbacks [reconnect_backoff: 0, reboot: 0]
 
   @doc """
@@ -192,6 +201,13 @@ defmodule NervesHubLink.Client do
   """
   def identify() do
     apply_wrap(mod(), :identify, [])
+  end
+
+  @doc """
+  This function runs a health check on the device.
+  """
+  def check_health() do
+    apply_wrap(mod(), :check_health, [])
   end
 
   @doc """
