@@ -21,14 +21,16 @@ defmodule NervesHubLink.Configurator.SharedSecret do
   Generate headers for Shared Secret Auth
   """
   @spec headers(Config.t()) :: [{String.t(), String.t()}]
-  def headers(%{shared_secret: shared_secret}) do
+  def headers(%{shared_secret: shared_secret} = config) do
+    serial_number = config.serial_number || Nerves.Runtime.serial_number()
+
     opts =
       (shared_secret || [])
       |> Keyword.put_new(:key_digest, :sha256)
       |> Keyword.put_new(:key_iterations, 1000)
       |> Keyword.put_new(:key_length, 32)
       |> Keyword.put_new(:signature_version, "NH1")
-      |> Keyword.put_new(:identifier, Nerves.Runtime.serial_number())
+      |> Keyword.put_new(:identifier, serial_number)
       |> Keyword.put(:signed_at, System.system_time(:second))
 
     alg =

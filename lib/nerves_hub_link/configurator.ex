@@ -24,6 +24,7 @@ defmodule NervesHubLink.Configurator do
               remote_iex: false,
               request_archive_public_keys: false,
               request_fwup_public_keys: false,
+              serial_number: nil,
               shared_secret: [],
               socket: [],
               ssl: []
@@ -46,6 +47,7 @@ defmodule NervesHubLink.Configurator do
             remote_iex: boolean(),
             request_archive_public_keys: boolean(),
             request_fwup_public_keys: boolean(),
+            serial_number: binary() | nil,
             shared_secret: [product_key: String.t(), product_secret: String.t()],
             socket: any(),
             ssl: [:ssl.tls_client_option()]
