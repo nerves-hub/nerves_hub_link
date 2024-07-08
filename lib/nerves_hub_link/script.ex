@@ -1,19 +1,32 @@
 defmodule NervesHubLink.Script do
-  # Inspired from ExUnit.CaptureIO
-  # https://github.com/elixir-lang/elixir/blob/main/lib/ex_unit/lib/ex_unit/capture_io.ex
+  use GenServer
 
   @doc """
   Run a script from NervesHub and capture its output
   """
-  def capture(text) do
-    original_gl = Process.group_leader()
+  def capture(text, ref) do
+    _ = GenServer.start_link(__MODULE__, {self(), text, ref})
+
+    :ok
+  end
+
+  @impl GenServer
+  def init({pid, text, ref}) do
+    state = %{pid: pid, text: text, ref: ref}
+    {:ok, state, {:continue, :capture}}
+  end
+
+  @impl GenServer
+  def handle_continue(:capture, state) do
+    # Inspired from ExUnit.CaptureIO
+    # https://github.com/elixir-lang/elixir/blob/main/lib/ex_unit/lib/ex_unit/capture_io.ex
     {:ok, string_io} = StringIO.open("")
 
-    try do
-      Process.group_leader(self(), string_io)
+    Process.group_leader(self(), string_io)
 
+    {result, output} =
       try do
-        Code.eval_string(text)
+        Code.eval_string(state.text)
       catch
         kind, reason ->
           {:ok, {_input, output}} = StringIO.close(string_io)
@@ -21,12 +34,13 @@ defmodule NervesHubLink.Script do
           output = output <> "\n" <> result
           {nil, output}
       else
-        result ->
+        {result, _binding} ->
           {:ok, {_input, output}} = StringIO.close(string_io)
           {result, output}
       end
-    after
-      Process.group_leader(self(), original_gl)
-    end
+
+    send(state.pid, {"scripts/run", state.ref, output, result})
+
+    {:stop, :normal, state}
   end
 end

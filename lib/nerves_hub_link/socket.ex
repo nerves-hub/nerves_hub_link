@@ -301,15 +301,8 @@ defmodule NervesHubLink.Socket do
   end
 
   def handle_message(@device_topic, "scripts/run", params, socket) do
-    {return, output} = Script.capture(params["text"])
-
-    _ =
-      push(socket, @device_topic, "scripts/run", %{
-        ref: params["ref"],
-        output: output,
-        return: inspect(return, pretty: true)
-      })
-
+    # See related handle_info for pushing back the script result
+    :ok = Script.capture(params["text"], params["ref"])
     {:ok, socket}
   end
 
@@ -413,6 +406,17 @@ defmodule NervesHubLink.Socket do
         schedule_network_availability_check(2_000)
         {:noreply, socket}
     end
+  end
+
+  def handle_info({"scripts/run", ref, output, return}, socket) do
+    _ =
+      push(socket, @device_topic, "scripts/run", %{
+        ref: ref,
+        output: output,
+        return: inspect(return, pretty: true)
+      })
+
+    {:noreply, socket}
   end
 
   def handle_info({:tty_data, data}, socket) do
