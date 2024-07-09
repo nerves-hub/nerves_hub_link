@@ -61,7 +61,7 @@ A full example config:
 
 ```elixir
 config :nerves_hub_link,
-  device_api_host: "your.nerveshub.host",
+  host: "your.nerveshub.host",
   shared_secret: [
     product_key: "<product_key>",
     product_secret: "<product_secret>",
@@ -86,7 +86,7 @@ This allows your config to be simplified to:
 
 ```elixir
 config :nerves_hub_link,
-  device_api_host: "your.nerveshub.host"
+  host: "your.nerveshub.host"
 ```
 
 NervesKey will default to using I2C bus 1 and the `:primary` certificate pair (`:primary` is one-time configurable and `:aux` may be updated). You can customize these options to use a different bus and certificate pair:
@@ -103,7 +103,7 @@ If you would like to use certificate device authentication, but you are not usin
 
 ```elixir
 config :nerves_hub_link,
-  device_api_host: "your.nerveshub.host",
+  host: "your.nerveshub.host",
   configurator: NervesHubLink.Configurator.LocalCertKey
 ```
 
@@ -111,7 +111,7 @@ By default the configurator will use a certificate found at `/data/nerves_hub/ce
 
 ```elixir
 config :nerves_hub_link,
-  device_api_host: "your.nerveshub.host",
+  host: "your.nerveshub.host",
   configurator: NervesHubLink.Configurator.LocalCertKey,
   ssl: [
     certfile: "/path/to/certfile.pem",
