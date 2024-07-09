@@ -5,8 +5,7 @@ config :nerves_hub_link,
   archive_public_keys: ["a key?"],
   connect: false,
   client: NervesHubLink.ClientMock,
-  device_api_host: "0.0.0.0",
-  device_api_port: 4001,
+  host: "0.0.0.0:4001",
   fwup_public_keys: ["a key"],
   # SSL values are used in a test.
   ssl: [

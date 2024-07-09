@@ -274,7 +274,7 @@ config :nerves_hub_link, ssl: [cacerts: my_der_list]
 
 ### Verifying network availability
 
-`NervesHubLink` will attempt to verify that the network is available before initiating the first connection attempt. This is done by checking if the `NervesHub` host address (`config.device_api_host`) can be resolved. If the network isn't available then the check will be run again in 2 seconds.
+`NervesHubLink` will attempt to verify that the network is available before initiating the first connection attempt. This is done by checking if the `NervesHub` host address (`config.host`) can be resolved. If the network isn't available then the check will be run again in 2 seconds.
 
 You can disable this behaviour with the following config:
 

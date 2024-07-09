@@ -100,7 +100,7 @@ defmodule NervesHubLink.Socket do
 
   @impl Slipstream
   def handle_continue(:connect, %{assigns: %{config: config}} = socket) do
-    Logger.info("[NervesHubLink] connecting to #{config.device_api_host}")
+    Logger.info("[NervesHubLink] connecting to #{config.socket[:url].host}")
 
     rejoin_after = Application.get_env(:nerves_hub_link, :rejoin_after, 5_000)
 
@@ -129,7 +129,7 @@ defmodule NervesHubLink.Socket do
 
   @impl Slipstream
   def handle_connect(%{assigns: %{config: config}} = socket) do
-    Logger.info("[NervesHubLink] connection to #{config.device_api_host} succeeded")
+    Logger.info("[NervesHubLink] connection to #{config.socket[:url].host} succeeded")
 
     currently_downloading_uuid = UpdateManager.currently_downloading_uuid()
 
