@@ -11,20 +11,19 @@ defmodule NervesHubLink.Configurator do
               connect: true,
               connect_wait_for_network: true,
               data_path: "/data/nerves-hub",
-              device_api_host: nil,
-              device_api_port: 443,
-              device_api_sni: nil,
               fwup_devpath: "/dev/mmcblk0",
               fwup_env: [],
               fwup_public_keys: [],
               fwup_task: "upgrade",
               heartbeat_interval_msec: 30_000,
+              host: "localhost",
               nerves_key: [],
               params: %{},
               remote_iex: false,
               request_archive_public_keys: false,
               request_fwup_public_keys: false,
               shared_secret: [],
+              sni: nil,
               socket: [],
               ssl: []
 
@@ -33,20 +32,19 @@ defmodule NervesHubLink.Configurator do
             connect: boolean(),
             connect_wait_for_network: boolean(),
             data_path: Path.t(),
-            device_api_host: String.t(),
-            device_api_port: String.t(),
-            device_api_sni: charlist(),
             fwup_devpath: Path.t(),
             fwup_env: [{String.t(), String.t()}],
             fwup_public_keys: [binary()],
             fwup_task: String.t(),
             heartbeat_interval_msec: integer(),
+            host: String.t(),
             nerves_key: any(),
             params: map(),
             remote_iex: boolean(),
             request_archive_public_keys: boolean(),
             request_fwup_public_keys: boolean(),
             shared_secret: [product_key: String.t(), product_secret: String.t()],
+            sni: String.t(),
             socket: any(),
             ssl: [:ssl.tls_client_option()]
           }
@@ -106,7 +104,8 @@ defmodule NervesHubLink.Configurator do
   defp base_config() do
     base = struct(Config, Application.get_all_env(:nerves_hub_link))
 
-    url = "wss://#{base.device_api_host}:#{base.device_api_port}/socket/websocket"
+    host = if String.contains?(base.host, "://"), do: base.host, else: "wss://#{base.host}"
+    url = URI.parse(host) |> URI.append_path("/socket/websocket")
 
     socket = Keyword.put_new(base.socket, :url, url)
 
@@ -116,7 +115,7 @@ defmodule NervesHubLink.Configurator do
       |> Keyword.put_new(:versions, [:"tlsv1.2"])
       |> Keyword.put_new(
         :server_name_indication,
-        to_charlist(base.device_api_sni || base.device_api_host)
+        to_charlist(base.sni || url.host)
       )
 
     fwup_devpath = Nerves.Runtime.KV.get(@fwup_devpath)
