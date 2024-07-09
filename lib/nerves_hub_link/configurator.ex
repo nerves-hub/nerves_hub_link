@@ -105,8 +105,7 @@ defmodule NervesHubLink.Configurator do
     base = struct(Config, Application.get_all_env(:nerves_hub_link))
 
     host = if String.contains?(base.host, "://"), do: base.host, else: "wss://#{base.host}"
-    url = URI.parse(host) |> URI.append_path("/socket/websocket")
-
+    url = URI.parse(host) |> URI.merge("/socket/websocket")
     socket = Keyword.put_new(base.socket, :url, url)
 
     ssl =
