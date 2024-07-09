@@ -104,11 +104,12 @@ defmodule NervesHubLink.Socket do
 
     rejoin_after = Application.get_env(:nerves_hub_link, :rejoin_after, 5_000)
 
-    mint_opts = if config.socket[:url].scheme == "wss" do
-      [protocols: [:http1], transport_opts: config.ssl]
-    else
-      [protocols: [:http1]]
-    end
+    mint_opts =
+      if config.socket[:url].scheme == "wss" do
+        [protocols: [:http1], transport_opts: config.ssl]
+      else
+        [protocols: [:http1]]
+      end
 
     opts = [
       mint_opts: mint_opts,
@@ -397,6 +398,7 @@ defmodule NervesHubLink.Socket do
   @impl Slipstream
   def handle_info(:connect_check_network_availability, socket) do
     hostname = URI.parse(socket.assigns.config.socket[:url]).host
+
     case :inet.gethostbyname(to_charlist(hostname)) do
       {:ok, _} ->
         {:noreply, socket, {:continue, :connect}}
