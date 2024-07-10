@@ -110,19 +110,16 @@ defmodule NervesHubLink.Configurator do
   defp base_config() do
     base = struct(Config, Application.get_all_env(:nerves_hub_link))
 
-    url =
+    connection_config_warnings(base)
+
+    host =
       if base.device_api_host do
-        Logger.warning("[NervesHubLink] The way your NervesHub connection has changed")
-
-        Logger.warning(
-          "[NervesHubLink] Please update your config to use `host` and `sni` (optional)."
-        )
-
-        "wss://#{base.device_api_host}:#{base.device_api_port}/socket/websocket"
+        "wss://#{base.device_api_host}:#{base.device_api_port || 443}"
       else
-        host = if String.contains?(base.host, "://"), do: base.host, else: "wss://#{base.host}"
-        URI.parse(host) |> URI.merge("/socket/websocket")
+        if String.contains?(base.host, "://"), do: base.host, else: "wss://#{base.host}"
       end
+
+    url = URI.parse(host) |> URI.merge("/socket/websocket")
 
     socket = Keyword.put_new(base.socket, :url, url)
 
@@ -209,5 +206,29 @@ defmodule NervesHubLink.Configurator do
     params = Map.put(config.params, "archive_public_keys", "on_connect")
 
     %{config | params: params}
+  end
+
+  defp connection_config_warnings(base) do
+    if base.device_api_host || base.device_api_port || base.device_api_sni do
+      Logger.warning("[NervesHubLink] CONFIG DEPRECATION WARNINGS")
+
+      if base.device_api_host do
+        Logger.warning(
+          "[NervesHubLink] `device_api_host` has been deprecated, please update your config to use `host`."
+        )
+      end
+
+      if base.device_api_port do
+        Logger.warning(
+          "[NervesHubLink] `device_api_port` has been deprecated, please update your config to use `host` and include the port number."
+        )
+      end
+
+      if base.device_api_sni do
+        Logger.warning(
+          "[NervesHubLink] `device_api_sni` has been deprecated, please update your config to use `sni`."
+        )
+      end
+    end
   end
 end
