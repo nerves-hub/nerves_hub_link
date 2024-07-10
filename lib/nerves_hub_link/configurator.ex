@@ -11,6 +11,9 @@ defmodule NervesHubLink.Configurator do
               connect: true,
               connect_wait_for_network: true,
               data_path: "/data/nerves-hub",
+              device_api_host: nil,
+              device_api_port: nil,
+              device_api_sni: nil,
               fwup_devpath: "/dev/mmcblk0",
               fwup_env: [],
               fwup_public_keys: [],
@@ -32,6 +35,9 @@ defmodule NervesHubLink.Configurator do
             connect: boolean(),
             connect_wait_for_network: boolean(),
             data_path: Path.t(),
+            device_api_host: String.t(),
+            device_api_port: String.t(),
+            device_api_sni: charlist(),
             fwup_devpath: Path.t(),
             fwup_env: [{String.t(), String.t()}],
             fwup_public_keys: [binary()],
@@ -104,8 +110,20 @@ defmodule NervesHubLink.Configurator do
   defp base_config() do
     base = struct(Config, Application.get_all_env(:nerves_hub_link))
 
-    host = if String.contains?(base.host, "://"), do: base.host, else: "wss://#{base.host}"
-    url = URI.parse(host) |> URI.merge("/socket/websocket")
+    url =
+      if base.device_api_host do
+        Logger.warning("[NervesHubLink] The way your NervesHub connection has changed")
+
+        Logger.warning(
+          "[NervesHubLink] Please update your config to use `host` and `sni` (optional)."
+        )
+
+        "wss://#{base.device_api_host}:#{base.device_api_port}/socket/websocket"
+      else
+        host = if String.contains?(base.host, "://"), do: base.host, else: "wss://#{base.host}"
+        URI.parse(host) |> URI.merge("/socket/websocket")
+      end
+
     socket = Keyword.put_new(base.socket, :url, url)
 
     ssl =
@@ -114,7 +132,7 @@ defmodule NervesHubLink.Configurator do
       |> Keyword.put_new(:versions, [:"tlsv1.2"])
       |> Keyword.put_new(
         :server_name_indication,
-        to_charlist(base.sni || url.host)
+        to_charlist(base.sni || base.device_api_sni || url.host)
       )
 
     fwup_devpath = Nerves.Runtime.KV.get(@fwup_devpath)
