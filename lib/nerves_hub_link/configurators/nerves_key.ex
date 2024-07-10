@@ -59,7 +59,7 @@ if Code.ensure_loaded?(NervesKey) do
       end)
     end
 
-    defp maybe_add_sni(ssl, %{device_api_sni: sni}) do
+    defp maybe_add_sni(ssl, %{sni: sni}) do
       Keyword.put_new(ssl, :server_name_indication, to_charlist(sni))
     end
   end

@@ -61,7 +61,7 @@ A full example config:
 
 ```elixir
 config :nerves_hub_link,
-  device_api_host: "your.nerveshub.host",
+  host: "your.nerveshub.host",
   shared_secret: [
     product_key: "<product_key>",
     product_secret: "<product_secret>",
@@ -86,7 +86,7 @@ This allows your config to be simplified to:
 
 ```elixir
 config :nerves_hub_link,
-  device_api_host: "your.nerveshub.host"
+  host: "your.nerveshub.host"
 ```
 
 NervesKey will default to using I2C bus 1 and the `:primary` certificate pair (`:primary` is one-time configurable and `:aux` may be updated). You can customize these options to use a different bus and certificate pair:
@@ -103,7 +103,7 @@ If you would like to use certificate device authentication, but you are not usin
 
 ```elixir
 config :nerves_hub_link,
-  device_api_host: "your.nerveshub.host",
+  host: "your.nerveshub.host",
   configurator: NervesHubLink.Configurator.LocalCertKey
 ```
 
@@ -111,7 +111,7 @@ By default the configurator will use a certificate found at `/data/nerves_hub/ce
 
 ```elixir
 config :nerves_hub_link,
-  device_api_host: "your.nerveshub.host",
+  host: "your.nerveshub.host",
   configurator: NervesHubLink.Configurator.LocalCertKey,
   ssl: [
     certfile: "/path/to/certfile.pem",
@@ -274,7 +274,7 @@ config :nerves_hub_link, ssl: [cacerts: my_der_list]
 
 ### Verifying network availability
 
-`NervesHubLink` will attempt to verify that the network is available before initiating the first connection attempt. This is done by checking if the `NervesHub` host address (`config.device_api_host`) can be resolved. If the network isn't available then the check will be run again in 2 seconds.
+`NervesHubLink` will attempt to verify that the network is available before initiating the first connection attempt. This is done by checking if the `NervesHub` host address (`config.host`) can be resolved. If the network isn't available then the check will be run again in 2 seconds.
 
 You can disable this behaviour with the following config:
 

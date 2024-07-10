@@ -24,3 +24,5 @@ nerves_hub-*.tar
 
 /.nerves-hub
 /nerves-hub
+
+/tmp

@@ -55,7 +55,7 @@ defmodule NervesHubLink.Configurator.LocalCertKey do
     %{config | ssl: ssl}
   end
 
-  defp maybe_add_sni(%{ssl: ssl, device_api_sni: sni} = config) do
+  defp maybe_add_sni(%{ssl: ssl, sni: sni} = config) do
     ssl = Keyword.put_new(ssl, :server_name_indication, to_charlist(sni))
     %{config | ssl: ssl}
   end

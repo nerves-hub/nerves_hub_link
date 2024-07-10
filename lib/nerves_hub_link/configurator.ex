@@ -12,19 +12,21 @@ defmodule NervesHubLink.Configurator do
               connect_wait_for_network: true,
               data_path: "/data/nerves-hub",
               device_api_host: nil,
-              device_api_port: 443,
+              device_api_port: nil,
               device_api_sni: nil,
               fwup_devpath: "/dev/mmcblk0",
               fwup_env: [],
               fwup_public_keys: [],
               fwup_task: "upgrade",
               heartbeat_interval_msec: 30_000,
+              host: "localhost",
               nerves_key: [],
               params: %{},
               remote_iex: false,
               request_archive_public_keys: false,
               request_fwup_public_keys: false,
               shared_secret: [],
+              sni: nil,
               socket: [],
               ssl: []
 
@@ -41,12 +43,14 @@ defmodule NervesHubLink.Configurator do
             fwup_public_keys: [binary()],
             fwup_task: String.t(),
             heartbeat_interval_msec: integer(),
+            host: String.t(),
             nerves_key: any(),
             params: map(),
             remote_iex: boolean(),
             request_archive_public_keys: boolean(),
             request_fwup_public_keys: boolean(),
             shared_secret: [product_key: String.t(), product_secret: String.t()],
+            sni: String.t(),
             socket: any(),
             ssl: [:ssl.tls_client_option()]
           }
@@ -106,7 +110,16 @@ defmodule NervesHubLink.Configurator do
   defp base_config() do
     base = struct(Config, Application.get_all_env(:nerves_hub_link))
 
-    url = "wss://#{base.device_api_host}:#{base.device_api_port}/socket/websocket"
+    connection_config_warnings(base)
+
+    host =
+      if base.device_api_host do
+        "wss://#{base.device_api_host}:#{base.device_api_port || 443}"
+      else
+        if String.contains?(base.host, "://"), do: base.host, else: "wss://#{base.host}"
+      end
+
+    url = URI.parse(host) |> URI.merge("/socket/websocket")
 
     socket = Keyword.put_new(base.socket, :url, url)
 
@@ -116,7 +129,7 @@ defmodule NervesHubLink.Configurator do
       |> Keyword.put_new(:versions, [:"tlsv1.2"])
       |> Keyword.put_new(
         :server_name_indication,
-        to_charlist(base.device_api_sni || base.device_api_host)
+        to_charlist(base.sni || base.device_api_sni || url.host)
       )
 
     fwup_devpath = Nerves.Runtime.KV.get(@fwup_devpath)
@@ -193,5 +206,29 @@ defmodule NervesHubLink.Configurator do
     params = Map.put(config.params, "archive_public_keys", "on_connect")
 
     %{config | params: params}
+  end
+
+  defp connection_config_warnings(base) do
+    if base.device_api_host || base.device_api_port || base.device_api_sni do
+      Logger.warning("[NervesHubLink] CONFIG DEPRECATION WARNINGS")
+
+      if base.device_api_host do
+        Logger.warning(
+          "[NervesHubLink] `device_api_host` has been deprecated, please update your config to use `host`."
+        )
+      end
+
+      if base.device_api_port do
+        Logger.warning(
+          "[NervesHubLink] `device_api_port` has been deprecated, please update your config to use `host` and include the port number."
+        )
+      end
+
+      if base.device_api_sni do
+        Logger.warning(
+          "[NervesHubLink] `device_api_sni` has been deprecated, please update your config to use `sni`."
+        )
+      end
+    end
   end
 end

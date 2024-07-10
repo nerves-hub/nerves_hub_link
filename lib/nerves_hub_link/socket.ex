@@ -100,12 +100,19 @@ defmodule NervesHubLink.Socket do
 
   @impl Slipstream
   def handle_continue(:connect, %{assigns: %{config: config}} = socket) do
-    Logger.info("[NervesHubLink] connecting to #{config.device_api_host}")
+    Logger.info("[NervesHubLink] connecting to #{config.socket[:url].host}")
 
     rejoin_after = Application.get_env(:nerves_hub_link, :rejoin_after, 5_000)
 
+    mint_opts =
+      if config.socket[:url].scheme == "wss" do
+        [protocols: [:http1], transport_opts: config.ssl]
+      else
+        [protocols: [:http1]]
+      end
+
     opts = [
-      mint_opts: [protocols: [:http1], transport_opts: config.ssl],
+      mint_opts: mint_opts,
       headers: config.socket[:headers] || [],
       uri: config.socket[:url],
       rejoin_after_msec: [rejoin_after],
@@ -122,7 +129,7 @@ defmodule NervesHubLink.Socket do
 
   @impl Slipstream
   def handle_connect(%{assigns: %{config: config}} = socket) do
-    Logger.info("[NervesHubLink] connection to #{config.device_api_host} succeeded")
+    Logger.info("[NervesHubLink] connection to #{config.socket[:url].host} succeeded")
 
     currently_downloading_uuid = UpdateManager.currently_downloading_uuid()
 
@@ -390,7 +397,9 @@ defmodule NervesHubLink.Socket do
 
   @impl Slipstream
   def handle_info(:connect_check_network_availability, socket) do
-    case :inet.gethostbyname(to_charlist(socket.assigns.config.device_api_host)) do
+    hostname = URI.parse(socket.assigns.config.socket[:url]).host
+
+    case :inet.gethostbyname(to_charlist(hostname)) do
       {:ok, _} ->
         {:noreply, socket, {:continue, :connect}}
 

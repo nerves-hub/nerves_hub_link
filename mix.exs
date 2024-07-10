@@ -32,9 +32,7 @@ defmodule NervesHubLink.MixProject do
   def application do
     [
       env: [
-        device_api_host: nil,
-        device_api_port: 443,
-        device_api_sni: nil,
+        host: nil,
         fwup_public_keys: []
       ],
       extra_applications: [:logger, :iex, :inets, :sasl],

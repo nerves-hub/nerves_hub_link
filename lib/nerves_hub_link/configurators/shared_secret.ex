@@ -12,7 +12,7 @@ defmodule NervesHubLink.Configurator.SharedSecret do
       |> Keyword.put_new(:cacerts, Certificate.ca_certs())
 
     # Shared Secret Auth uses a different socket path
-    url = URI.merge(socket[:url], "/device-socket/websocket") |> to_string()
+    url = URI.merge(socket[:url], "/device-socket/websocket")
 
     %{config | ssl: ssl, socket: Keyword.merge(socket, headers: headers(config), url: url)}
   end
