@@ -144,6 +144,7 @@ defmodule NervesHubLink.Socket do
       |> assign(connected_at: System.monotonic_time(:millisecond))
 
     :alarm_handler.clear_alarm(NervesHubLink.Disconnected)
+
     {:ok, socket}
   end
 
@@ -151,6 +152,11 @@ defmodule NervesHubLink.Socket do
   def handle_join(@device_topic, reply, socket) do
     Logger.debug("[#{inspect(__MODULE__)}] Joined Device channel")
     _ = handle_join_reply(reply, socket)
+
+    if socket.assigns.config.whenwhere do
+      send(self(), :send_whenwhere_location)
+    end
+
     {:ok, assign(socket, joined_at: System.monotonic_time(:millisecond))}
   end
 
@@ -293,6 +299,14 @@ defmodule NervesHubLink.Socket do
     {:ok, assign(socket, config: config)}
   end
 
+  def handle_message(@device_topic, "location:update", _params, socket) do
+    Logger.debug("[#{inspect(__MODULE__)}] Location update request received.")
+
+    send(self(), :send_whenwhere_location)
+
+    {:ok, socket}
+  end
+
   def handle_message(@device_topic, "reboot", _params, socket) do
     Logger.warning("[NervesHubLink] Reboot Request from NervesHub")
     _ = push(socket, @device_topic, "rebooting", %{})
@@ -410,6 +424,11 @@ defmodule NervesHubLink.Socket do
     end
   end
 
+  def handle_info(:send_whenwhere_location, socket) do
+    send_location(socket)
+    {:noreply, socket}
+  end
+
   def handle_info({:tty_data, data}, socket) do
     _ = push(socket, @console_topic, "up", %{data: data})
     {:noreply, set_iex_timer(socket)}
@@ -520,6 +539,33 @@ defmodule NervesHubLink.Socket do
       join(socket, @console_topic, socket.assigns.params)
     else
       socket
+    end
+  end
+
+  defp send_location(socket) do
+    case Req.get("http://whenwhere.nerves-project.org/") do
+      {:ok, resp} ->
+        payload = %{
+          source: "whenwhere",
+          result: resp.body
+        }
+
+        _ = push(socket, @device_topic, "location:update", payload)
+
+        Logger.debug(
+          "[#{inspect(__MODULE__)}] Sync'd location information from whenwhere.nerves-project.org"
+        )
+
+        :ok
+
+      {:error, error} ->
+        _ = push(socket, @device_topic, "location:error", %{error: Exception.message(error)})
+
+        Logger.debug(
+          "[#{inspect(__MODULE__)}] Error syncing location information from whenwhere.nerves-project.org : #{inspect(error)}"
+        )
+
+        :error
     end
   end
 
