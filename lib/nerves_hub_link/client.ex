@@ -57,6 +57,11 @@ defmodule NervesHubLink.Client do
           | {:error, non_neg_integer(), String.t()}
           | {:progress, 0..100}
 
+  @typedoc "Supported responses from `archive_available/1`"
+  @type location_response ::
+          {:ok, %{latitude: Float.t(), longitude: Float.t(), source: String.t()}}
+          | {:error, String.t(), String.t()}
+
   @doc """
   Called to find out what to do when a firmware update is available.
 
@@ -111,6 +116,14 @@ defmodule NervesHubLink.Client do
   your server.
   """
   @callback reconnect_backoff() :: [integer()] | nil
+
+  @doc """
+  Optional callback to query the devices current location.
+
+  The default behavior is to use `whenwhere.nerves-project.org` to query and resolve
+  the devices latitude and longitude position.
+  """
+  @callback request_location() :: location_response()
 
   @doc """
   Callback to identify the device from NervesHub.
@@ -192,6 +205,26 @@ defmodule NervesHubLink.Client do
   """
   def identify() do
     apply_wrap(mod(), :identify, [])
+  end
+
+  @doc """
+  This function is called internally by NervesHubLink to resolve the location of a device.
+  """
+  def request_location() do
+    case apply_wrap(mod(), :request_location, []) do
+      {:ok, _} = result ->
+        result
+
+      {:error, _, _} = result ->
+        result
+
+      result ->
+        Logger.error(
+          "[NervesHubLink] Client: #{inspect(mod())}.request_location/0 bad return value: #{inspect(result)}."
+        )
+
+        {:error, "UNEXPECTED_RESULT", inspect(result)}
+    end
   end
 
   @doc """

@@ -77,4 +77,29 @@ defmodule NervesHubLink.Client.Default do
   def identify() do
     Logger.info("[NervesHubLink] identifying")
   end
+
+  @impl NervesHubLink.Client
+  def request_location() do
+    case Req.get("http://whenwhere.nerves-project.org/") do
+      {:ok, resp} ->
+        payload = %{
+          source: "whenwhere",
+          latitude: resp.body["latitude"],
+          longitude: resp.body["longitude"]
+        }
+
+        Logger.debug(
+          "[#{inspect(__MODULE__)}] Location information resolved using whenwhere.nerves-project.org"
+        )
+
+        {:ok, payload}
+
+      {:error, error} ->
+        Logger.debug(
+          "[#{inspect(__MODULE__)}] Error resolving location information from whenwhere.nerves-project.org : #{inspect(error)}"
+        )
+
+        {:error, "HTTP_ERROR", inspect(error)}
+    end
+  end
 end

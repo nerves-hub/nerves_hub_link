@@ -543,29 +543,16 @@ defmodule NervesHubLink.Socket do
   end
 
   defp send_location(socket) do
-    case Req.get("http://whenwhere.nerves-project.org/") do
-      {:ok, resp} ->
-        payload = %{
-          source: "whenwhere",
-          result: resp.body
-        }
-
+    case Client.request_location() do
+      {:ok, payload} ->
         _ = push(socket, @device_topic, "location:update", payload)
 
-        Logger.debug(
-          "[#{inspect(__MODULE__)}] Sync'd location information from whenwhere.nerves-project.org"
-        )
-
-        :ok
-
-      {:error, error} ->
-        _ = push(socket, @device_topic, "location:error", %{error: Exception.message(error)})
-
-        Logger.debug(
-          "[#{inspect(__MODULE__)}] Error syncing location information from whenwhere.nerves-project.org : #{inspect(error)}"
-        )
-
-        :error
+      {:error, code, message} ->
+        _ =
+          push(socket, @device_topic, "location:error", %{
+            error_code: code,
+            error_message: message
+          })
     end
   end
 
