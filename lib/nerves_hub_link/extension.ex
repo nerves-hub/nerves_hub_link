@@ -1,6 +1,21 @@
 defmodule NervesHubLink.Extension do
   @moduledoc """
-  An Extension is a
+  An Extension is a GenServer that can handle messages passed down from NervesHub
+  and that can send messages up to NervesHub. It utilizes the regular NervesHubLink
+  connection but are isolated to avoid crashing the main connection for things that
+  are less important than the firmware update functionality.
+
+  To configure an extension, simply add a child as if for a Supervisor, in config:alarm_handler
+
+  ```
+  config :nerves_hub_link,
+    extensions: [
+      NervesHubLink.Geo,
+      NervesHubLink.Health,
+      {MyExtension, interval: 500}
+    ]
+  ```
+
   """
   @callback events() :: [String.t()]
 
