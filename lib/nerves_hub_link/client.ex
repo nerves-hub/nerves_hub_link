@@ -59,7 +59,7 @@ defmodule NervesHubLink.Client do
 
   @typedoc "Supported responses from `archive_available/1`"
   @type location_response ::
-          {:ok, %{latitude: Float.t(), longitude: Float.t(), source: String.t()}}
+          {:ok, %{latitude: float(), longitude: float(), source: String.t()}}
           | {:error, String.t(), String.t()}
 
   @doc """
