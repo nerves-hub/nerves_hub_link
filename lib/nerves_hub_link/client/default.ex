@@ -80,12 +80,12 @@ defmodule NervesHubLink.Client.Default do
 
   @impl NervesHubLink.Client
   def request_location() do
-    case Req.get("http://whenwhere.nerves-project.org/") do
+    case Whenwhere.asks() do
       {:ok, resp} ->
         payload = %{
           source: "whenwhere",
-          latitude: resp.body["latitude"],
-          longitude: resp.body["longitude"]
+          latitude: Float.parse(resp.body["latitude"]),
+          longitude: Float.parse(resp.body["longitude"])
         }
 
         Logger.debug(
