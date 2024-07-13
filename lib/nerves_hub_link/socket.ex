@@ -153,8 +153,8 @@ defmodule NervesHubLink.Socket do
     Logger.debug("[#{inspect(__MODULE__)}] Joined Device channel")
     _ = handle_join_reply(reply, socket)
 
-    if socket.assigns.config.whenwhere do
-      send(self(), :send_whenwhere_location)
+    if socket.assigns.config.resolve_location do
+      send(self(), :send_location_information)
     end
 
     {:ok, assign(socket, joined_at: System.monotonic_time(:millisecond))}
@@ -302,7 +302,7 @@ defmodule NervesHubLink.Socket do
   def handle_message(@device_topic, "location:update", _params, socket) do
     Logger.debug("[#{inspect(__MODULE__)}] Location update request received.")
 
-    send(self(), :send_whenwhere_location)
+    send(self(), :send_location_information)
 
     {:ok, socket}
   end
@@ -424,7 +424,7 @@ defmodule NervesHubLink.Socket do
     end
   end
 
-  def handle_info(:send_whenwhere_location, socket) do
+  def handle_info(:send_location_information, socket) do
     send_location(socket)
     {:noreply, socket}
   end

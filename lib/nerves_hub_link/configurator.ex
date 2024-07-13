@@ -25,11 +25,11 @@ defmodule NervesHubLink.Configurator do
               remote_iex: false,
               request_archive_public_keys: false,
               request_fwup_public_keys: false,
+              resolve_location: true,
               shared_secret: [],
               sni: nil,
               socket: [],
-              ssl: [],
-              whenwhere: true
+              ssl: []
 
     @type t() :: %__MODULE__{
             archive_public_keys: [binary()],
@@ -50,11 +50,11 @@ defmodule NervesHubLink.Configurator do
             remote_iex: boolean(),
             request_archive_public_keys: boolean(),
             request_fwup_public_keys: boolean(),
+            resolve_location: true,
             shared_secret: [product_key: String.t(), product_secret: String.t()],
             sni: String.t(),
             socket: any(),
-            ssl: [:ssl.tls_client_option()],
-            whenwhere: boolean()
+            ssl: [:ssl.tls_client_option()]
           }
   end
 
