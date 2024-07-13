@@ -12,7 +12,7 @@ defmodule NervesHubLink.MixProject do
       description: @description,
       dialyzer: dialyzer(),
       docs: docs(),
-      elixir: "~> 1.11",
+      elixir: "~> 1.13",
       elixirc_paths: elixirc_paths(Mix.env()),
       package: package(),
       preferred_cli_env: [
