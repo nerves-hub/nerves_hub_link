@@ -546,6 +546,7 @@ defmodule NervesHubLink.Socket do
     case Client.request_location() do
       {:ok, payload} ->
         _ = push(socket, @device_topic, "location:update", payload)
+        :ok
 
       {:error, code, message} ->
         _ =
@@ -553,6 +554,8 @@ defmodule NervesHubLink.Socket do
             error_code: code,
             error_message: message
           })
+
+        :ok
     end
   end
 
