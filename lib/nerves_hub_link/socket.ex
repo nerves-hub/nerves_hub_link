@@ -9,6 +9,7 @@ defmodule NervesHubLink.Socket do
   alias NervesHubLink.Client
   alias NervesHubLink.Configurator
   alias NervesHubLink.Configurator.SharedSecret
+  alias NervesHubLink.Extension
   alias NervesHubLink.UpdateManager
   alias NervesHubLink.UploadFile
 
@@ -89,6 +90,7 @@ defmodule NervesHubLink.Socket do
       |> assign(started_at: System.monotonic_time(:millisecond))
       |> assign(connected_at: nil)
       |> assign(joined_at: nil)
+      |> assign(extension_events: Extension.extension_events_from_config(config.extensions))
 
     if config.connect_wait_for_network do
       schedule_network_availability_check()
@@ -327,6 +329,21 @@ defmodule NervesHubLink.Socket do
     end
   end
 
+  # Delegate message to a `nerves_hub_link` extension (usually a separate library)
+  # if available
+  # This function favors failing to do talk to the exntesion rather
+  # than crashing for any reason. We want to keep firmware updates working.
+  def handle_message(@device_topic, event, params, socket) do
+    try do
+      Extension.forward(socket.extension_events, event, params)
+    catch
+      _, _ ->
+        Logger.warning("Could not forward to extension for event: #{event}")
+    end
+
+    {:noreply, socket}
+  end
+
   ##
   # Console API messages
   #
@@ -450,6 +467,11 @@ defmodule NervesHubLink.Socket do
     _ = push(socket, @console_topic, "up", %{data: msg})
 
     {:noreply, stop_iex(socket)}
+  end
+
+  def handle_info({:extension_msg, event, params}, socket) do
+    push(socket, @device_topic, event, params)
+    {:noreply, socket}
   end
 
   def handle_info(msg, socket) do

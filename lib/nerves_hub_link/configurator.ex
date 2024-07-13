@@ -28,7 +28,8 @@ defmodule NervesHubLink.Configurator do
               shared_secret: [],
               sni: nil,
               socket: [],
-              ssl: []
+              ssl: [],
+              extensions: []
 
     @type t() :: %__MODULE__{
             archive_public_keys: [binary()],
@@ -52,7 +53,8 @@ defmodule NervesHubLink.Configurator do
             shared_secret: [product_key: String.t(), product_secret: String.t()],
             sni: String.t(),
             socket: any(),
-            ssl: [:ssl.tls_client_option()]
+            ssl: [:ssl.tls_client_option()],
+            extensions: [NervesHub.Extension.t()]
           }
   end
 

@@ -27,10 +27,12 @@ defmodule NervesHubLink.Application do
   defp children(%{connect: false}, _fwup_config), do: []
 
   defp children(config, fwup_config) do
-    [
-      {UpdateManager, fwup_config},
-      {ArchiveManager, config},
-      {Socket, config}
-    ]
+    # Start extensions first or they might miss Socket messages
+    config.extensions ++
+      [
+        {UpdateManager, fwup_config},
+        {ArchiveManager, config},
+        {Socket, config}
+      ]
   end
 end
