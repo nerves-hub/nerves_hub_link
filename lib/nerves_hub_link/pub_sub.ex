@@ -38,7 +38,7 @@ defmodule NervesHubLink.PubSub do
     `NervesHubLink.Socket`. Typically only used by `NervesHubLink.Socket`.
     """
     def publish_channel_event(topic, event, params) do
-        publish(topic, {:broadcast_msg, topic, event, params})
+        publish(topic, {:broadcast, :msg, topic, event, params})
     end
 
     @doc """
@@ -46,7 +46,7 @@ defmodule NervesHubLink.PubSub do
     `NervesHubLink.Socket`. Typically only used by `NervesHubLink.Socket`.
     """
     def publish_topic_join(topic, reply) do
-        publish(topic, {:broadcast_join, topic, reply})
+        publish(topic, {:broadcast, :join, topic, reply})
     end
 
     @doc """
@@ -54,7 +54,7 @@ defmodule NervesHubLink.PubSub do
     `NervesHubLink.Socket`. Typically only used by `NervesHubLink.Socket`.
     """
     def publish_topic_close(topic, reason) do
-        publish(topic, {:broadcast_close, topic, reason})
+        publish(topic, {:broadcast, :close, topic, reason})
     end
 
     @doc """
@@ -62,7 +62,7 @@ defmodule NervesHubLink.PubSub do
     `NervesHubLink.Socket`. Typically only used by `NervesHubLink.Socket`.
     """
     def publish_disconnect(topic, reason) do
-        publish(topic, {:broadcast_disconnect, topic, reason})
+        publish(topic, {:broadcast, :disconnect, topic, reason})
     end
 
     @doc """

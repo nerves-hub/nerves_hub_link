@@ -32,22 +32,22 @@ defmodule NervesHubLinkTest do
       {:reply, :ok, state}
     end
 
-    def handle_info({:broadcast_join, topic, reply}, state) do
+    def handle_info({:broadcast, :join, topic, reply}, state) do
       send(state.report_pid, {:joined, topic, reply})
       {:noreply, state}
     end
 
-    def handle_info({:broadcast_close, topic, reason}, state) do
+    def handle_info({:broadcast, :close, topic, reason}, state) do
       send(state.report_pid, {:closed, topic, reason})
       {:noreply, state}
     end
 
-    def handle_info({:broadcast_disconnect, topic, reason}, state) do
+    def handle_info({:broadcast, :disconnect, topic, reason}, state) do
       send(state.report_pid, {:disconnected, topic, reason})
       {:noreply, state}
     end
 
-    def handle_info({:broadcast_msg, topic, event, params}, state) do
+    def handle_info({:broadcast, :msg, topic, event, params}, state) do
       send(state.report_pid, {:messaged, topic, event, params})
       {:noreply, state}
     end
