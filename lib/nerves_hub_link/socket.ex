@@ -154,14 +154,14 @@ defmodule NervesHubLink.Socket do
 
   @impl Slipstream
   def handle_join(@device_topic, reply, socket) do
-    publish_topic_join(@device_topic, reply)
+    PubSub.publish_topic_join(@device_topic, reply)
     Logger.debug("[#{inspect(__MODULE__)}] Joined Device channel")
     _ = handle_join_reply(reply, socket)
     {:ok, assign(socket, joined_at: System.monotonic_time(:millisecond))}
   end
 
-  def handle_join(@console_topic, _reply, socket) do
-    publish_topic_join(@console_topic, reply)
+  def handle_join(@console_topic, reply, socket) do
+    PubSub.publish_topic_join(@console_topic, reply)
     Logger.debug("[#{inspect(__MODULE__)}] Joined Console channel")
     {:ok, socket}
   end
@@ -407,11 +407,11 @@ defmodule NervesHubLink.Socket do
   end
 
   ##
-  # Unknown message
+  # Any other message
   #
-  defp handle_event(topic, event, _params, socket) do
-    Logger.warning("Unknown message (\"#{topic}:#{event}\") received")
-
+  defp handle_event(_topic, _event, _params, socket) do
+    # We don't warn an unknown messages as those are possibly handled by other
+    # processes via PubSub.
     {:ok, socket}
   end
 

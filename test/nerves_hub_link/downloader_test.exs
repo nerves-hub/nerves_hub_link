@@ -20,7 +20,8 @@ defmodule NervesHubLink.DownloaderTest do
     worst_case_download_speed: 30_000
   }
 
-  @failure_url "http://localhost/this_should_fail"
+  # Unlikely port
+  @failure_url "http://localhost:61045/this_should_fail"
 
   test "max_disconnects" do
     test_pid = self()

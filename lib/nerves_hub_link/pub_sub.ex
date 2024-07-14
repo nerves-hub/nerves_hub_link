@@ -6,7 +6,7 @@ defmodule NervesHubLink.PubSub do
     libraries that extend NervesHubLink via this mechanism.
     """
 
-    def child_spec do
+    def child_spec(_) do
         Registry.child_spec(
             # Multiple registrations per key/topic
             keys: :duplicate,
@@ -29,7 +29,7 @@ defmodule NervesHubLink.PubSub do
     Subscribe to messages meant for the hub.
     Typically only used by `NervesHubLink.Socket`.
     """
-    def subcribe_to_hub do
+    def subscribe_to_hub do
         subscribe("special:hub")
     end
 
@@ -61,7 +61,7 @@ defmodule NervesHubLink.PubSub do
     Publish disconnect to extensions or listeners that want messages from
     `NervesHubLink.Socket`. Typically only used by `NervesHubLink.Socket`.
     """
-    def publish_disconnect(topic) do
+    def publish_disconnect(topic, reason) do
         publish(topic, {:broadcast_disconnect, topic, reason})
     end
 
