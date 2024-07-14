@@ -6,6 +6,7 @@ defmodule NervesHubLink.Application do
   alias NervesHubLink.Configurator
   alias NervesHubLink.Socket
   alias NervesHubLink.FwupConfig
+  alias NervesHubLink.PubSub
   alias NervesHubLink.UpdateManager
 
   def start(_type, _args) do
@@ -28,6 +29,7 @@ defmodule NervesHubLink.Application do
 
   defp children(config, fwup_config) do
     [
+      PubSub,
       {UpdateManager, fwup_config},
       {ArchiveManager, config},
       {Socket, config}
