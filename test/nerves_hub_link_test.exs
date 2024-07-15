@@ -68,7 +68,6 @@ defmodule NervesHubLinkTest do
     {:ok, _pid} =
       Supervisor.start_link(
         [
-          PubSub,
           {UpdateManager, fwup_config},
           {ArchiveManager, config},
           {Socket, config}
