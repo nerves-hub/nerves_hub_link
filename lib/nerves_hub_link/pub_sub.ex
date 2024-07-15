@@ -70,7 +70,8 @@ defmodule NervesHubLink.PubSub do
   `subscribe_to_others/0` and `subscribe_to_hub/0` but available if needed.
   """
   def subscribe(topic) do
-    Registry.register(NervesHubLink.PubSub, topic, [])
+    _ = Registry.register(NervesHubLink.PubSub, topic, [])
+    :ok
   end
 
   @doc """
