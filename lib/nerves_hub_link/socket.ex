@@ -417,7 +417,7 @@ defmodule NervesHubLink.Socket do
 
   @impl Slipstream
   def handle_info({:to_hub, topic, event, params}, socket) do
-    push(socket, topic, event, params)
+    _ = push(socket, topic, event, params)
     {:noreply, socket}
   rescue
     error ->
