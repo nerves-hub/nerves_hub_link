@@ -5,6 +5,9 @@ defmodule NervesHubLink.PubSub do
   Wrapped up in a module for convenience and convenient correct use in
   libraries that extend NervesHubLink via this mechanism.
   """
+
+  alias NervesHubLink.PubSub.Message, as: M
+
   def child_spec(_) do
     Registry.child_spec(
       # Multiple registrations per key/topic
@@ -18,26 +21,11 @@ defmodule NervesHubLink.PubSub do
   end
 
   @doc """
-  Publish to `NervesHubLink.Socket` to pass up to hub.
-  """
-  def publish_to_hub(topic, event, params) do
-    publish("special:hub", {:to_hub, topic, event, params})
-  end
-
-  @doc """
-  Subscribe to messages meant for the hub.
-  Typically only used by `NervesHubLink.Socket`.
-  """
-  def subscribe_to_hub do
-    subscribe("special:hub")
-  end
-
-  @doc """
   Publish to extensions or listeners that want messages from
   `NervesHubLink.Socket`. Typically only used by `NervesHubLink.Socket`.
   """
   def publish_channel_event(topic, event, params) do
-    publish(topic, {:broadcast, :msg, topic, event, params})
+    publish(topic, M.msg(topic, event, params))
   end
 
   @doc """
@@ -45,7 +33,7 @@ defmodule NervesHubLink.PubSub do
   `NervesHubLink.Socket`. Typically only used by `NervesHubLink.Socket`.
   """
   def publish_topic_join(topic, reply) do
-    publish(topic, {:broadcast, :join, topic, reply})
+    publish(topic, M.join(topic, reply))
   end
 
   @doc """
@@ -53,7 +41,7 @@ defmodule NervesHubLink.PubSub do
   `NervesHubLink.Socket`. Typically only used by `NervesHubLink.Socket`.
   """
   def publish_topic_close(topic, reason) do
-    publish(topic, {:broadcast, :close, topic, reason})
+    publish(topic, M.close(topic, reason))
   end
 
   @doc """
@@ -61,7 +49,7 @@ defmodule NervesHubLink.PubSub do
   `NervesHubLink.Socket`. Typically only used by `NervesHubLink.Socket`.
   """
   def publish_disconnect(topic, reason) do
-    publish(topic, {:broadcast, :disconnect, topic, reason})
+    publish(topic, M.disconnect(topic, reason))
   end
 
   @doc """

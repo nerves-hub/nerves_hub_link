@@ -37,6 +37,11 @@ defmodule NervesHubLink.Socket do
     GenServer.call(__MODULE__, {:check_connection, type})
   end
 
+  def send_message(%{topic: topic, event: event, params: params} = m)
+      when is_binary(topic) and is_binary(event) and is_map(params) do
+    GenServer.call(__MODULE__, {:message, m})
+  end
+
   @spec send_file(Path.t()) :: :ok | {:error, :too_large | File.posix()}
   def send_file(file_path) do
     GenServer.call(__MODULE__, {:send_file, file_path})
@@ -91,9 +96,6 @@ defmodule NervesHubLink.Socket do
       |> assign(started_at: System.monotonic_time(:millisecond))
       |> assign(connected_at: nil)
       |> assign(joined_at: nil)
-
-    # Subscribe to message from extensions
-    PubSub.subscribe_to_hub()
 
     if config.connect_wait_for_network do
       schedule_network_availability_check()
@@ -241,6 +243,15 @@ defmodule NervesHubLink.Socket do
     else
       {:reply, :error, socket}
     end
+  end
+
+  def handle_call({:message, m}, _from, socket) do
+    _ = push(socket, m.topic, m.event, m.params)
+    {:reply, :ok, socket}
+  rescue
+    error ->
+      Logger.error("Pushing message failed due to error: #{inspect(error)}")
+      {:reply, {:error, error}, socket}
   end
 
   @impl Slipstream
@@ -416,15 +427,6 @@ defmodule NervesHubLink.Socket do
   end
 
   @impl Slipstream
-  def handle_info({:to_hub, topic, event, params}, socket) do
-    _ = push(socket, topic, event, params)
-    {:noreply, socket}
-  rescue
-    error ->
-      Logger.error("Pushing message failed due to error: #{inspect(error)}")
-      {:noreply, socket}
-  end
-
   def handle_info(:connect_check_network_availability, socket) do
     hostname = URI.parse(socket.assigns.config.socket[:url]).host
 

@@ -24,31 +24,25 @@ defmodule NervesHubLinkTest do
       {:ok, %{report_pid: report_pid}}
     end
 
-    def push(pid, event, params) do
-      GenServer.call(pid, {:push, event, params})
-    end
-
-    def handle_call({:push, event, params}, _from, state) do
-      PubSub.publish_to_hub("device", event, params)
-      {:reply, :ok, state}
-    end
-
-    def handle_info({:broadcast, :join, topic, reply}, state) do
+    def handle_info(%PubSub.Message{type: :join, topic: topic, reply: reply}, state) do
       send(state.report_pid, {:joined, topic, reply})
       {:noreply, state}
     end
 
-    def handle_info({:broadcast, :close, topic, reason}, state) do
+    def handle_info(%PubSub.Message{type: :close, topic: topic, reason: reason}, state) do
       send(state.report_pid, {:closed, topic, reason})
       {:noreply, state}
     end
 
-    def handle_info({:broadcast, :disconnect, topic, reason}, state) do
+    def handle_info(%PubSub.Message{type: :disconnect, topic: topic, reason: reason}, state) do
       send(state.report_pid, {:disconnected, topic, reason})
       {:noreply, state}
     end
 
-    def handle_info({:broadcast, :msg, topic, event, params}, state) do
+    def handle_info(
+          %PubSub.Message{type: :msg, topic: topic, event: event, params: params},
+          state
+        ) do
       send(state.report_pid, {:messaged, topic, event, params})
       {:noreply, state}
     end
@@ -80,14 +74,12 @@ defmodule NervesHubLinkTest do
     {:ok, ext_pid: pid}
   end
 
-  test "join device channel", %{ext_pid: ext_pid} do
+  test "join device channel", %{ext_pid: _ext_pid} do
     connect_and_assert_join(Socket, "device", _, :ok)
     # assert_join("device", _, :ok)
     assert_join("console", _, :ok)
     assert_receive {:joined, "device", _}
     push(Socket, "device", "server-custom-event", %{myparam: 1})
     assert_receive {:messaged, "device", "server-custom-event", %{myparam: 1}}
-    Extension.push(ext_pid, "device-custom-event", %{myparam: 2})
-    assert_push("device", "device-custom-event", %{myparam: 2})
   end
 end
