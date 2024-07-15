@@ -37,9 +37,9 @@ defmodule NervesHubLink.Socket do
     GenServer.call(__MODULE__, {:check_connection, type})
   end
 
-  def send_message(%{topic: topic, event: event, params: params} = m)
+  def send_message(topic, event, params)
       when is_binary(topic) and is_binary(event) and is_map(params) do
-    GenServer.call(__MODULE__, {:message, m})
+    GenServer.call(__MODULE__, {:message, %{topic: topic, event: event, params: params}})
   end
 
   @spec send_file(Path.t()) :: :ok | {:error, :too_large | File.posix()}
