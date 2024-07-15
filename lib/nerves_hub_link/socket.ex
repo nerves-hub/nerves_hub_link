@@ -268,7 +268,7 @@ defmodule NervesHubLink.Socket do
   # hands off handling to `handle_event/3`
   def handle_message(topic, event, params, socket) do
     PubSub.publish_channel_event(topic, event, params)
-    handle_event(topic ,event, params, socket)
+    handle_event(topic, event, params, socket)
   end
 
   defp handle_event(@device_topic, "fwup_public_keys", params, socket) do
@@ -373,11 +373,11 @@ defmodule NervesHubLink.Socket do
   end
 
   defp handle_event(
-        @console_topic,
-        "window_size",
-        %{"height" => height, "width" => width},
-        socket
-      ) do
+         @console_topic,
+         "window_size",
+         %{"height" => height, "width" => width},
+         socket
+       ) do
     _ = ExTTY.window_change(socket.assigns.iex_pid, width, height)
     {:ok, set_iex_timer(socket)}
   end
@@ -500,6 +500,7 @@ defmodule NervesHubLink.Socket do
   @impl Slipstream
   def handle_topic_close(topic, reason, socket) when reason != :left do
     PubSub.publish_topic_close(topic, reason)
+
     if topic == @device_topic do
       _ = Client.handle_error(reason)
     end
