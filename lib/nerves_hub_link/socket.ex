@@ -9,6 +9,7 @@ defmodule NervesHubLink.Socket do
   alias NervesHubLink.Client
   alias NervesHubLink.Configurator
   alias NervesHubLink.Configurator.SharedSecret
+  alias NervesHubLink.Script
   alias NervesHubLink.UpdateManager
   alias NervesHubLink.UploadFile
 
@@ -306,6 +307,12 @@ defmodule NervesHubLink.Socket do
     {:ok, socket}
   end
 
+  def handle_message(@device_topic, "scripts/run", params, socket) do
+    # See related handle_info for pushing back the script result
+    :ok = Script.capture(params["text"], params["ref"])
+    {:ok, socket}
+  end
+
   def handle_message(@device_topic, "archive", params, socket) do
     {:ok, info} = NervesHubLink.Message.ArchiveInfo.parse(params)
     _ = ArchiveManager.apply_archive(info, socket.assigns.config.archive_public_keys)
@@ -408,6 +415,17 @@ defmodule NervesHubLink.Socket do
         schedule_network_availability_check(2_000)
         {:noreply, socket}
     end
+  end
+
+  def handle_info({"scripts/run", ref, output, return}, socket) do
+    _ =
+      push(socket, @device_topic, "scripts/run", %{
+        ref: ref,
+        output: output,
+        return: inspect(return, pretty: true)
+      })
+
+    {:noreply, socket}
   end
 
   def handle_info({:tty_data, data}, socket) do
