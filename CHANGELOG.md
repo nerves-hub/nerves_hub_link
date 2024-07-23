@@ -1,6 +1,13 @@
 # Changelog
 
-## unreleased
+## [2.5.0] - 2024-07-14
+
+This latest release requires Elixir 1.13 or later.
+
+* Added
+  * Run a NervesHub script on device (#207)
+* Updated
+  * Simplify connection settings (#214)
 
 ## [2.4.0] - 2024-06-24
 
