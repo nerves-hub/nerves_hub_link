@@ -312,3 +312,18 @@ Another possibility is that the device wasn't provisioned with the certificate
 that's on NervesHub.
 
 See also [NervesHubWeb: Potential SSL Issues](https://github.com/nerves-hub/nerves_hub_web#potential-ssl-issues)
+
+## Internal API Versions
+
+`NervesHubLink.Configurator` includes two internal versions for NervesHub to determine what features are available on the device socket.
+
+### `device_api_version`
+
+- `1.0.0` - Updating firmware, status updates, reboot device
+- `2.0.0` - Identify a device, archives
+- `2.1.0` - Run scripts on a device separate from the console, sync firmware keys and archive keys
+
+### `console_version`
+
+- `1.0.0` - Remote IEx console
+- `2.0.0` - Send and receive files from a device
