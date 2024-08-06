@@ -29,8 +29,8 @@ defmodule NervesHubLink.Configurator.SharedSecret do
       |> Keyword.put_new(:key_length, 32)
       |> Keyword.put_new(:signature_version, "NH1")
       |> Keyword.put_new(:identifier, Nerves.Runtime.serial_number())
-      # Important to use os_time as system_time is not updated by NervesTime
-      # nearly as quickly
+      # Important to use os_time as system_time is not updated by Erlang as
+      # quickly. See https://www.erlang.org/doc/apps/erts/time_correction#erlang-system-time
       |> Keyword.put(:signed_at, System.os_time(:second))
 
     alg =
