@@ -29,7 +29,9 @@ defmodule NervesHubLink.Configurator.SharedSecret do
       |> Keyword.put_new(:key_length, 32)
       |> Keyword.put_new(:signature_version, "NH1")
       |> Keyword.put_new(:identifier, Nerves.Runtime.serial_number())
-      |> Keyword.put(:signed_at, System.system_time(:second))
+      # Important to use os_time as system_time is not updated by NervesTime
+      # nearly as quickly
+      |> Keyword.put(:signed_at, System.os_time(:second))
 
     alg =
       "#{opts[:signature_version]}-HMAC-#{opts[:key_digest]}-#{opts[:key_iterations]}-#{opts[:key_length]}"
