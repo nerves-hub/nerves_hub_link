@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.5.1] - 2024-08-09
+
+* Updated
+  * Fix issue causing shared secret authentications to fail until Erlang is able
+    to catch the system time up. (#225)
+
 ## [2.5.0] - 2024-07-14
 
 This latest release requires Elixir 1.13 or later.
