@@ -10,6 +10,7 @@ defmodule NervesHubLink.Socket do
   alias NervesHubLink.Configurator
   alias NervesHubLink.Configurator.SharedSecret
   alias NervesHubLink.Script
+  alias NervesHubLink.PubSub
   alias NervesHubLink.UpdateManager
   alias NervesHubLink.UploadFile
 
@@ -34,6 +35,11 @@ defmodule NervesHubLink.Socket do
 
   def check_connection(type) do
     GenServer.call(__MODULE__, {:check_connection, type})
+  end
+
+  def send_message(topic, event, params)
+      when is_binary(topic) and is_binary(event) and is_map(params) do
+    GenServer.call(__MODULE__, {:message, %{topic: topic, event: event, params: params}})
   end
 
   @spec send_file(Path.t()) :: :ok | {:error, :too_large | File.posix()}
@@ -150,12 +156,14 @@ defmodule NervesHubLink.Socket do
 
   @impl Slipstream
   def handle_join(@device_topic, reply, socket) do
+    PubSub.publish_topic_join(@device_topic, reply)
     Logger.debug("[#{inspect(__MODULE__)}] Joined Device channel")
     _ = handle_join_reply(reply, socket)
     {:ok, assign(socket, joined_at: System.monotonic_time(:millisecond))}
   end
 
-  def handle_join(@console_topic, _reply, socket) do
+  def handle_join(@console_topic, reply, socket) do
+    PubSub.publish_topic_join(@console_topic, reply)
     Logger.debug("[#{inspect(__MODULE__)}] Joined Console channel")
     {:ok, socket}
   end
@@ -237,6 +245,15 @@ defmodule NervesHubLink.Socket do
     end
   end
 
+  def handle_call({:message, m}, _from, socket) do
+    _ = push(socket, m.topic, m.event, m.params)
+    {:reply, :ok, socket}
+  rescue
+    error ->
+      Logger.error("Pushing message failed due to error: #{inspect(error)}")
+      {:reply, {:error, error}, socket}
+  end
+
   @impl Slipstream
   def handle_cast(:reconnect, socket) do
     # See handle_disconnect/2 for the reconnect call once the connection is
@@ -258,7 +275,14 @@ defmodule NervesHubLink.Socket do
   ##
   # Device API messages
   #
-  def handle_message(@device_topic, "fwup_public_keys", params, socket) do
+  # handle_message captures all messages and does PubSub publishing
+  # hands off handling to `handle_event/3`
+  def handle_message(topic, event, params, socket) do
+    PubSub.publish_channel_event(topic, event, params)
+    handle_event(topic, event, params, socket)
+  end
+
+  defp handle_event(@device_topic, "fwup_public_keys", params, socket) do
     count = Enum.count(params["keys"])
 
     config = %{socket.assigns.config | fwup_public_keys: params["keys"]}
@@ -276,7 +300,7 @@ defmodule NervesHubLink.Socket do
     {:ok, assign(socket, config: config)}
   end
 
-  def handle_message(@device_topic, "archive_public_keys", params, socket) do
+  defp handle_event(@device_topic, "archive_public_keys", params, socket) do
     count = Enum.count(params["keys"])
 
     config = %{socket.assigns.config | archive_public_keys: params["keys"]}
@@ -294,7 +318,7 @@ defmodule NervesHubLink.Socket do
     {:ok, assign(socket, config: config)}
   end
 
-  def handle_message(@device_topic, "reboot", _params, socket) do
+  defp handle_event(@device_topic, "reboot", _params, socket) do
     Logger.warning("[NervesHubLink] Reboot Request from NervesHub")
     _ = push(socket, @device_topic, "rebooting", %{})
     # TODO: Maybe allow delayed reboot
@@ -302,24 +326,24 @@ defmodule NervesHubLink.Socket do
     {:ok, socket}
   end
 
-  def handle_message(@device_topic, "identify", _params, socket) do
+  defp handle_event(@device_topic, "identify", _params, socket) do
     Client.identify()
     {:ok, socket}
   end
 
-  def handle_message(@device_topic, "scripts/run", params, socket) do
+  defp handle_event(@device_topic, "scripts/run", params, socket) do
     # See related handle_info for pushing back the script result
     :ok = Script.capture(params["text"], params["ref"])
     {:ok, socket}
   end
 
-  def handle_message(@device_topic, "archive", params, socket) do
+  defp handle_event(@device_topic, "archive", params, socket) do
     {:ok, info} = NervesHubLink.Message.ArchiveInfo.parse(params)
     _ = ArchiveManager.apply_archive(info, socket.assigns.config.archive_public_keys)
     {:ok, socket}
   end
 
-  def handle_message(@device_topic, "update", update, socket) do
+  defp handle_event(@device_topic, "update", update, socket) do
     case NervesHubLink.Message.UpdateInfo.parse(update) do
       {:ok, %NervesHubLink.Message.UpdateInfo{} = info} ->
         _ = UpdateManager.apply_update(info, socket.assigns.config.fwup_public_keys)
@@ -337,7 +361,7 @@ defmodule NervesHubLink.Socket do
   ##
   # Console API messages
   #
-  def handle_message(@console_topic, "restart", _payload, socket) do
+  defp handle_event(@console_topic, "restart", _payload, socket) do
     Logger.warning("[#{inspect(__MODULE__)}] Restarting IEx process from web request")
 
     _ = push(socket, @console_topic, "up", %{data: "\r*** Restarting IEx ***\r"})
@@ -350,26 +374,26 @@ defmodule NervesHubLink.Socket do
     {:ok, set_iex_timer(socket)}
   end
 
-  def handle_message(@console_topic, message, payload, %{assigns: %{iex_pid: nil}} = socket) do
+  defp handle_event(@console_topic, message, payload, %{assigns: %{iex_pid: nil}} = socket) do
     handle_message(@console_topic, message, payload, start_iex(socket))
   end
 
-  def handle_message(@console_topic, "dn", %{"data" => data}, socket) do
+  defp handle_event(@console_topic, "dn", %{"data" => data}, socket) do
     _ = ExTTY.send_text(socket.assigns.iex_pid, data)
     {:ok, set_iex_timer(socket)}
   end
 
-  def handle_message(
-        @console_topic,
-        "window_size",
-        %{"height" => height, "width" => width},
-        socket
-      ) do
+  defp handle_event(
+         @console_topic,
+         "window_size",
+         %{"height" => height, "width" => width},
+         socket
+       ) do
     _ = ExTTY.window_change(socket.assigns.iex_pid, width, height)
     {:ok, set_iex_timer(socket)}
   end
 
-  def handle_message(@console_topic, "file-data/start", params, socket) do
+  defp handle_event(@console_topic, "file-data/start", params, socket) do
     :ok = File.mkdir_p!(socket.assigns.data_path)
     path = Path.join(socket.assigns.data_path, params["filename"])
     _ = File.rm_rf!(path)
@@ -377,7 +401,7 @@ defmodule NervesHubLink.Socket do
     {:ok, socket}
   end
 
-  def handle_message(@console_topic, "file-data", params, socket) do
+  defp handle_event(@console_topic, "file-data", params, socket) do
     path = Path.join(socket.assigns.data_path, params["filename"])
 
     _res =
@@ -389,16 +413,16 @@ defmodule NervesHubLink.Socket do
     {:ok, socket}
   end
 
-  def handle_message(@console_topic, "file-data/stop", _params, socket) do
+  defp handle_event(@console_topic, "file-data/stop", _params, socket) do
     {:ok, socket}
   end
 
   ##
-  # Unknown message
+  # Any other message
   #
-  def handle_message(topic, event, _params, socket) do
-    Logger.warning("Unknown message (\"#{topic}:#{event}\") received")
-
+  defp handle_event(_topic, _event, _params, socket) do
+    # We don't warn an unknown messages as those are possibly handled by other
+    # processes via PubSub.
     {:ok, socket}
   end
 
@@ -477,6 +501,8 @@ defmodule NervesHubLink.Socket do
 
   @impl Slipstream
   def handle_topic_close(topic, reason, socket) when reason != :left do
+    PubSub.publish_topic_close(topic, reason)
+
     if topic == @device_topic do
       _ = Client.handle_error(reason)
     end
@@ -486,6 +512,8 @@ defmodule NervesHubLink.Socket do
 
   @impl Slipstream
   def handle_disconnect(reason, socket) do
+    PubSub.publish_disconnect(@device_topic, reason)
+    PubSub.publish_disconnect(@console_topic, reason)
     _ = Client.handle_error(reason)
     :alarm_handler.set_alarm({NervesHubLink.Disconnected, [reason: reason]})
     channel_config = %{socket.channel_config | reconnect_after_msec: Client.reconnect_backoff()}

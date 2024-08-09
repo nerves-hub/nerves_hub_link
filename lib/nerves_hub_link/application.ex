@@ -6,6 +6,7 @@ defmodule NervesHubLink.Application do
   alias NervesHubLink.Configurator
   alias NervesHubLink.Socket
   alias NervesHubLink.FwupConfig
+  alias NervesHubLink.PubSub
   alias NervesHubLink.UpdateManager
 
   def start(_type, _args) do
@@ -24,10 +25,11 @@ defmodule NervesHubLink.Application do
     Supervisor.start_link(children, strategy: :one_for_one, name: NervesHubLink.Supervisor)
   end
 
-  defp children(%{connect: false}, _fwup_config), do: []
+  defp children(%{connect: false}, _fwup_config), do: [PubSub]
 
   defp children(config, fwup_config) do
     [
+      PubSub,
       {UpdateManager, fwup_config},
       {ArchiveManager, config},
       {Socket, config}
