@@ -331,7 +331,7 @@ defmodule NervesHubLink.Socket do
     {:ok, socket}
   end
 
-  def handle_event(@device_topic, "scripts/run", params, socket) do
+  defp handle_event(@device_topic, "scripts/run", params, socket) do
     # See related handle_info for pushing back the script result
     :ok = Script.capture(params["text"], params["ref"])
     {:ok, socket}
