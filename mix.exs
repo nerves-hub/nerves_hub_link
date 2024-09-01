@@ -35,7 +35,7 @@ defmodule NervesHubLink.MixProject do
         host: nil,
         fwup_public_keys: []
       ],
-      extra_applications: [:logger, :iex, :inets, :sasl],
+      extra_applications: [:logger, :iex, :inets, :sasl, :os_mon],
       mod: {NervesHubLink.Application, []}
     ]
   end
@@ -87,11 +87,13 @@ defmodule NervesHubLink.MixProject do
       {:mint, "~> 1.2"},
       {:mox, "~> 1.0", only: :test},
       {:nerves_key, "~> 1.0 or ~> 0.5", optional: true},
+      {:vintage_net, "~> 0.13", optional: true},
       {:nerves_runtime, "~> 0.8"},
       {:nerves_time, "~> 0.4"},
       {:plug_crypto, "~> 2.0"},
       {:plug_cowboy, "~> 2.0", only: :test},
       {:slipstream, "~> 1.0 or ~> 0.8"},
+      {:whenwhere, "~> 0.1.1"},
       {:x509, "~> 0.5"}
     ]
   end
