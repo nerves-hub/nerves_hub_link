@@ -5,6 +5,8 @@ defmodule NervesHubLink.Application do
   alias NervesHubLink.Client
   alias NervesHubLink.Configurator
   alias NervesHubLink.Socket
+  alias NervesHubLink.Features
+  alias NervesHubLink.FeaturesSupervisor
   alias NervesHubLink.FwupConfig
   alias NervesHubLink.UpdateManager
 
@@ -28,6 +30,8 @@ defmodule NervesHubLink.Application do
 
   defp children(config, fwup_config) do
     [
+      {DynamicSupervisor, name: FeaturesSupervisor},
+      Features,
       {UpdateManager, fwup_config},
       {ArchiveManager, config},
       {Socket, config}
