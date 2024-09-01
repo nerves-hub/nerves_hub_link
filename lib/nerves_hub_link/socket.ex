@@ -15,6 +15,7 @@ defmodule NervesHubLink.Socket do
 
   @console_topic "console"
   @device_topic "device"
+  @features_topic "features"
 
   def start_link(config) do
     GenServer.start_link(__MODULE__, config, name: __MODULE__)
@@ -72,6 +73,10 @@ defmodule NervesHubLink.Socket do
   @spec console_active?() :: boolean()
   def console_active?() do
     GenServer.call(__MODULE__, :console_active?)
+  end
+
+  def push(topic, event, message) do
+    GenServer.call(__MODULE__, {:push, topic, event, message})
   end
 
   @impl Slipstream
@@ -157,6 +162,12 @@ defmodule NervesHubLink.Socket do
 
   def handle_join(@console_topic, _reply, socket) do
     Logger.debug("[#{inspect(__MODULE__)}] Joined Console channel")
+    {:ok, socket}
+  end
+
+  def handle_join(@features_topic, reply, socket) do
+    features = for {feature, true} <- reply, do: feature
+    NervesHubLink.Features.attach(features)
     {:ok, socket}
   end
 
@@ -334,6 +345,15 @@ defmodule NervesHubLink.Socket do
     end
   end
 
+  def handle_message(@device_topic, "features:get", _payload, socket) do
+    available_features =
+      for {name, %{version: ver}} <- NervesHubLink.Features.list(),
+          into: %{},
+          do: {name, to_string(ver)}
+
+    {:ok, join(socket, "features", available_features)}
+  end
+
   ##
   # Console API messages
   #
@@ -390,6 +410,11 @@ defmodule NervesHubLink.Socket do
   end
 
   def handle_message(@console_topic, "file-data/stop", _params, socket) do
+    {:ok, socket}
+  end
+
+  def handle_message(@features_topic, event, payload, socket) do
+    NervesHubLink.Features.handle_event(event, payload)
     {:ok, socket}
   end
 
@@ -481,7 +506,7 @@ defmodule NervesHubLink.Socket do
       _ = Client.handle_error(reason)
     end
 
-    rejoin(socket, topic, socket.assigns.params)
+    rejoin(socket, topic)
   end
 
   @impl Slipstream
