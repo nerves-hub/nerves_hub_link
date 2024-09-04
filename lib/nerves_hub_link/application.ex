@@ -9,28 +9,29 @@ defmodule NervesHubLink.Application do
   alias NervesHubLink.UpdateManager
 
   def start(_type, _args) do
-    config = Configurator.build()
+    connect? = Application.get_env(:nerves_hub_link, :connect, true)
 
-    fwup_config = %FwupConfig{
-      fwup_devpath: config.fwup_devpath,
-      fwup_task: config.fwup_task,
-      fwup_env: config.fwup_env,
-      handle_fwup_message: &Client.handle_fwup_message/1,
-      update_available: &Client.update_available/1
-    }
+    children =
+      if connect? do
+        config = Configurator.build()
 
-    children = children(config, fwup_config)
+        fwup_config = %FwupConfig{
+          fwup_devpath: config.fwup_devpath,
+          fwup_task: config.fwup_task,
+          fwup_env: config.fwup_env,
+          handle_fwup_message: &Client.handle_fwup_message/1,
+          update_available: &Client.update_available/1
+        }
+
+        [
+          {UpdateManager, fwup_config},
+          {ArchiveManager, config},
+          {Socket, config}
+        ]
+      else
+        []
+      end
 
     Supervisor.start_link(children, strategy: :one_for_one, name: NervesHubLink.Supervisor)
-  end
-
-  defp children(%{connect: false}, _fwup_config), do: []
-
-  defp children(config, fwup_config) do
-    [
-      {UpdateManager, fwup_config},
-      {ArchiveManager, config},
-      {Socket, config}
-    ]
   end
 end
