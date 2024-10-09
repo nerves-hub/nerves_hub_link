@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.5.2] - 2024-10-09
+
+* Updated
+  * Change to only configure if connecting (#229)
+
 ## [2.5.1] - 2024-08-09
 
 * Updated
