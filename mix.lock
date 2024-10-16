@@ -43,5 +43,5 @@
   "slipstream": {:hex, :slipstream, "1.1.2", "368d84dab2aed061aaa83762c28a0fe1fcb42a7eb8a7019a67c58de06d486fb9", [:mix], [{:jason, "~> 1.0", [hex: :jason, repo: "hexpm", optional: true]}, {:mint_web_socket, "~> 0.2 or ~> 1.0", [hex: :mint_web_socket, repo: "hexpm", optional: false]}, {:nimble_options, "~> 0.1 or ~> 1.0", [hex: :nimble_options, repo: "hexpm", optional: false]}, {:telemetry, "~> 0.4 or ~> 1.0", [hex: :telemetry, repo: "hexpm", optional: false]}], "hexpm", "585abc367f522efd1946f539129849f09b65be46a166c8de67db392861bedcb9"},
   "telemetry": {:hex, :telemetry, "1.3.0", "fedebbae410d715cf8e7062c96a1ef32ec22e764197f70cda73d82778d61e7a2", [:rebar3], [], "hexpm", "7015fc8919dbe63764f4b4b87a95b7c0996bd539e0d499be6ec9d7f3875b79e6"},
   "uboot_env": {:hex, :uboot_env, "1.0.1", "b0e136cf1a561412ff7db23ed2b6df18d7c7ce2fc59941afd851006788a67f3d", [:mix], [], "hexpm", "b6d4fe7c24123be57ed946c48116d23173e37944bc945b8b76fccc437909c60b"},
-  "x509": {:hex, :x509, "0.8.9", "03c47e507171507d3d3028d802f48dd575206af2ef00f764a900789dfbe17476", [:mix], [], "hexpm", "ea3fb16a870a199cb2c45908a2c3e89cc934f0434173dc0c828136f878f11661"},
+  "x509": {:hex, :x509, "0.8.10", "5d1ec6d5f4db31982f9dc34e6a1eebd631d04599e0b6c1c259f1dadd4495e11f", [:mix], [], "hexpm", "a191221665af28b9bdfff0c986ef55f80e126d8ce751bbdf6cefa846410140c0"},
 }
