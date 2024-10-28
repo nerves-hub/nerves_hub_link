@@ -24,10 +24,21 @@ defmodule NervesHubLink.Features.Health do
     if report do
       :alarm_handler.clear_alarm(NervesHubLink.Features.Health.CheckFailed)
 
+      alarms =
+        case :gen_event.which_handlers(:alarm_handler) do
+          [:alarm_handler] ->
+            # Using default alarm handler, it is not to be used
+            # it will be very confusing, just send no alarms
+            %{}
+
+          _ ->
+            report.alarms()
+        end
+
       DeviceStatus.new(
         timestamp: report.timestamp(),
         metadata: report.metadata(),
-        alarms: report.alarms(),
+        alarms: alarms,
         metrics: report.metrics(),
         checks: report.checks()
       )
