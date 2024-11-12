@@ -5,6 +5,11 @@ defmodule NervesHubLink.Features do
   alias NervesHubLink.FeaturesSupervisor
   alias NervesHubLink.Socket
 
+  @default_feature_modules [
+    NervesHubLink.Features.Health,
+    NervesHubLink.Features.Geo
+  ]
+
   @doc """
   Invoked when routing a Feature event
 
@@ -68,18 +73,22 @@ defmodule NervesHubLink.Features do
   end
 
   defp find_features() do
-    for {mod, _path} <- :code.all_loaded(),
+    modules = Application.get_env(:nerves_hub_link, :feature_modules, @default_feature_modules)
+    Enum.each(modules, &Code.ensure_loaded/1)
+
+    for mod <- modules,
         function_exported?(mod, :module_info, 1),
         {:behaviour, behaviours} <- mod.module_info(:attributes),
         __MODULE__ in behaviours,
         into: %{} do
       {mod.__name__(), %{module: mod, version: mod.__version__(), attached?: false}}
     end
+    |> dbg()
   end
 
   @impl GenServer
   def handle_call(:list, _from, state) do
-    {:reply, state.features, state}
+    {:reply, find_features(), state}
   end
 
   def handle_call({:push, feature, event, payload}, _from, state) do
