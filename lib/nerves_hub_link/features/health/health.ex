@@ -13,7 +13,7 @@ defmodule NervesHubLink.Features.Health do
   end
 
   @impl NervesHubLink.Features
-  def handle_event("health:check", _msg, state) do
+  def handle_event("check", _msg, state) do
     _ = push("report", %{"value" => check_health()})
     {:noreply, state}
   end
@@ -34,13 +34,20 @@ defmodule NervesHubLink.Features.Health do
     end
   rescue
     err ->
-      Logger.error("Health check failed due to error: #{inspect(err)}")
-      :alarm_handler.set_alarm({NervesHubLink.Features.Health.CheckFailed, []})
+      reason =
+        try do
+          inspect(err)
+        rescue
+          _ ->
+            "unknown error"
+        end
+      Logger.error("Health check failed due to error: #{reason}")
+      :alarm_handler.set_alarm({NervesHubLink.Features.Health.CheckFailed, [reason: reason]})
 
       DeviceStatus.new(
         timestamp: DateTime.utc_now(),
         metadata: %{},
-        alarms: %{to_string(NervesHubLink.Features.Health.CheckFailed) => []},
+        alarms: %{to_string(NervesHubLink.Features.Health.CheckFailed) => reason},
         metrics: %{},
         checks: %{}
       )
