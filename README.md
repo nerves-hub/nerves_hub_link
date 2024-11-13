@@ -3,9 +3,9 @@
 [![CircleCI](https://circleci.com/gh/nerves-hub/nerves_hub_link/tree/main.svg?style=svg)](https://circleci.com/gh/nerves-hub/nerves_hub_link/tree/main)
 [![Hex version](https://img.shields.io/hexpm/v/nerves_hub_link.svg "Hex version")](https://hex.pm/packages/nerves_hub_link)
 
-**Important**
+The Device-side client library for NervesHub.
 
-This is the 2.0 development branch of NervesHubLink. If you have been using NervesHub prior to around April, 2023 and are not following 2.0 development, see the `maint-v1` branch. The `maint-v1` branch is being used in production. 2.0 development is in progress, and we don't have guides or good documentation yet. If you use the 2.0 development branch, we don't expect breaking changes, but please bear with us as we complete the 2.0 release.
+This is the 2.x version NervesHubLink. If you have been using NervesHub prior to around April, 2023 and have not updated to 2.0 or newer see the `maint-v1` branch.
 
 ---
 
