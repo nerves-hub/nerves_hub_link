@@ -83,7 +83,6 @@ defmodule NervesHubLink.Features do
         into: %{} do
       {mod.__name__(), %{module: mod, version: mod.__version__(), attached?: false}}
     end
-    |> dbg()
   end
 
   @impl GenServer
