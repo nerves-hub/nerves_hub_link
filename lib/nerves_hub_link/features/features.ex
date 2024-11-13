@@ -52,6 +52,7 @@ defmodule NervesHubLink.Features do
           %{
             String.t() => %{
               attached?: boolean(),
+              attach_ref: String.t(),
               module: module(),
               version: boolean()
             }
@@ -81,7 +82,8 @@ defmodule NervesHubLink.Features do
         {:behaviour, behaviours} <- mod.module_info(:attributes),
         __MODULE__ in behaviours,
         into: %{} do
-      {mod.__name__(), %{module: mod, version: mod.__version__(), attached?: false}}
+      {mod.__name__(),
+       %{module: mod, version: mod.__version__(), attached?: false, attach_ref: nil}}
     end
   end
 
@@ -112,8 +114,8 @@ defmodule NervesHubLink.Features do
     state =
       for {_, pid, _, [module]} <-
             DynamicSupervisor.which_children(FeaturesSupervisor),
-          {feature, %{module: ^module}} <- state.features,
-          features == :all or feature in features,
+          {feature, %{attach_ref: ref, module: ^module}} <- state.features,
+          features == :all or feature in features or ref in features,
           reduce: state do
         acc ->
           # Ignore since either :ok, or {:error, :not_found}
@@ -132,9 +134,9 @@ defmodule NervesHubLink.Features do
       for feature <- features, reduce: state do
         acc ->
           with mod when not is_nil(mod) <- state.features[feature][:module],
-               :ok <- start_feature(mod) do
-            _ = Socket.push("features", "#{feature}:attached", %{})
-            put_in(acc.features[feature][:attached?], true)
+               :ok <- start_feature(mod),
+               {:ok, ref} <- Socket.push("features", "#{feature}:attached", %{}) do
+            update_in(acc.features[feature], &%{&1 | attached?: true, attach_ref: ref})
           else
             error ->
               reason = if error, do: "start_failure", else: "unknown_feature"
