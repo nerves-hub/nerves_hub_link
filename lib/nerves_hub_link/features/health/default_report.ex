@@ -62,8 +62,13 @@ defmodule NervesHubLink.Features.Health.DefaultReport do
   defp vof({mod, fun, args}), do: apply(mod, fun, args)
   defp vof(val), do: val
 
+  defp get_health_config(key, default) do
+    config = Application.get_env(:nerves_hub_link, :health, [])
+    Keyword.get(config, key, default)
+  end
+
   defp metadata_from_config do
-    metadata = Application.get_env(:nerves_hub_health, :metadata, %{})
+    metadata = get_health_config(:metadata, %{})
 
     for {key, val_or_fun} <- metadata, into: %{} do
       {inspect(key), vof(val_or_fun)}
@@ -71,7 +76,7 @@ defmodule NervesHubLink.Features.Health.DefaultReport do
   end
 
   defp metrics_from_config do
-    metrics = Application.get_env(:nerves_hub_health, :metrics, %{})
+    metrics = get_health_config(:metrics, %{})
 
     for {key, val_or_fun} <- metrics, into: %{} do
       {inspect(key), vof(val_or_fun)}
@@ -79,7 +84,7 @@ defmodule NervesHubLink.Features.Health.DefaultReport do
   end
 
   defp checks_from_config do
-    checks = Application.get_env(:nerves_hub_health, :checks, %{})
+    checks = get_health_config(:checks, %{})
 
     for {key, val_or_fun} <- checks, into: %{} do
       {inspect(key), vof(val_or_fun)}
@@ -87,7 +92,7 @@ defmodule NervesHubLink.Features.Health.DefaultReport do
   end
 
   defp connectivity_from_config do
-    connectivity = Application.get_env(:nerves_hub_health, :connectivity, %{})
+    connectivity = get_health_config(:connectivity, %{})
 
     for {key, val_or_fun} <- connectivity, into: %{} do
       {inspect(key), vof(val_or_fun)}

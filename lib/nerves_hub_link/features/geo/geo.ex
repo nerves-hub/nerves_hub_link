@@ -42,7 +42,7 @@ defmodule NervesHubLink.Features.Geo do
   end
 
   defp resolver() do
-    resolver = Application.get_env(:nerves_hub_link, :geo)[:resolver] || DefaultResolver
+    resolver = Application.get_env(:nerves_hub_link, :geo, [])[:resolver] || DefaultResolver
     if function_exported?(resolver, :resolve_location, 0), do: resolver, else: DefaultResolver
   end
 end
