@@ -41,6 +41,7 @@ defmodule NervesHubLink.Features.Health do
           _ ->
             "unknown error"
         end
+
       Logger.error("Health check failed due to error: #{reason}")
       :alarm_handler.set_alarm({NervesHubLink.Features.Health.CheckFailed, [reason: reason]})
 

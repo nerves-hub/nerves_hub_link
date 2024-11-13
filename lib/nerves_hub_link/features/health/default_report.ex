@@ -94,12 +94,23 @@ defmodule NervesHubLink.Features.Health.DefaultReport do
     end
   end
 
+  @default_temperature_source
   defp cpu_temperature do
-    with {:ok, content} <- File.read("/sys/class/thermal/thermal_zone0/temp"),
-         {millidegree_c, _} <- Integer.parse(content) do
-      %{cpu_temp: millidegree_c / 1000}
-    else
-      _ -> cpu_temperature_rpi()
+    cond do
+      match?({:ok, _}, File.stat("/sys/class/thermal/thermal_zone0/temp")) ->
+        with {:ok, content} <- File.read(),
+             {millidegree_c, _} <- Integer.parse(content) do
+          %{cpu_temp: millidegree_c / 1000}
+        else
+          _ ->
+            %{}
+        end
+
+      match?({:ok, _}, File.stat("/usr/bin/vcgencmd")) ->
+        cpu_temperature_rpi()
+
+      true ->
+        %{}
     end
   end
 
@@ -158,6 +169,9 @@ defmodule NervesHubLink.Features.Health.DefaultReport do
     used_percent = round(used_mb / size_mb * 100)
 
     %{size_mb: size_mb, used_mb: used_mb, used_percent: used_percent}
+  rescue
+    _ ->
+      %{}
   end
 
   defp disk do
