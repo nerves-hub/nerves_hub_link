@@ -292,6 +292,66 @@ config :nerves_hub_link, connect: false
 
 to your `config/test.exs`
 
+## Features: Health & Geo
+
+Features are pieces of non-critical functionality going over the NervesHub WebSocket. They are separated out under the Features mechanism so that the client can happily ignore anything feature-related in service of keeping firmware updates healthy. That is always the top priority.
+
+There are two features currently:
+
+- **Health** reports device metrics, alarms, metadata and similar.
+- **Geo** provides GeoIP information and allows slotting in a better source.
+
+You NervesHub server controls enabling and disabling of features to allow you to switch them off if they impact operations.
+
+### Configure Health
+
+You can add your own metrics, metadata and alarms:
+
+In your config.exs for the device:
+
+```
+config :nerves_hub_link,
+  health: [
+    # metrics are added with a key and a module function and arguments
+    # the function should return a number (int or float is fine)
+    metrics: %{
+      "cats_passed" => {CatCounter, :total, []}
+    },
+
+    # metadata is identical but should return a string
+    metrics: %{
+      "placement" => {CatCounter, :venue, []}
+    }
+  ]
+```
+
+Or you can implement a completely custom reporting module by implementing `NervesHubLink.Features.Health.Report` and configuring it:
+
+```
+config :nerves_hub_link,
+  health: [
+    report: CatCounter.MyHealthReport
+  ]
+```
+
+## Configure Geo
+
+It is intended to be easy to replace the default Geo Resolver with your own. Maybe you have a GPS module or can resolve a reasonably precise location via LTE. Just change config:
+
+```
+config :nerves_hub_link,
+  geo: [
+    resolver: CatCounter.MyResolver
+  ]
+```
+
+Your module only needs to implement a single function, see `NervesHubLink.Features.Geo.Resolver` for details.
+
+
+## Configure Alarms
+
+NervesHubLink will automatically report Erlang Alarms from `:alarm_handler` IF you have added a custom alarm handler. The default one is not very helpful and not intended for production use from what I gather. One well-used option is `alarmist` that can be found on Hex.
+
 ## Debugging errors
 
 ### TLS client errors
