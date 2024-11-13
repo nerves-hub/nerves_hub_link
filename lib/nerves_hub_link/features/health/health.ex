@@ -13,7 +13,7 @@ defmodule NervesHubLink.Features.Health do
   end
 
   @impl NervesHubLink.Features
-  def handle_event("health:check", _msg, state) do
+  def handle_event("check", _msg, state) do
     _ = push("report", %{"value" => check_health()})
     {:noreply, state}
   end

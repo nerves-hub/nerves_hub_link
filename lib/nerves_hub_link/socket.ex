@@ -165,8 +165,8 @@ defmodule NervesHubLink.Socket do
     {:ok, socket}
   end
 
-  def handle_join(@features_topic, reply, socket) do
-    features = for {feature, true} <- reply, do: feature
+  def handle_join(@features_topic, features, socket) do
+    # features = for {feature, true} <- reply, do: feature
     NervesHubLink.Features.attach(features)
     {:ok, socket}
   end
@@ -414,6 +414,7 @@ defmodule NervesHubLink.Socket do
   end
 
   def handle_message(@features_topic, event, payload, socket) do
+    dbg()
     NervesHubLink.Features.handle_event(event, payload)
     {:ok, socket}
   end
@@ -498,6 +499,12 @@ defmodule NervesHubLink.Socket do
   def handle_info(msg, socket) do
     Logger.warning("[#{inspect(__MODULE__)}] Unhandled handle_info: #{inspect(msg)}")
     {:noreply, socket}
+  end
+
+  @impl Slipstream
+  def handle_reply(ref, {:error, "detach"}, socket) do
+    NervesHubLink.Features.detach(ref) |> dbg()
+    {:ok, socket}
   end
 
   @impl Slipstream
