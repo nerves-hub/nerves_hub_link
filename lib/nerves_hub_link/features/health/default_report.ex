@@ -99,11 +99,11 @@ defmodule NervesHubLink.Features.Health.DefaultReport do
     end
   end
 
-  @default_temperature_source
+  @default_temperature_source "/sys/class/thermal/thermal_zone0/temp"
   defp cpu_temperature do
     cond do
-      match?({:ok, _}, File.stat("/sys/class/thermal/thermal_zone0/temp")) ->
-        with {:ok, content} <- File.read(),
+      match?({:ok, _}, File.stat(@default_temperature_source)) ->
+        with {:ok, content} <- File.read(@default_temperature_source),
              {millidegree_c, _} <- Integer.parse(content) do
           %{cpu_temp: millidegree_c / 1000}
         else
