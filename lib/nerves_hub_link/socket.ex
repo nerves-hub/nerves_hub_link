@@ -414,7 +414,6 @@ defmodule NervesHubLink.Socket do
   end
 
   def handle_message(@features_topic, event, payload, socket) do
-    dbg()
     NervesHubLink.Features.handle_event(event, payload)
     {:ok, socket}
   end
@@ -503,7 +502,7 @@ defmodule NervesHubLink.Socket do
 
   @impl Slipstream
   def handle_reply(ref, {:error, "detach"}, socket) do
-    NervesHubLink.Features.detach(ref) |> dbg()
+    NervesHubLink.Features.detach(ref)
     {:ok, socket}
   end
 
