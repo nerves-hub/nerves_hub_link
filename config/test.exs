@@ -40,3 +40,8 @@ config :nerves_runtime,
      }}
 
 config :nerves_time, :servers, []
+
+config :vintage_net,
+  resolvconf: "/dev/null",
+  persistence: VintageNet.Persistence.Null,
+  bin_ip: "false"

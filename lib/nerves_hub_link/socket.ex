@@ -15,6 +15,7 @@ defmodule NervesHubLink.Socket do
 
   @console_topic "console"
   @device_topic "device"
+  @extensions_topic "extensions"
 
   def start_link(config) do
     GenServer.start_link(__MODULE__, config, name: __MODULE__)
@@ -72,6 +73,10 @@ defmodule NervesHubLink.Socket do
   @spec console_active?() :: boolean()
   def console_active?() do
     GenServer.call(__MODULE__, :console_active?)
+  end
+
+  def push(topic, event, message) do
+    GenServer.call(__MODULE__, {:push, topic, event, message})
   end
 
   @impl Slipstream
@@ -157,6 +162,11 @@ defmodule NervesHubLink.Socket do
 
   def handle_join(@console_topic, _reply, socket) do
     Logger.debug("[#{inspect(__MODULE__)}] Joined Console channel")
+    {:ok, socket}
+  end
+
+  def handle_join(@extensions_topic, extensions, socket) do
+    NervesHubLink.Extensions.attach(extensions)
     {:ok, socket}
   end
 
@@ -334,6 +344,15 @@ defmodule NervesHubLink.Socket do
     end
   end
 
+  def handle_message(@device_topic, "extensions:get", _payload, socket) do
+    available_extensions =
+      for {name, %{version: ver}} <- NervesHubLink.Extensions.list(),
+          into: %{},
+          do: {name, to_string(ver)}
+
+    {:ok, join(socket, "extensions", available_extensions)}
+  end
+
   ##
   # Console API messages
   #
@@ -390,6 +409,11 @@ defmodule NervesHubLink.Socket do
   end
 
   def handle_message(@console_topic, "file-data/stop", _params, socket) do
+    {:ok, socket}
+  end
+
+  def handle_message(@extensions_topic, event, payload, socket) do
+    NervesHubLink.Extensions.handle_event(event, payload)
     {:ok, socket}
   end
 
@@ -476,12 +500,18 @@ defmodule NervesHubLink.Socket do
   end
 
   @impl Slipstream
+  def handle_reply(ref, {:error, "detach"}, socket) do
+    NervesHubLink.Extensions.detach(ref)
+    {:ok, socket}
+  end
+
+  @impl Slipstream
   def handle_topic_close(topic, reason, socket) when reason != :left do
     if topic == @device_topic do
       _ = Client.handle_error(reason)
     end
 
-    rejoin(socket, topic, socket.assigns.params)
+    rejoin(socket, topic)
   end
 
   @impl Slipstream

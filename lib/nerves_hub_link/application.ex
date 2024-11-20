@@ -5,6 +5,8 @@ defmodule NervesHubLink.Application do
   alias NervesHubLink.Client
   alias NervesHubLink.Configurator
   alias NervesHubLink.Socket
+  alias NervesHubLink.Extensions
+  alias NervesHubLink.ExtensionsSupervisor
   alias NervesHubLink.FwupConfig
   alias NervesHubLink.UpdateManager
 
@@ -24,6 +26,8 @@ defmodule NervesHubLink.Application do
         }
 
         [
+          {DynamicSupervisor, name: ExtensionsSupervisor},
+          Extensions,
           {UpdateManager, fwup_config},
           {ArchiveManager, config},
           {Socket, config}
