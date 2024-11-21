@@ -173,7 +173,7 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
     used_mb = round(used_kb / 1000)
     used_percent = round(used_mb / size_mb * 100)
 
-    %{size_mb: size_mb, used_mb: used_mb, used_percent: used_percent}
+    %{mem_size_mb: size_mb, mem_used_mb: used_mb, mem_used_percent: used_percent}
   rescue
     _ ->
       %{}
