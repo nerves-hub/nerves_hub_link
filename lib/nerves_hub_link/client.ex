@@ -181,6 +181,7 @@ defmodule NervesHubLink.Client do
 
       {:ok, 0, _message} ->
         initiate_reboot()
+        NervesHubLink.send_update_status("rebooting_after_update")
 
       _ ->
         :ok
