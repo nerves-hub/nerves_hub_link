@@ -30,6 +30,9 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
           {"bad alarm term", ""}
       end
     end
+  rescue
+    error ->
+      %{NervesHubLink.AlarmReportFailed => inspect(error)}
   end
 
   @impl Report
