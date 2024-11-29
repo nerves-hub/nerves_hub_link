@@ -22,17 +22,13 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
 
   @impl Report
   def alarms do
-    for {id, description} <- :alarm_handler.get_alarms(), into: %{} do
-      try do
-        {inspect(id), inspect(description)}
-      catch
-        _, _ ->
-          {"bad alarm term", ""}
-      end
+    case :alarm_handler.get_alarms() do
+      alarms when is_list(alarms) ->
+        for {id, description} <- alarms, into: %{}, do: {inspect(id), inspect(description)}
+
+      err ->
+        %{"NervesHubLink.AlarmReportFailed" => inspect(err)}
     end
-  rescue
-    error ->
-      %{NervesHubLink.AlarmReportFailed => inspect(error)}
   end
 
   @impl Report
