@@ -3,7 +3,7 @@ defmodule NervesHubLink.Configurator do
   alias __MODULE__.Config
   require Logger
 
-  @device_api_version "2.5.2"
+  @device_api_version Mix.Project.config()[:version]
   @console_version "2.0.0"
 
   defmodule Config do
