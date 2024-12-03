@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.6.0] - 2024-12-03
+This update includes Extensions, a mechanism to handle extensions on a device for custom data and/or reporting outside the firmware update mechanism. These are
+isolated from the socket as to not get in the way of potential firmware updates and can be defined in external libs as well as this one by implementing the `NervesHubLink.Extensions` behavior.
+
+* Added
+  * Add support for Extensions using the Socket (#228)
+
+* Updated
+  * Bump device_api_version to 2.2.0; check README for details (#255)
+
 ## [2.5.2] - 2024-10-09
 
 * Updated
