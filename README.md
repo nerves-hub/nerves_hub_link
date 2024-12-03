@@ -382,6 +382,7 @@ See also [NervesHubWeb: Potential SSL Issues](https://github.com/nerves-hub/nerv
 - `1.0.0` - Updating firmware, status updates, reboot device
 - `2.0.0` - Identify a device, archives
 - `2.1.0` - Run scripts on a device separate from the console, sync firmware keys and archive keys
+- `2.2.0` - Report what extensions are enabled and their version
 
 ### `console_version`
 
