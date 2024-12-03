@@ -11,6 +11,8 @@ and can be adjusted at the product or device level for granular control.
 
 * Added
   * Add support for Extensions using the Socket (#228)
+    * Initial extensions supported are `NervesHubLink.Extensions.Health` and
+      `NervesHubLink.Extensions.Geo`
 
 * Updated
   * Bump device_api_version to 2.2.0; check README for details (#255)
