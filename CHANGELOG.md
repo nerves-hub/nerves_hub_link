@@ -1,8 +1,13 @@
 # Changelog
 
 ## [2.6.0] - 2024-12-03
-This update includes Extensions, a mechanism to handle extensions on a device for custom data and/or reporting outside the firmware update mechanism. These are
-isolated from the socket as to not get in the way of potential firmware updates and can be defined in external libs as well as this one by implementing the `NervesHubLink.Extensions` behavior.
+
+This update includes Extensions, a mechanism to handle extensions on a device
+for custom data and/or reporting outside the firmware update mechanism. These
+are isolated from the socket as to not get in the way of potential firmware
+updates and can be defined in external libs as well as this one by implementing
+the `NervesHubLink.Extensions` behavior. Extensions are controlled by NervesHub
+and can be adjusted at the product or device level for granular control.
 
 * Added
   * Add support for Extensions using the Socket (#228)
