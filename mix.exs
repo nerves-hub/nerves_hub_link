@@ -77,7 +77,7 @@ defmodule NervesHubLink.MixProject do
   defp deps do
     [
       {:castore, "~> 0.1 or ~> 1.0", optional: true},
-      {:credo, "~> 1.2", only: :test, runtime: false},
+      {:credo, "~> 1.2", only: :dev, runtime: false},
       {:dialyxir, "~> 1.1", only: [:dev, :test], runtime: false},
       {:excoveralls, "~> 0.10", only: :test},
       {:ex_doc, "~> 0.18", only: :docs, runtime: false},
