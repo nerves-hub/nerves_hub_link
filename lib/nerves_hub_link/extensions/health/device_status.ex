@@ -38,10 +38,9 @@ defmodule NervesHubLink.Extensions.Health.DeviceStatus do
           }
         }
 
-  alias __MODULE__, as: DS
-
+  @spec new(Access.t()) :: t()
   def new(kv) do
-    %DS{
+    %__MODULE__{
       timestamp: kv[:timestamp],
       metadata: kv[:metadata],
       alarms: kv[:alarms],
