@@ -12,7 +12,7 @@ defmodule NervesHubLink.Application do
   alias NervesHubLink.UpdateManager
 
   @spec start(Application.start_type(), any()) ::
-          {:ok, pid()} | {:ok, pid(), any()} | {:error, any()}
+          {:ok, pid()} | {:error, any()}
   def start(_type, _args) do
     connect? = Application.get_env(:nerves_hub_link, :connect, true)
 
