@@ -1,6 +1,11 @@
 defmodule NervesHubLink.Certificate do
+  @moduledoc """
+  Certificate management utilities.
+  """
+
   require Logger
 
+  @spec key_pem_to_der(nil | binary()) :: binary()
   def key_pem_to_der(nil), do: <<>>
 
   def key_pem_to_der(pem) do
@@ -10,6 +15,7 @@ defmodule NervesHubLink.Certificate do
     end
   end
 
+  @spec pem_to_der(nil | binary()) :: binary()
   def pem_to_der(nil), do: <<>>
 
   def pem_to_der(cert) do
@@ -21,7 +27,7 @@ defmodule NervesHubLink.Certificate do
 
   @doc "Returns a list of der encoded CA certs"
   @spec ca_certs() :: [binary()]
-  def ca_certs do
+  def ca_certs() do
     ssl = Application.get_env(:nerves_hub_link, :ssl, [])
     ca_store = Application.get_env(:nerves_hub_link, :ca_store)
 
