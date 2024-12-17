@@ -3,36 +3,43 @@ defmodule NervesHubLink.Socket do
 
   use Slipstream
 
-  require Logger
-
   alias NervesHubLink.ArchiveManager
   alias NervesHubLink.Client
   alias NervesHubLink.Configurator
   alias NervesHubLink.Configurator.SharedSecret
+  alias NervesHubLink.Message.ArchiveInfo
+  alias NervesHubLink.Message.UpdateInfo
   alias NervesHubLink.Script
   alias NervesHubLink.UpdateManager
   alias NervesHubLink.UploadFile
+
+  require Logger
 
   @console_topic "console"
   @device_topic "device"
   @extensions_topic "extensions"
 
+  @spec start_link(Configurator.Config.t()) :: GenServer.on_start()
   def start_link(config) do
     GenServer.start_link(__MODULE__, config, name: __MODULE__)
   end
 
+  @spec reconnect() :: :ok
   def reconnect() do
     GenServer.cast(__MODULE__, :reconnect)
   end
 
+  @spec send_update_progress(non_neg_integer()) :: :ok
   def send_update_progress(progress) do
     GenServer.cast(__MODULE__, {:send_update_progress, progress})
   end
 
+  @spec send_update_status(String.t()) :: :ok
   def send_update_status(status) do
     GenServer.cast(__MODULE__, {:send_update_status, status})
   end
 
+  @spec check_connection(atom()) :: boolean()
   def check_connection(type) do
     GenServer.call(__MODULE__, {:check_connection, type})
   end
@@ -43,16 +50,19 @@ defmodule NervesHubLink.Socket do
   end
 
   @doc false
+  @spec start_uploading(pid(), String.t()) :: :ok | :error
   def start_uploading(pid, filename) do
     GenServer.call(pid, {:start_uploading, filename})
   end
 
   @doc false
+  @spec upload_data(pid(), String.t(), any(), any()) :: :ok | :error
   def upload_data(pid, filename, index, chunk) do
     GenServer.call(pid, {:upload_data, filename, index, chunk})
   end
 
   @doc false
+  @spec finish_uploading(pid(), String.t()) :: :ok | :error
   def finish_uploading(pid, filename) do
     GenServer.call(pid, {:finish_uploading, filename})
   end
@@ -63,6 +73,7 @@ defmodule NervesHubLink.Socket do
   Escape hatch for uploading files via the console, kill the upload
   process to stop uploading.
   """
+  @spec cancel_upload() :: :ok | :error
   def cancel_upload() do
     GenServer.call(__MODULE__, :cancel_upload)
   end
@@ -75,6 +86,11 @@ defmodule NervesHubLink.Socket do
     GenServer.call(__MODULE__, :console_active?)
   end
 
+  @spec push(
+          topic :: String.t(),
+          event :: String.t(),
+          message :: Slipstream.json_serializable() | {:binary, binary()}
+        ) :: {:ok, Slipstream.push_reference()} | {:error, reason :: term()}
   def push(topic, event, message) do
     GenServer.call(__MODULE__, {:push, topic, event, message})
   end
@@ -324,14 +340,14 @@ defmodule NervesHubLink.Socket do
   end
 
   def handle_message(@device_topic, "archive", params, socket) do
-    {:ok, info} = NervesHubLink.Message.ArchiveInfo.parse(params)
+    {:ok, info} = ArchiveInfo.parse(params)
     _ = ArchiveManager.apply_archive(info, socket.assigns.config.archive_public_keys)
     {:ok, socket}
   end
 
   def handle_message(@device_topic, "update", update, socket) do
-    case NervesHubLink.Message.UpdateInfo.parse(update) do
-      {:ok, %NervesHubLink.Message.UpdateInfo{} = info} ->
+    case UpdateInfo.parse(update) do
+      {:ok, %UpdateInfo{} = info} ->
         _ = UpdateManager.apply_update(info, socket.assigns.config.fwup_public_keys)
         {:ok, socket}
 
@@ -548,8 +564,8 @@ defmodule NervesHubLink.Socket do
   end
 
   defp handle_join_reply(%{"firmware_url" => url} = update, socket) when is_binary(url) do
-    case NervesHubLink.Message.UpdateInfo.parse(update) do
-      {:ok, %NervesHubLink.Message.UpdateInfo{} = info} ->
+    case UpdateInfo.parse(update) do
+      {:ok, %UpdateInfo{} = info} ->
         UpdateManager.apply_update(info, socket.assigns.config.fwup_public_keys)
 
       error ->
