@@ -7,7 +7,6 @@ if Code.ensure_loaded?(NervesKey) do
     @behaviour NervesHubLink.Configurator
 
     alias ATECC508A.Transport.I2C
-    alias X509.Certificate
     alias NervesHubLink.{Certificate, Configurator.Config}
     alias NervesKey.PKCS11
 
@@ -43,7 +42,7 @@ if Code.ensure_loaded?(NervesKey) do
         {:ok, i2c} = I2C.init(bus_name: "i2c-#{bus_num}")
 
         NervesKey.device_cert(i2c, certificate_pair)
-        |> Certificate.to_der()
+        |> X509.Certificate.to_der()
       end)
     end
 
@@ -60,7 +59,7 @@ if Code.ensure_loaded?(NervesKey) do
 
         signer_cert =
           NervesKey.signer_cert(i2c, certificate_pair)
-          |> Certificate.to_der()
+          |> X509.Certificate.to_der()
 
         [signer_cert | Certificate.ca_certs()]
       end)
