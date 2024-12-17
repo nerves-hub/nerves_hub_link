@@ -1,4 +1,12 @@
 defmodule NervesHubLink.Extensions.Geo.Resolver do
+  @moduledoc """
+  Geo extension behaviour for writing custom resolvers.
+
+  For example to support your GPS or LTE modem's means of geo-location.
+
+  Default implementation is `NervesHubLink.Extensions.Geo.DefaultResolver`.
+  """
+
   @typedoc "Location information from a successful location resolution"
   @type location_information() :: %{
           :latitude => float(),

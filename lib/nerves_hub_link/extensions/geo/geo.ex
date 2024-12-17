@@ -1,4 +1,9 @@
 defmodule NervesHubLink.Extensions.Geo do
+  @moduledoc """
+  The Geo Extension.
+
+  Provides geo-location information to NervesHub.
+  """
   use NervesHubLink.Extensions, name: "geo", version: "0.0.1"
 
   alias NervesHubLink.Extensions.Geo.DefaultResolver
