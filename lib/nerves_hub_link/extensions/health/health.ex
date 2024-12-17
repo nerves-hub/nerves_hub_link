@@ -1,4 +1,13 @@
 defmodule NervesHubLink.Extensions.Health do
+  @moduledoc """
+  The Health Extension.
+
+  Provides metrics, metadata and alarms to allow building an understanding of
+  the operational state of a device. The device's "health". This information
+  is reported over the extensions mechanism to NervesHub for display, alerting
+  and more.
+  """
+
   use NervesHubLink.Extensions, name: "health", version: "0.0.1"
 
   alias NervesHubLink.Extensions.Health.DefaultReport
@@ -7,6 +16,7 @@ defmodule NervesHubLink.Extensions.Health do
   require Logger
 
   @impl GenServer
+  @spec init(any()) :: {:ok, any()}
   def init(_opts) do
     # Does not send an initial report, server reports one
     {:ok, %{}}
@@ -18,6 +28,7 @@ defmodule NervesHubLink.Extensions.Health do
     {:noreply, state}
   end
 
+  @spec check_health(module()) :: DeviceStatus.t()
   def check_health(default_report \\ DefaultReport) do
     config = Application.get_env(:nerves_hub, :health, [])
     report = Keyword.get(config, :report, default_report)
