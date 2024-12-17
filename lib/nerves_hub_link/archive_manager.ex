@@ -73,7 +73,7 @@ defmodule NervesHubLink.ArchiveManager do
   end
 
   @doc false
-  @spec start_link(GenServer.options()) :: GenServer.on_start()
+  @spec start_link(map(), GenServer.options()) :: GenServer.on_start()
   def start_link(args, opts \\ []) do
     GenServer.start_link(__MODULE__, args, opts)
   end
@@ -212,7 +212,7 @@ defmodule NervesHubLink.ArchiveManager do
     %{state | update_reschedule_timer: nil}
   end
 
-  def valid_archive?(file_path, public_keys) do
+  defp valid_archive?(file_path, public_keys) do
     args = ["-V", "-i", file_path]
 
     args =
