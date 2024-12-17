@@ -1,6 +1,10 @@
 defmodule NervesHubLink.Configurator.SharedSecret do
+  @moduledoc """
+  Configurator allowing authentication with a shared secret.
+  """
   @behaviour NervesHubLink.Configurator
 
+  alias Nerves.Runtime.KV
   alias NervesHubLink.Certificate
   alias NervesHubLink.Configurator.Config
 
@@ -39,16 +43,16 @@ defmodule NervesHubLink.Configurator.SharedSecret do
     # Lookup device first then product
     # TODO: Support saving to file?
     key =
-      Nerves.Runtime.KV.get("nh_shared_key") || opts[:key] ||
-        Nerves.Runtime.KV.get("nh_shared_product_key") || opts[:product_key]
+      KV.get("nh_shared_key") || opts[:key] ||
+        KV.get("nh_shared_product_key") || opts[:product_key]
 
     secret =
       case key do
         "nhp_" <> _ ->
-          Nerves.Runtime.KV.get("nh_shared_product_secret") || opts[:product_secret]
+          KV.get("nh_shared_product_secret") || opts[:product_secret]
 
         _ ->
-          Nerves.Runtime.KV.get("nh_shared_secret") || opts[:secret]
+          KV.get("nh_shared_secret") || opts[:secret]
       end
 
     salt = create_salt(opts[:signature_version], alg, key, opts[:signed_at])
