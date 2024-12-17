@@ -1,8 +1,14 @@
 if Code.ensure_loaded?(NervesKey) do
   defmodule NervesHubLink.Configurator.NervesKey do
+    @moduledoc """
+    Configurator enabling authentication via NervesKey.
+    """
+
     @behaviour NervesHubLink.Configurator
 
+    alias ATECC508A.Transport.I2C
     alias NervesHubLink.{Certificate, Configurator.Config}
+    alias NervesKey.PKCS11
 
     @impl NervesHubLink.Configurator
     def build(%Config{} = config) do
@@ -33,7 +39,7 @@ if Code.ensure_loaded?(NervesKey) do
 
     defp maybe_add_cert(ssl, bus_num, certificate_pair) do
       Keyword.put_new_lazy(ssl, :cert, fn ->
-        {:ok, i2c} = ATECC508A.Transport.I2C.init(bus_name: "i2c-#{bus_num}")
+        {:ok, i2c} = I2C.init(bus_name: "i2c-#{bus_num}")
 
         NervesKey.device_cert(i2c, certificate_pair)
         |> X509.Certificate.to_der()
@@ -42,14 +48,14 @@ if Code.ensure_loaded?(NervesKey) do
 
     defp maybe_add_key(ssl, bus_num) do
       Keyword.put_new_lazy(ssl, :key, fn ->
-        {:ok, engine} = NervesKey.PKCS11.load_engine()
-        NervesKey.PKCS11.private_key(engine, i2c: bus_num)
+        {:ok, engine} = PKCS11.load_engine()
+        PKCS11.private_key(engine, i2c: bus_num)
       end)
     end
 
     defp maybe_add_signer_cert(ssl, bus_num, certificate_pair) do
       Keyword.put_new_lazy(ssl, :cacerts, fn ->
-        {:ok, i2c} = ATECC508A.Transport.I2C.init(bus_name: "i2c-#{bus_num}")
+        {:ok, i2c} = I2C.init(bus_name: "i2c-#{bus_num}")
 
         signer_cert =
           NervesKey.signer_cert(i2c, certificate_pair)

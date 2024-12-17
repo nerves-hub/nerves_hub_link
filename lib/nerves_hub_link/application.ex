@@ -1,15 +1,18 @@
 defmodule NervesHubLink.Application do
+  @moduledoc false
   use Application
 
   alias NervesHubLink.ArchiveManager
   alias NervesHubLink.Client
   alias NervesHubLink.Configurator
-  alias NervesHubLink.Socket
   alias NervesHubLink.Extensions
   alias NervesHubLink.ExtensionsSupervisor
   alias NervesHubLink.FwupConfig
+  alias NervesHubLink.Socket
   alias NervesHubLink.UpdateManager
 
+  @spec start(Application.start_type(), any()) ::
+          {:ok, pid()} | {:error, any()}
   def start(_type, _args) do
     connect? = Application.get_env(:nerves_hub_link, :connect, true)
 

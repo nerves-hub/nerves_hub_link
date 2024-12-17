@@ -1,5 +1,7 @@
 defmodule NervesHubLink.Client.DefaultTest do
   use ExUnit.Case, async: true
+
+  alias Nerves.Runtime.KV
   alias NervesHubLink.Client.Default
   alias NervesHubLink.Message.{FirmwareMetadata, UpdateInfo}
 
@@ -16,7 +18,7 @@ defmodule NervesHubLink.Client.DefaultTest do
 
   test "update_available with same uuid" do
     update_info =
-      put_in(@update_info.firmware_meta.uuid, Nerves.Runtime.KV.get_active("nerves_fw_uuid"))
+      put_in(@update_info.firmware_meta.uuid, KV.get_active("nerves_fw_uuid"))
 
     assert Default.update_available(update_info) == :ignore
   end

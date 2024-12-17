@@ -1,6 +1,11 @@
 defmodule NervesHubLink.Configurator.LocalCertKey do
+  @moduledoc """
+  Configurator allowing authentication via locally stored certificate key.
+  """
+
   @behaviour NervesHubLink.Configurator
 
+  alias Nerves.Runtime.KV
   alias NervesHubLink.{Certificate, Configurator.Config}
 
   @cert_kv_path "nerves_hub_cert"
@@ -25,7 +30,7 @@ defmodule NervesHubLink.Configurator.LocalCertKey do
         ssl[:cert] || ssl[:certfile] ->
           ssl
 
-        cert = Nerves.Runtime.KV.get(@cert_kv_path) ->
+        cert = KV.get(@cert_kv_path) ->
           cert = Certificate.pem_to_der(cert)
 
           Keyword.put(ssl, :cert, cert)
@@ -43,7 +48,7 @@ defmodule NervesHubLink.Configurator.LocalCertKey do
         ssl[:key] || ssl[:keyfile] ->
           ssl
 
-        key = Nerves.Runtime.KV.get(@key_kv_path) ->
+        key = KV.get(@key_kv_path) ->
           key = Certificate.key_pem_to_der(key)
 
           Keyword.put(ssl, :key, {:ECPrivateKey, key})

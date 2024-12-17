@@ -8,12 +8,12 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
   require Logger
 
   @impl Report
-  def timestamp do
+  def timestamp() do
     DateTime.utc_now()
   end
 
   @impl Report
-  def metadata do
+  def metadata() do
     # A lot of typical metadata is included in the join
     # we can skip that here
     # NervesHub is responsible for joining that into the stored data
@@ -21,7 +21,7 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
   end
 
   @impl Report
-  def alarms do
+  def alarms() do
     for {id, description} <- :alarm_handler.get_alarms(), into: %{} do
       try do
         {inspect(id), inspect(description)}
@@ -33,7 +33,7 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
   end
 
   @impl Report
-  def metrics do
+  def metrics() do
     [
       metrics_from_config(),
       cpu_temperature(),
@@ -46,12 +46,12 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
   end
 
   @impl Report
-  def checks do
+  def checks() do
     checks_from_config()
   end
 
   @impl Report
-  def connectivity do
+  def connectivity() do
     [
       connectivity_from_config(),
       vintage_net()
@@ -67,7 +67,7 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
     Keyword.get(config, key, default)
   end
 
-  defp metadata_from_config do
+  defp metadata_from_config() do
     metadata = get_health_config(:metadata, %{})
 
     for {key, val_or_fun} <- metadata, into: %{} do
@@ -75,7 +75,7 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
     end
   end
 
-  defp metrics_from_config do
+  defp metrics_from_config() do
     metrics = get_health_config(:metrics, %{})
 
     for {key, val_or_fun} <- metrics, into: %{} do
@@ -83,7 +83,7 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
     end
   end
 
-  defp checks_from_config do
+  defp checks_from_config() do
     checks = get_health_config(:checks, %{})
 
     for {key, val_or_fun} <- checks, into: %{} do
@@ -91,7 +91,7 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
     end
   end
 
-  defp connectivity_from_config do
+  defp connectivity_from_config() do
     connectivity = get_health_config(:connectivity, %{})
 
     for {key, val_or_fun} <- connectivity, into: %{} do
@@ -100,7 +100,7 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
   end
 
   @default_temperature_source "/sys/class/thermal/thermal_zone0/temp"
-  defp cpu_temperature do
+  defp cpu_temperature() do
     cond do
       match?({:ok, _}, File.stat(@default_temperature_source)) ->
         with {:ok, content} <- File.read(@default_temperature_source),
@@ -119,7 +119,7 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
     end
   end
 
-  defp cpu_utilization do
+  defp cpu_utilization() do
     case Application.ensure_all_started(:os_mon) do
       {:ok, _} ->
         cpu_util()
@@ -132,7 +132,7 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
     end
   end
 
-  defp cpu_util do
+  defp cpu_util() do
     case :cpu_sup.util([]) do
       {:all, usage, _, _} ->
         %{cpu_usage_percent: usage}
@@ -142,17 +142,19 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
     end
   end
 
-  defp cpu_temperature_rpi do
-    with {result, 0} <- System.cmd("/usr/bin/vcgencmd", ["measure_temp"]) do
-      %{"temp" => temp} = Regex.named_captures(~r/temp=(?<temp>[\d.]+)/, result)
-      {temp, _} = Integer.parse(temp)
-      %{cpu_temp: temp}
-    else
-      _ -> %{}
+  defp cpu_temperature_rpi() do
+    case System.cmd("/usr/bin/vcgencmd", ["measure_temp"]) do
+      {result, 0} ->
+        %{"temp" => temp} = Regex.named_captures(~r/temp=(?<temp>[\d.]+)/, result)
+        {temp, _} = Integer.parse(temp)
+        %{cpu_temp: temp}
+
+      _ ->
+        %{}
     end
   end
 
-  defp load_averages do
+  defp load_averages() do
     with {:ok, data_str} <- File.read("/proc/loadavg"),
          [min1, min5, min15, _, _] <- String.split(data_str, " "),
          {min1, _} <- Float.parse(min1),
@@ -164,7 +166,7 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
     end
   end
 
-  defp memory do
+  defp memory() do
     {free_output, 0} = System.cmd("free", [])
     [_title_row, memory_row | _] = String.split(free_output, "\n")
     [_title_column | memory_columns] = String.split(memory_row)
@@ -179,7 +181,7 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
       %{}
   end
 
-  defp disk do
+  defp disk() do
     case Application.ensure_all_started(:os_mon) do
       {:ok, _} ->
         disk_info()
@@ -192,7 +194,7 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
     end
   end
 
-  defp disk_info do
+  defp disk_info() do
     data =
       Enum.find(:disksup.get_disk_info(), fn {key, _, _, _} ->
         key == ~c"/root"
@@ -211,57 +213,58 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
     end
   end
 
-  def vintage_net() do
+  defp vintage_net() do
     case Application.ensure_loaded(:vintage_net) do
       :ok ->
-        ifs = VintageNet.all_interfaces() |> Enum.reject(&(&1 == "lo"))
-
-        PropertyTable.get_all(VintageNet)
-        |> Enum.reduce(%{}, fn {key, value}, acc ->
-          # Get all data from nuisance PropertyTable structure
-          case key do
-            ["interface", interface, subkey] ->
-              if interface in ifs do
-                kv =
-                  acc
-                  |> Map.get(interface, %{})
-                  |> Map.put(subkey, value)
-
-                Map.put(acc, interface, kv)
-              else
-                acc
-              end
-
-            _ ->
-              acc
-          end
-        end)
-        |> Enum.reduce(%{}, fn {interface, kv}, acc ->
-          case kv do
-            %{
-              "type" => type,
-              "present" => present,
-              "state" => state,
-              "connection" => connection_status
-            } ->
-              Map.put(acc, interface, %{
-                type: vintage_net_type(type),
-                present: present,
-                state: state,
-                connection_status: connection_status,
-                metrics: %{},
-                metadata: %{}
-              })
-
-            _ ->
-              acc
-          end
-        end)
+        format_interfaces()
 
       {:error, _} ->
         # Probably VintageNet doesn't exist
         %{}
     end
+  end
+
+  defp format_interfaces() do
+    ifs = VintageNet.all_interfaces() |> Enum.reject(&(&1 == "lo"))
+
+    PropertyTable.get_all(VintageNet)
+    |> Enum.reduce(%{}, fn
+      {["interface", interface, subkey], value}, acc ->
+        if interface in ifs do
+          kv =
+            acc
+            |> Map.get(interface, %{})
+            |> Map.put(subkey, value)
+
+          Map.put(acc, interface, kv)
+        else
+          acc
+        end
+
+      _, acc ->
+        acc
+    end)
+    |> Enum.reduce(%{}, fn {interface, kv}, acc ->
+      case kv do
+        %{
+          "type" => type,
+          "present" => present,
+          "state" => state,
+          "connection" => connection_status
+        } ->
+          Map.put(acc, interface, %{
+            type: vintage_net_type(type),
+            present: present,
+            state: state,
+            connection_status: connection_status,
+            metrics: %{},
+            metadata: %{}
+          })
+
+        _ ->
+          acc
+      end
+    end)
   end
 
   defp vintage_net_type(VintageNetWiFi), do: :wifi

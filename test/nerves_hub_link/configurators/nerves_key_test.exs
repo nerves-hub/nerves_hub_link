@@ -2,6 +2,7 @@ defmodule NervesHubLink.Configurator.NervesKeyTest do
   use ExUnit.Case, async: true
 
   alias NervesHubLink.Configurator.Config
+  alias NervesHubLink.Configurator.NervesKey
 
   test "prefers already supplied values" do
     config = %Config{
@@ -13,7 +14,7 @@ defmodule NervesHubLink.Configurator.NervesKeyTest do
       ]
     }
 
-    new_config = NervesHubLink.Configurator.NervesKey.build(config)
+    new_config = NervesKey.build(config)
     assert new_config.ssl == config.ssl
   end
 end

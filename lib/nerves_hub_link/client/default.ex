@@ -6,11 +6,14 @@ defmodule NervesHubLink.Client.Default do
   """
 
   @behaviour NervesHubLink.Client
+
+  alias Nerves.Runtime.KV
+
   require Logger
 
   @impl NervesHubLink.Client
   def update_available(update_info) do
-    if update_info.firmware_meta.uuid == Nerves.Runtime.KV.get_active("nerves_fw_uuid") do
+    if update_info.firmware_meta.uuid == KV.get_active("nerves_fw_uuid") do
       Logger.info("""
       [NervesHubLink.Client] Ignoring request to update to the same firmware
 
