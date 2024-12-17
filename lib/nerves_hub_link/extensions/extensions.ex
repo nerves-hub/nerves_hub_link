@@ -1,9 +1,24 @@
 defmodule NervesHubLink.Extensions do
+  @moduledoc """
+  Extensions are a mechanism for transmitting messages for non-critical
+  functionality over the existing NervesHub Socket. An extension will only
+  attach if the server-side requests it from the device to ensure it will not
+  disrupt regular operation.
+
+  This module provides a behaviour with a macro to use for implementing an
+  Extension.
+
+  Extensions are started as separate GenServers under a DynamicSupervisor and
+  any messages namespaced for a specific extension will be forwarded to that
+  extension's GenServer.
+  """
+
   use GenServer
-  require Logger
 
   alias NervesHubLink.ExtensionsSupervisor
   alias NervesHubLink.Socket
+
+  require Logger
 
   @default_extension_modules [
     NervesHubLink.Extensions.Health,
@@ -60,10 +75,12 @@ defmodule NervesHubLink.Extensions do
         ]
   def list(), do: GenServer.call(__MODULE__, :list)
 
+  @spec handle_event(String.t(), map()) :: :ok
   def handle_event(event, message) do
     GenServer.cast(__MODULE__, {:handle_event, event, message})
   end
 
+  @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
@@ -101,9 +118,9 @@ defmodule NervesHubLink.Extensions do
     result =
       if state.extensions[extension][:attached?] == true do
         scoped_event =
-          if not String.starts_with?(event, "#{extension}:"),
-            do: "#{extension}:#{event}",
-            else: event
+          if String.starts_with?(event, "#{extension}:"),
+            do: event,
+            else: "#{extension}:#{event}"
 
         Socket.push("extensions", scoped_event, payload)
       else
