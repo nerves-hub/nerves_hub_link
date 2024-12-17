@@ -16,7 +16,6 @@ defmodule NervesHubLink.Extensions.Health do
   require Logger
 
   @impl GenServer
-  @spec init(any()) :: {:ok, any()}
   def init(_opts) do
     # Does not send an initial report, server reports one
     {:ok, %{}}
@@ -28,7 +27,7 @@ defmodule NervesHubLink.Extensions.Health do
     {:noreply, state}
   end
 
-  @spec check_health(module()) :: DeviceStatus.t()
+  @spec check_health(module()) :: DeviceStatus.t() | nil
   def check_health(default_report \\ DefaultReport) do
     config = Application.get_env(:nerves_hub, :health, [])
     report = Keyword.get(config, :report, default_report)
