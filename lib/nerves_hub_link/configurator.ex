@@ -1,12 +1,29 @@
 defmodule NervesHubLink.Configurator do
-  alias NervesHubLink.Backoff
+  @moduledoc """
+  Behaviour for implementing a configurator.
+
+  Implementing a new one would typically be relevant if you need a new way
+  of doing authentication or other configuration. New security hardware or
+  a new way to make the private key, shared secret available.
+
+  If you want to control the firmware updates look at `NervesHubLink.Client`
+  instead.
+  """
+
   alias __MODULE__.Config
+  alias Nerves.Runtime.KV
+  alias NervesHubLink.Backoff
+
   require Logger
 
   @device_api_version "2.2.0"
   @console_version "2.0.0"
 
   defmodule Config do
+    @moduledoc """
+    Data structure for holding configuration information provided by the configurator.
+    """
+
     defstruct archive_public_keys: [],
               connect: true,
               connect_wait_for_network: true,
@@ -132,10 +149,10 @@ defmodule NervesHubLink.Configurator do
         to_charlist(base.sni || base.device_api_sni || url.host)
       )
 
-    fwup_devpath = Nerves.Runtime.KV.get(@fwup_devpath)
+    fwup_devpath = KV.get(@fwup_devpath)
 
     params =
-      Nerves.Runtime.KV.get_all_active()
+      KV.get_all_active()
       |> Map.put("fwup_version", fwup_version())
       |> Map.put("device_api_version", @device_api_version)
       |> Map.put("console_version", @console_version)
@@ -143,7 +160,7 @@ defmodule NervesHubLink.Configurator do
     %{base | params: params, socket: socket, ssl: ssl, fwup_devpath: fwup_devpath}
   end
 
-  defp fwup_version do
+  defp fwup_version() do
     {version_string, 0} = System.cmd("fwup", ["--version"])
     String.trim(version_string)
   end
