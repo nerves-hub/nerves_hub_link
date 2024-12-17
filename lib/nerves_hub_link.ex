@@ -1,14 +1,27 @@
 defmodule NervesHubLink do
+  @moduledoc """
+  The Device-side client for NervesHub.
+
+  The `:nerves_hub_link` Erlang application will start by default if installed
+  as a dependency and use provided configuration to connect to a NervesHub
+  server.
+
+  This module primarily provides utility functions for checking the status of
+  the connection and performing some operations such as reconnecting, sending
+  a file to a connected console and more.
+  """
+
   alias NervesHubLink.Socket
 
   @doc """
   Checks if the device is connected to the NervesHub device channel.
   """
-  @spec connected? :: boolean()
+  @spec connected?() :: boolean()
   def connected?() do
     Socket.check_connection(:device)
   end
 
+  @spec console_connected?() :: boolean()
   def console_connected?() do
     Socket.check_connection(:console)
   end
@@ -16,6 +29,7 @@ defmodule NervesHubLink do
   @doc """
   Checks if the device has a socket connection with NervesHub
   """
+  @spec socket_connected?() :: boolean()
   def socket_connected?() do
     Socket.check_connection(:socket)
   end
