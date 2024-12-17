@@ -1,9 +1,14 @@
 defmodule NervesHubLink.Script do
+  @moduledoc """
+  Mechanism for running scripts from NervesHub on device.
+  """
+
   use GenServer
 
   @doc """
   Run a script from NervesHub and capture its output
   """
+  @spec capture(String.t(), any()) :: :ok
   def capture(text, ref) do
     _ = GenServer.start_link(__MODULE__, {self(), text, ref})
 

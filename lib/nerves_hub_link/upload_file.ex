@@ -10,6 +10,7 @@ defmodule NervesHubLink.UploadFile do
   alias NervesHubLink.Socket
 
   defmodule State do
+    @moduledoc false
     @type t() :: %__MODULE__{
             file_path: Path.t(),
             socket_pid: pid()
@@ -52,8 +53,10 @@ defmodule NervesHubLink.UploadFile do
   end
 
   if Version.match?(System.version(), ">= 1.16.0") do
+    @spec file_stream!(any()) :: File.Stream.t()
     def file_stream!(state), do: File.stream!(state.file_path, 1024, [])
   else
+    @spec file_stream!(any()) :: File.Stream.t()
     def file_stream!(state), do: File.stream!(state.file_path, [], 1024)
   end
 end
