@@ -190,6 +190,7 @@ defmodule NervesHubLink.Client do
   @doc """
   This function is called internally by NervesHubLink to identify a device.
   """
+  @spec identify() :: :ok
   def identify() do
     apply_wrap(mod(), :identify, [])
   end
