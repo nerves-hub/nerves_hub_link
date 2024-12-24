@@ -319,7 +319,7 @@ config :nerves_hub_link,
     },
 
     # metadata is identical but should return a string
-    metrics: %{
+    metadata: %{
       "placement" => {CatCounter, :venue, []}
     }
   ]
