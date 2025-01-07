@@ -29,9 +29,12 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
   @impl Report
   def alarms do
     # Currently, only Alarmist is supported as alarm handler.
-    # Just send empty map if other handler is configured.
-    if Alarmist.Handler in :gen_event.which_handlers(:alarm_handler) do
-      for {id, description} <- Alarmist.get_alarms(), into: %{} do
+    # Send empty map if Alarmist isn't loaded.
+    try do
+      module = String.to_existing_atom("Elixir.Alarmist")
+      alarms = apply(module, :get_alarms, [])
+
+      for {id, description} <- alarms, into: %{} do
         try do
           {inspect(id), inspect(description)}
         catch
@@ -39,8 +42,8 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
             {"bad alarm term", ""}
         end
       end
-    else
-      %{}
+    rescue
+      _ -> %{}
     end
   end
 
