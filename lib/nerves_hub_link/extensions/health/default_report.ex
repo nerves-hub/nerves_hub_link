@@ -27,14 +27,20 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
   end
 
   @impl Report
-  def alarms() do
-    for {id, description} <- :alarm_handler.get_alarms(), into: %{} do
-      try do
-        {inspect(id), inspect(description)}
-      catch
-        _, _ ->
-          {"bad alarm term", ""}
+  def alarms do
+    # Currently, only Alarmist is supported as alarm handler.
+    # Just send empty map if other handler is configured.
+    if Alarmist.Handler in :gen_event.which_handlers(:alarm_handler) do
+      for {id, description} <- Alarmist.get_alarms(), into: %{} do
+        try do
+          {inspect(id), inspect(description)}
+        catch
+          _, _ ->
+            {"bad alarm term", ""}
+        end
       end
+    else
+      %{}
     end
   end
 
