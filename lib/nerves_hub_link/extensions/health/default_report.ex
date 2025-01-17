@@ -26,15 +26,12 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
     metadata_from_config()
   end
 
-  @impl Report
-  def alarms do
-    # Currently, only Alarmist is supported as alarm handler.
-    # Send empty map if Alarmist isn't loaded.
-    try do
-      module = String.to_existing_atom("Elixir.Alarmist")
-      alarms = apply(module, :get_alarms, [])
-
-      for {id, description} <- alarms, into: %{} do
+  # Currently, only Alarmist is supported as alarm handler.
+  # Send empty map if Alarmist isn't loaded.
+  if Code.ensure_loaded?(Alarmist) do
+    @impl Report
+    def alarms() do
+      for {id, description} <- Alarmist.get_alarms(), into: %{} do
         try do
           {inspect(id), inspect(description)}
         catch
@@ -42,8 +39,11 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
             {"bad alarm term", ""}
         end
       end
-    rescue
-      _ -> %{}
+    end
+  else
+    @impl Report
+    def alarms() do
+      %{}
     end
   end
 
