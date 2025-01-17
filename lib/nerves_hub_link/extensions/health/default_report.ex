@@ -26,8 +26,7 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
     metadata_from_config()
   end
 
-  # Currently, only Alarmist is supported as alarm handler.
-  # Send empty map if Alarmist isn't loaded.
+  # The Alarmist library is required for alarms handling.
   if Code.ensure_loaded?(Alarmist) do
     @impl Report
     def alarms() do
