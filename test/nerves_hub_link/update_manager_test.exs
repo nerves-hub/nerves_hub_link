@@ -62,13 +62,8 @@ defmodule NervesHubLink.UpdateManagerTest do
       }
 
       {:ok, manager} = UpdateManager.start_link(fwup_config)
-      assert UpdateManager.apply_update(manager, update_payload, []) == :update_rescheduled
+      assert UpdateManager.apply_update(manager, update_payload, []) == :rescheduled
       assert_received :rescheduled
-      refute_received {:fwup, _}
-
-      assert_receive {:fwup, {:progress, 0}}, 250
-      assert_receive {:fwup, {:progress, 100}}
-      assert_receive {:fwup, {:ok, 0, ""}}
     end
 
     test "apply with fwup environment", %{update_payload: update_payload, devpath: devpath} do

@@ -202,12 +202,13 @@ defmodule NervesHubLink.Client do
     # TODO: nasty side effects here. Consider moving somewhere else
     case data do
       {:progress, percent} ->
-        NervesHubLink.send_update_progress(percent)
+        NervesHubLink.send_firmware_update_progress(percent)
 
       {:error, _, message} ->
-        NervesHubLink.send_update_status("fwup error #{message}")
+        NervesHubLink.send_firmware_update_status(:error, %{reason: message})
 
       {:ok, 0, _message} ->
+        NervesHubLink.send_firmware_update_status(:finalizing)
         initiate_reboot()
 
       _ ->

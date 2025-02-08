@@ -75,14 +75,14 @@ defmodule NervesHubLink do
   @doc """
   Send update progress percentage for display in web
   """
-  @spec send_update_progress(non_neg_integer()) :: :ok
-  defdelegate send_update_progress(progress), to: Socket
+  @spec send_firmware_update_progress(non_neg_integer()) :: :ok
+  defdelegate send_firmware_update_progress(progress), to: Socket
 
   @doc """
-  Send an update status to web
+  Send a firmware status update status to hub
   """
-  @spec send_update_status(String.t() | atom()) :: :ok
-  defdelegate send_update_status(status), to: Socket
+  @spec send_firmware_update_status(status :: atom(), payload :: map()) :: :ok
+  defdelegate send_firmware_update_status(status, payload \\ %{}), to: Socket
 
   @doc """
   Send a file to the connected console

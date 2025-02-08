@@ -40,14 +40,17 @@ defmodule NervesHubLink.Socket do
     GenServer.cast(__MODULE__, :reconnect)
   end
 
-  @spec send_update_progress(non_neg_integer()) :: :ok
-  def send_update_progress(progress) do
-    GenServer.cast(__MODULE__, {:send_update_progress, progress})
+  @spec send_firmware_update_progress(percent_progress :: non_neg_integer()) :: :ok
+  def send_firmware_update_progress(percent_progress) do
+    GenServer.cast(
+      __MODULE__,
+      {:send_firmware_update_status, :progress, %{percent: percent_progress}}
+    )
   end
 
-  @spec send_update_status(String.t()) :: :ok
-  def send_update_status(status) do
-    GenServer.cast(__MODULE__, {:send_update_status, status})
+  @spec send_firmware_update_status(status :: atom(), payload :: map()) :: :ok
+  def send_firmware_update_status(status, payload \\ %{}) do
+    GenServer.cast(__MODULE__, {:send_firmware_update_status, status, payload})
   end
 
   @spec check_connection(atom()) :: boolean()
@@ -282,13 +285,39 @@ defmodule NervesHubLink.Socket do
     {:noreply, disconnect(socket)}
   end
 
-  def handle_cast({:send_update_progress, progress}, socket) do
-    _ = push(socket, @device_topic, "fwup_progress", %{value: progress})
+  def handle_cast({:send_firmware_update_progress, :progress, progress}, socket) do
+    _ =
+      push(socket, @device_topic, "firmware_update_status", %{
+        status: "progress",
+        percent: progress
+      })
+
     {:noreply, socket}
   end
 
-  def handle_cast({:send_update_status, status}, socket) do
-    _ = push(socket, @device_topic, "status_update", %{status: status})
+  def handle_cast({:send_firmware_update_status, :finalizing, payload}, socket) do
+    {:ok, push_ref} =
+      push(
+        socket,
+        @device_topic,
+        "firmware_update_status",
+        Map.merge(payload, %{status: "applying"})
+      )
+
+    _ = await_reply(push_ref)
+
+    {:noreply, socket}
+  end
+
+  def handle_cast({:send_firmware_update_status, status, payload}, socket) do
+    _ =
+      push(
+        socket,
+        @device_topic,
+        "firmware_update_status",
+        Map.merge(payload, %{status: to_string(status)})
+      )
+
     {:noreply, socket}
   end
 
@@ -378,7 +407,7 @@ defmodule NervesHubLink.Socket do
           into: %{},
           do: {name, to_string(ver)}
 
-    {:ok, join(socket, "extensions", available_extensions)}
+    {:ok, join(socket, @extensions_topic, available_extensions)}
   end
 
   ##
