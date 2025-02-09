@@ -301,7 +301,7 @@ defmodule NervesHubLink.Socket do
         socket,
         @device_topic,
         "firmware_update_status",
-        Map.merge(payload, %{status: "applying"})
+        Map.merge(payload, %{status: "finalizing"})
       )
 
     _ = await_reply(push_ref)
