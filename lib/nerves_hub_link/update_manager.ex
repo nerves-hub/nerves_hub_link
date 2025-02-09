@@ -24,7 +24,7 @@ defmodule NervesHubLink.UpdateManager do
     @type status ::
             :idle
             | {:updating, integer()}
-            | :applying
+            | :finalizing
 
     @type previous_status ::
             :ignored
@@ -163,7 +163,7 @@ defmodule NervesHubLink.UpdateManager do
            state
            | fwup: nil,
              update_info: nil,
-             status: :applying,
+             status: :finalizing,
              previous_status: :successful
          }}
 
