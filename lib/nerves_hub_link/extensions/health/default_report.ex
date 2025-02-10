@@ -40,7 +40,8 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
       cpu_utilization(),
       load_averages(),
       memory(),
-      disk()
+      disk(),
+      network_traffic()
     ]
     |> Enum.reduce(%{}, &Map.merge/2)
   end
@@ -211,6 +212,38 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
           disk_used_percentage: capacity_percentage
         }
     end
+  end
+
+  defp network_traffic() do
+    {output, _} = System.cmd("cat", ["/proc/net/dev"])
+
+    [_top, _header | data] = String.split(output, "\n")
+
+    {_, data} = List.pop_at(data, -1)
+
+    data
+    |> Enum.map(fn line ->
+      [interface, bytes_received, _, _, _, _, _, _, _, bytes_sent | _] = String.split(line)
+
+      %{
+        interface: String.replace(interface, ":", ""),
+        bytes_received_total: bytes_received,
+        bytes_sent_total: bytes_sent
+      }
+    end)
+    |> Enum.reject(fn %{interface: interface} ->
+      interface == "lo"
+    end)
+    |> Enum.map(fn data ->
+      %{
+        "#{data.interface}_bytes_received_total" => data.bytes_received_total,
+        "#{data.interface}_bytes_sent_total" => data.bytes_sent_total
+      }
+    end)
+    |> Enum.reduce(%{}, &Map.merge/2)
+  rescue
+    _ ->
+      %{}
   end
 
   defp vintage_net() do
