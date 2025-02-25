@@ -79,7 +79,13 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
     metrics = get_health_config(:metrics, %{})
 
     for {key, val_or_fun} <- metrics, into: %{} do
-      {inspect(key), vof(val_or_fun)}
+      key =
+        case key do
+          key when is_atom(key) -> to_string(key)
+          key when is_binary(key) -> key
+        end
+
+      {key, vof(val_or_fun)}
     end
   end
 
