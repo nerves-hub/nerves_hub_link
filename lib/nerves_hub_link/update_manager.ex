@@ -224,7 +224,7 @@ defmodule NervesHubLink.UpdateManager do
       {:reschedule, ms} ->
         until =
           DateTime.utc_now()
-          |> DateTime.add(round(ms / 1_000), :second)
+          |> DateTime.add(ms, :millisecond)
 
         NervesHubLink.send_firmware_update_status(:reschedule, %{until: until})
         Logger.info("[NervesHubLink] rescheduling firmware update in #{ms / 1_000} seconds")
