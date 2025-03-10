@@ -334,6 +334,11 @@ config :nerves_hub_link,
   ]
 ```
 
+## Configure Alarms
+
+Alarm reporting is only available when a custom alarm handler is added as the default one is not intended for production use.
+The pre-configured health report uses [`alarmist`](https://hex.pm/packages/alarmist) for reporting alarms, but if another handler is preferred it can be configured by adding an `alarms` function to your custom health report module.
+
 ## Configure Geo
 
 It is intended to be easy to replace the default Geo Resolver with your own. Maybe you have a GPS module or can resolve a reasonably precise location via LTE. Just change config:
@@ -348,9 +353,6 @@ config :nerves_hub_link,
 Your module only needs to implement a single function, see `NervesHubLink.Extensions.Geo.Resolver` for details.
 
 
-## Configure Alarms
-
-NervesHubLink will automatically report Erlang Alarms from `:alarm_handler` IF you have added a custom alarm handler. The default one is not very helpful and not intended for production use from what I gather. One well-used option is [`alarmist`](https://hex.pm/packages/alarmist).
 
 ## Debugging errors
 
