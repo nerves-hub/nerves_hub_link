@@ -312,11 +312,15 @@ In your config.exs for the device:
 ```
 config :nerves_hub_link,
   health: [
-    # metrics are added with a key and MFA
-    # the function should return a number (int or float is fine)
-    metrics: %{
-      "cats_passed" => {CatCounter, :total, []}
-    },
+    # metrics can be added with:
+    # - a map of keys and MFAs, functions, or static values
+    # - an MFA or Function that returns a map of keys and values (int or float)
+    # - a combination of the above which are then merged together
+    metrics: [
+      %{"80s_hits" => {EightiesHitsCounter, :total, []}},
+      {HitsOfTheDecadesCounter, :total, []},
+      %{"hits_of_tomorrow" => 0}
+    ],
 
     # metadata is identical but should return a string
     metadata: %{
