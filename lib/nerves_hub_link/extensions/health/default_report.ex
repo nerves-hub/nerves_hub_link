@@ -60,6 +60,7 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
   end
 
   defp vof({mod, fun, args}), do: apply(mod, fun, args)
+  defp vof(fun) when is_function(fun), do: fun.()
   defp vof(val), do: val
 
   defp get_health_config(key, default) do
@@ -68,19 +69,69 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
   end
 
   defp metadata_from_config() do
-    metadata = get_health_config(:metadata, %{})
-
-    for {key, val_or_fun} <- metadata, into: %{} do
-      {inspect(key), vof(val_or_fun)}
-    end
+    get_health_config(:metadata, %{})
+    |> format_metrics_or_metadata()
   end
 
   defp metrics_from_config() do
-    metrics = get_health_config(:metrics, %{})
+    get_health_config(:metrics, [])
+    |> format_metrics_or_metadata()
+  end
 
-    for {key, val_or_fun} <- metrics, into: %{} do
-      {inspect(key), vof(val_or_fun)}
+  def format_metrics_or_metadata(metrics_or_metadata) do
+    metrics_or_metadata
+    |> List.wrap()
+    |> normalize_metrics_from_config()
+    |> evaluate_metrics()
+    |> merge_metrics_output()
+  end
+
+  defp normalize_metrics_from_config(metrics) do
+    Enum.map(metrics, fn metric ->
+      cond do
+        is_map(metric) -> Map.to_list(metric)
+        metric -> metric
+      end
+    end)
+    |> List.flatten()
+  end
+
+  defp evaluate_metrics(metrics) do
+    Enum.map(metrics, fn metric ->
+      case metric do
+        {key, val_or_fun} -> {normalize_key(key), vof(val_or_fun)}
+        metric -> vof(metric)
+      end
+    end)
+  end
+
+  defp normalize_key(key) when not is_binary(key) do
+    to_string(key)
+    |> normalize_key()
+  end
+
+  defp normalize_key(key) do
+    if String.printable?(key) do
+      key
+    else
+      inspect(key)
     end
+  end
+
+  defp merge_metrics_output(metrics) do
+    Enum.reduce(metrics, %{}, fn metric_set, metrics_acc ->
+      cond do
+        is_map(metric_set) ->
+          Map.merge(metrics_acc, metric_set)
+
+        is_tuple(metric_set) ->
+          Map.put(metrics_acc, elem(metric_set, 0), elem(metric_set, 1))
+
+        true ->
+          Logger.warning("Invalid metric set: #{inspect(metric_set)}")
+          metrics_acc
+      end
+    end)
   end
 
   defp checks_from_config() do
