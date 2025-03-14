@@ -24,6 +24,7 @@ defmodule NervesHubLink.Extensions.Health do
       :ok
 
   """
+  @spec send_report() :: :ok
   def send_report() do
     GenServer.cast(__MODULE__, "send_report")
   end
@@ -43,6 +44,7 @@ defmodule NervesHubLink.Extensions.Health do
       true
 
   """
+  @spec report_sent?() :: boolean()
   def report_sent?() do
     GenServer.call(__MODULE__, "report_sent?")
   end

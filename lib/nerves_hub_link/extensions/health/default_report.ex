@@ -78,7 +78,7 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
     |> format_metrics_or_metadata()
   end
 
-  def format_metrics_or_metadata(metrics_or_metadata) do
+  defp format_metrics_or_metadata(metrics_or_metadata) do
     metrics_or_metadata
     |> List.wrap()
     |> normalize_metrics_from_config()
