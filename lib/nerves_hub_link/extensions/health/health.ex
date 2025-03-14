@@ -67,8 +67,10 @@ defmodule NervesHubLink.Extensions.Health do
 
   @impl NervesHubLink.Extensions
   def handle_event("check", _msg, state) do
-    _ = push("report", %{"value" => check_health()})
-    {:noreply, %{state | report_sent: true}}
+    case push("report", %{"value" => check_health()}) do
+      {:ok, _} -> {:noreply, %{state | report_sent: true}}
+      {:error, _reason} -> {:noreply, %{state | report_sent: false}}
+    end
   end
 
   @spec check_health(module()) :: DeviceStatus.t() | nil
