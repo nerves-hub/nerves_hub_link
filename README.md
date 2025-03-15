@@ -305,24 +305,63 @@ Your NervesHub server controls enabling and disabling extensions to allow you to
 
 ### Configure Health
 
-You can add your own metrics, metadata and alarms:
+You can add your own metrics, metadata and alarms.
 
-In your config.exs for the device:
+The default set of metrics used by the `Health.DefaultReport` are:
+
+- `NervesHubLink.Extensions.Health.MetricSet.CPU` - CPU temperature, usage (percentage), and load averages.
+- `NervesHubLink.Extensions.Health.MetricSet.Memory` - Memory size (MB), used (MB), and percentage used.
+- `NervesHubLink.Extensions.Health.MetricSet.Disk` - Disk size (KB), available (KB), and percentage used.
+
+You can also create your own metric sets by implementing the `NervesHubLink.Extensions.Health.MetricSet`
+behaviour.
+
+If a library you are using provides a metric set, you can add it to the list of metrics, but please ensure
+to include all the metric sets you want to use. If you want to include the full default set, you can use
+`Default` or `Defaults` in your metric set list.
+
+eg.
 
 ```
 config :nerves_hub_link,
   health: [
-    # metrics can be added with:
-    # - a map of keys and MFAs, functions, or static values
-    # - an MFA or Function that returns a map of keys and values (int or float)
-    # - a combination of the above which are then merged together
-    metrics: [
-      %{"80s_hits" => {EightiesHitsCounter, :total, []}},
-      {HitsOfTheDecadesCounter, :total, []},
-      %{"hits_of_tomorrow" => 0}
-    ],
+    metric_sets: [
+      Defaults,
+      MyApp.HealthMetrics,
+      ALibrary.BatteryMetrics
+    ]
+  ]
+```
 
-    # metadata is identical but should return a string
+If you only want to use some of the default metrics, you can specify them explicitly:
+
+```
+config :nerves_hub_link,
+  health: [
+    metric_sets: [
+      NervesHubLink.Extensions.Health.MetricSet.CPU,
+      NervesHubLink.Extensions.Health.MetricSet.Memory
+      # the disk metrics have been excluded
+    ]
+  ]
+```
+
+And if you don't want to use any metric sets, you can set the `metric_sets` option to an empty list.
+
+```
+config :nerves_hub_link,
+  health: [
+    metric_sets: []
+  ]
+```
+
+If you want to add custom metadata to the default health report, you can specify it with:
+
+```
+config :nerves_hub_link,
+  health: [
+    # metadata is added with a key and MFA
+    # the function should return a string
     metadata: %{
       "placement" => {CatCounter, :venue, []}
     }
