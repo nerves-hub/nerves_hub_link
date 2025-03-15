@@ -26,7 +26,7 @@ defmodule NervesHubLink.Extensions.Health do
   """
   @spec send_report() :: :ok
   def send_report() do
-    GenServer.cast(__MODULE__, "send_report")
+    GenServer.cast(__MODULE__, :send_report)
   end
 
   @doc """
@@ -46,7 +46,7 @@ defmodule NervesHubLink.Extensions.Health do
   """
   @spec report_sent?() :: boolean()
   def report_sent?() do
-    GenServer.call(__MODULE__, "report_sent?")
+    GenServer.call(__MODULE__, :report_sent?)
   end
 
   @impl GenServer
@@ -56,12 +56,12 @@ defmodule NervesHubLink.Extensions.Health do
   end
 
   @impl GenServer
-  def handle_cast("send_report", state) do
+  def handle_cast(:send_report, state) do
     handle_event("check", nil, state)
   end
 
   @impl GenServer
-  def handle_call("report_sent?", _args, state) do
+  def handle_call(:report_sent?, _args, state) do
     {:reply, state[:report_sent], state}
   end
 
