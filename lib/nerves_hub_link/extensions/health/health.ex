@@ -15,16 +15,62 @@ defmodule NervesHubLink.Extensions.Health do
 
   require Logger
 
+  @doc """
+  Request a health report be sent asynchronously.
+
+  ## Examples
+
+      iex> NervesHubLink.Extensions.Health.send_report()
+      :ok
+
+  """
+  @spec send_report() :: :ok
+  def send_report() do
+    GenServer.cast(__MODULE__, :send_report)
+  end
+
+  @doc """
+  Confirms if a health report has been sent.
+
+  ## Examples
+
+      iex> NervesHubLink.Extensions.Health.report_sent?()
+      false
+
+      iex> NervesHubLink.Extensions.Health.send_report()
+      :ok
+
+      iex> NervesHubLink.Extensions.Health.report_sent?()
+      true
+
+  """
+  @spec report_sent?() :: boolean()
+  def report_sent?() do
+    GenServer.call(__MODULE__, :report_sent?)
+  end
+
   @impl GenServer
   def init(_opts) do
-    # Does not send an initial report, server reports one
-    {:ok, %{}}
+    # Does not send an initial report, server requests one
+    {:ok, %{report_sent: false}}
+  end
+
+  @impl GenServer
+  def handle_cast(:send_report, state) do
+    handle_event("check", nil, state)
+  end
+
+  @impl GenServer
+  def handle_call(:report_sent?, _args, state) do
+    {:reply, state[:report_sent], state}
   end
 
   @impl NervesHubLink.Extensions
   def handle_event("check", _msg, state) do
-    _ = push("report", %{"value" => check_health()})
-    {:noreply, state}
+    case push("report", %{"value" => check_health()}) do
+      {:ok, _} -> {:noreply, %{state | report_sent: true}}
+      {:error, _reason} -> {:noreply, %{state | report_sent: false}}
+    end
   end
 
   @spec check_health(module()) :: DeviceStatus.t() | nil
