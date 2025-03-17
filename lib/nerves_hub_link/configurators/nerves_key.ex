@@ -7,7 +7,8 @@ if Code.ensure_loaded?(NervesKey) do
     @behaviour NervesHubLink.Configurator
 
     alias ATECC508A.Transport.I2C
-    alias NervesHubLink.{Certificate, Configurator.Config}
+    alias NervesHubLink.Configurator.Config
+    alias NervesHubLink.Utils.Certificate
     alias NervesKey.PKCS11
 
     @impl NervesHubLink.Configurator

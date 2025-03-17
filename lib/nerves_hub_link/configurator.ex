@@ -12,7 +12,7 @@ defmodule NervesHubLink.Configurator do
 
   alias __MODULE__.Config
   alias Nerves.Runtime.KV
-  alias NervesHubLink.Backoff
+  alias NervesHubLink.Utils.Backoff
 
   require Logger
 

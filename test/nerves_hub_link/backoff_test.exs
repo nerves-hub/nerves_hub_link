@@ -1,6 +1,6 @@
 defmodule NervesHubLink.BackoffTest do
   use ExUnit.Case, async: true
-  alias NervesHubLink.Backoff
+  alias NervesHubLink.Utils.Backoff
 
   test "no jitter" do
     assert Backoff.delay_list(1000, 60000, 0) == [1000, 2000, 4000, 8000, 16000, 32000, 60000]

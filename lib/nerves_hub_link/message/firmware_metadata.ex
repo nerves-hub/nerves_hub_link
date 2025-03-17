@@ -1,6 +1,6 @@
 defmodule NervesHubLink.Message.FirmwareMetadata do
   @moduledoc """
-  Structure containing metadata about a firmware.
+  Detailed firmware metadata received during the firmware update process.
   """
 
   defstruct [
@@ -29,7 +29,7 @@ defmodule NervesHubLink.Message.FirmwareMetadata do
           version: Version.build()
         }
 
-  @spec parse(map()) :: {:ok, t()}
+  @spec parse(metadata :: map()) :: {:ok, t()}
   def parse(params) do
     {:ok,
      %__MODULE__{

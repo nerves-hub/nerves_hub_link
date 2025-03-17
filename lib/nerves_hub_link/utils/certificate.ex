@@ -1,7 +1,7 @@
-defmodule NervesHubLink.Certificate do
-  @moduledoc """
-  Certificate management utilities.
-  """
+defmodule NervesHubLink.Utils.Certificate do
+  @moduledoc false
+
+  # Certificate management utilities.
 
   require Logger
 

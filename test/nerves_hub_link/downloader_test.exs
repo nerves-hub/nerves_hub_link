@@ -26,7 +26,7 @@ defmodule NervesHubLink.DownloaderTest do
     test_pid = self()
     handler_fun = &send(test_pid, &1)
 
-    retry_args = RetryConfig.validate!(max_disconnects: 2, time_between_retries: 1)
+    retry_args = RetryConfig.validate(max_disconnects: 2, time_between_retries: 1)
 
     Process.flag(:trap_exit, true)
     {:ok, download} = Downloader.start_download(@failure_url, handler_fun, retry_args)
@@ -41,7 +41,7 @@ defmodule NervesHubLink.DownloaderTest do
     test_pid = self()
     handler_fun = &send(test_pid, &1)
 
-    retry_args = RetryConfig.validate!(max_timeout: 10)
+    retry_args = RetryConfig.validate(max_timeout: 10)
 
     Process.flag(:trap_exit, true)
     {:ok, download} = Downloader.start_download(@failure_url, handler_fun, retry_args)
@@ -66,7 +66,7 @@ defmodule NervesHubLink.DownloaderTest do
       handler_fun = &send(test_pid, &1)
 
       retry_args =
-        RetryConfig.validate!(
+        RetryConfig.validate(
           idle_timeout: 100,
           time_between_retries: 10
         )

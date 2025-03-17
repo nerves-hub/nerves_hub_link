@@ -6,7 +6,8 @@ defmodule NervesHubLink.Configurator.LocalCertKey do
   @behaviour NervesHubLink.Configurator
 
   alias Nerves.Runtime.KV
-  alias NervesHubLink.{Certificate, Configurator.Config}
+  alias NervesHubLink.Configurator.Config
+  alias NervesHubLink.Utils.Certificate
 
   @cert_kv_path "nerves_hub_cert"
   @key_kv_path "nerves_hub_key"
