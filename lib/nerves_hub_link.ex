@@ -21,9 +21,20 @@ defmodule NervesHubLink do
     Socket.check_connection(:device)
   end
 
+  @doc """
+  Checks if the device is connected to the NervesHub console channel.
+  """
   @spec console_connected?() :: boolean()
   def console_connected?() do
     Socket.check_connection(:console)
+  end
+
+  @doc """
+  Checks if the device is connected to the NervesHub extensions channel.
+  """
+  @spec extensions_connected?() :: boolean()
+  def extensions_connected?() do
+    Socket.check_connection(:extensions)
   end
 
   @doc """

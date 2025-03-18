@@ -186,13 +186,17 @@ defmodule NervesHubLink.Socket do
     {:ok, socket}
   end
 
+  def handle_call({:check_connection, :device}, _from, socket) do
+    {:reply, joined?(socket, @device_topic), socket}
+  end
+
   @impl Slipstream
   def handle_call({:check_connection, :console}, _from, socket) do
     {:reply, joined?(socket, @console_topic), socket}
   end
 
-  def handle_call({:check_connection, :device}, _from, socket) do
-    {:reply, joined?(socket, @device_topic), socket}
+  def handle_call({:check_connection, :extensions}, _from, socket) do
+    {:reply, joined?(socket, @extensions_topic), socket}
   end
 
   def handle_call({:check_connection, :socket}, _from, socket) do
