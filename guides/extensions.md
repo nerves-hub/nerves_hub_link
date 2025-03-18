@@ -19,6 +19,9 @@ The default set of metrics used by the `Health.DefaultReport` are:
 - `NervesHubLink.Extensions.Health.MetricSet.Memory` - Memory size (MB), used (MB), and percentage used.
 - `NervesHubLink.Extensions.Health.MetricSet.Disk` - Disk size (KB), available (KB), and percentage used.
 
+And one optional metric set:
+- `NervesHubLink.Extensions.Health.MetricSet.NetworkTraffic` - Total bytes sent and received (per interface).
+
 You can also create your own metric sets by implementing the `NervesHubLink.Extensions.Health.MetricSet`
 behaviour.
 
