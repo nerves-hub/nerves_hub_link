@@ -12,7 +12,7 @@ defmodule NervesHubLink.Extensions.Health.MetricSet.CPU do
   @behaviour NervesHubLink.Extensions.Health.MetricSet
 
   @impl NervesHubLink.Extensions.Health.MetricSet
-  def metrics() do
+  def sample() do
     [
       cpu_temperature(),
       cpu_utilization(),

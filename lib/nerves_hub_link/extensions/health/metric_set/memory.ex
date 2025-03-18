@@ -10,7 +10,7 @@ defmodule NervesHubLink.Extensions.Health.MetricSet.Memory do
   @behaviour NervesHubLink.Extensions.Health.MetricSet
 
   @impl NervesHubLink.Extensions.Health.MetricSet
-  def metrics() do
+  def sample() do
     {free_output, 0} = System.cmd("free", [])
     [_title_row, memory_row | _] = String.split(free_output, "\n")
     [_title_column | memory_columns] = String.split(memory_row)

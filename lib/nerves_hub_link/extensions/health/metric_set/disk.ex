@@ -10,7 +10,7 @@ defmodule NervesHubLink.Extensions.Health.MetricSet.Disk do
   @behaviour NervesHubLink.Extensions.Health.MetricSet
 
   @impl NervesHubLink.Extensions.Health.MetricSet
-  def metrics() do
+  def sample() do
     case Application.ensure_all_started(:os_mon) do
       {:ok, _} ->
         disk_info()

@@ -62,18 +62,22 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
   end
 
   defp get_metric_sets() do
-    Application.get_env(:nerves_hub_link, :health, [])
-    |> Keyword.get(:metric_sets, @default_metric_sets)
-    |> Enum.map(fn metric_set ->
-      if metric_set in [Default, Defaults] do
-        @default_metric_sets
-      else
-        metric_set
-      end
-    end)
-    |> List.flatten()
-    |> Enum.map(& &1.metrics())
-    |> Enum.reduce(%{}, &Map.merge/2)
+    metric_sets =
+      Application.get_env(:nerves_hub_link, :health, [])
+      |> Keyword.get(:metric_sets, @default_metric_sets)
+      |> Enum.map(fn metric_set ->
+        if metric_set in [:default, :defaults] do
+          @default_metric_sets
+        else
+          metric_set
+        end
+      end)
+      |> List.flatten()
+
+    for metric_set <- metric_sets,
+        {k, v} <- metric_set.sample(),
+        into: %{},
+        do: {normalize_key(k), v}
   end
 
   defp vof({mod, fun, args}), do: apply(mod, fun, args)
@@ -88,7 +92,7 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
     metadata = get_health_config(:metadata, %{})
 
     for {key, val_or_fun} <- metadata, into: %{} do
-      {inspect(key), vof(val_or_fun)}
+      {normalize_key(key), vof(val_or_fun)}
     end
   end
 
