@@ -56,6 +56,8 @@ defmodule NervesHubLink.Downloader.RetryConfig do
     #{NimbleOptions.docs(@definition)}
   """
 
+  require Logger
+
   defstruct Keyword.keys(@definition)
 
   @type t :: %__MODULE__{
@@ -71,7 +73,18 @@ defmodule NervesHubLink.Downloader.RetryConfig do
   """
   @spec validate!(Keyword.t()) :: t()
   def validate!(opts) do
-    validated = NimbleOptions.validate!(opts, @definition)
-    struct(__MODULE__, validated)
+    case NimbleOptions.validate(opts, @definition) do
+      {:ok, validated} ->
+        struct(__MODULE__, validated)
+
+      {:error, error} ->
+        Logger.warning("Invalid retry configuration: #{inspect(error)}")
+
+        default = NimbleOptions.validate([], @definition)
+
+        Logger.warning("Using default retry configuration: #{inspect(default)}")
+
+        struct(__MODULE__, default)
+    end
   end
 end
