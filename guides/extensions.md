@@ -102,4 +102,8 @@ Your module only needs to implement a single function, see `NervesHubLink.Extens
 
 ## Alarms
 
-NervesHubLink will automatically report Erlang Alarms from `:alarm_handler` IF you have added a custom alarm handler. The default one is not very helpful and not intended for production use from what I gather. One well-used option is [`alarmist`](https://hex.pm/packages/alarmist).
+The [default health report](`NervesHubLink.Extensions.Health.DefaultReport`) requires the use of
+the [`alarmist`](https://hex.pm/packages/alarmist) library for correct alarms handling.
+
+To use another handler, you will need to create a custom [health report](`NervesHubLink.Extensions.Health.Report`)
+which implements the [`alarms/0`](`c:NervesHubLink.Extensions.Health.Report.alarms/0`) callback.

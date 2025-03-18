@@ -26,15 +26,23 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
     metadata_from_config()
   end
 
-  @impl Report
-  def alarms() do
-    for {id, description} <- :alarm_handler.get_alarms(), into: %{} do
-      try do
-        {inspect(id), inspect(description)}
-      catch
-        _, _ ->
-          {"bad alarm term", ""}
+  # The Alarmist library is required for alarms handling.
+  if Code.ensure_loaded?(Alarmist) do
+    @impl Report
+    def alarms() do
+      for {id, description} <- Alarmist.get_alarms(), into: %{} do
+        try do
+          {inspect(id), inspect(description)}
+        catch
+          _, _ ->
+            {"bad alarm term", ""}
+        end
       end
+    end
+  else
+    @impl Report
+    def alarms() do
+      %{}
     end
   end
 
