@@ -3,5 +3,5 @@ defmodule NervesHubLink.Extensions.Health.MetricSet do
   Behaviour for implementing a custom metric set to be used in a report.
   """
 
-  @callback metrics() :: %{String.t() => number()}
+  @callback metrics() :: %{(String.t() | atom()) => number()}
 end
