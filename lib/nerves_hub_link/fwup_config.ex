@@ -1,7 +1,10 @@
 defmodule NervesHubLink.FwupConfig do
   @moduledoc """
-  Config structure responsible for handling callbacks from FWUP,
-  applying a fwupdate, and storing fwup task configuration
+  Config structure responsible for:
+
+  - handling callbacks from FWUP
+  - applying a fwupdate,
+  - and storing fwup task configuration
   """
   alias NervesHubLink.Message.UpdateInfo
 

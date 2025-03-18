@@ -1,7 +1,7 @@
-defmodule NervesHubLink.Backoff do
-  @moduledoc """
-  Compute retry backoff intervals used by Slipstream
-  """
+defmodule NervesHubLink.Utils.Backoff do
+  @moduledoc false
+
+  # Compute retry backoff intervals used by Slipstream
 
   @doc """
   Produce a list of integer backoff delays with jitter

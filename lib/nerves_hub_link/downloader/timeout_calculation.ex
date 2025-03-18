@@ -1,7 +1,7 @@
 defmodule NervesHubLink.Downloader.TimeoutCalculation do
-  @moduledoc """
-  Pure functions for dealing with timeouts
-  """
+  @moduledoc false
+
+  # Pure functions for dealing with timeouts
 
   @type number_of_bytes :: non_neg_integer()
   @type bits_per_second :: non_neg_integer()

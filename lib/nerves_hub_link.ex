@@ -43,7 +43,7 @@ defmodule NervesHubLink do
   @doc """
   Current status of the update manager
   """
-  @spec status :: NervesHubLink.UpdateManager.State.status()
+  @spec status :: NervesHubLink.UpdateManager.status()
   defdelegate status(), to: NervesHubLink.UpdateManager
 
   @doc """

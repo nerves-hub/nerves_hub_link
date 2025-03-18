@@ -9,26 +9,24 @@ defmodule NervesHubLink.UpdateManager do
   """
   use GenServer
 
-  alias NervesHubLink.{Downloader, FwupConfig}
+  alias NervesHubLink.Downloader
+  alias NervesHubLink.FwupConfig
   alias NervesHubLink.Message.UpdateInfo
+  alias NervesHubLink.UpdateManager
 
   require Logger
 
-  defmodule State do
-    @moduledoc """
-    Structure for the state of the `UpdateManager` server.
-    Contains types that describe status and different states the
-    `UpdateManager` can be in
-    """
+  @type status ::
+          :idle
+          | {:fwup_error, String.t()}
+          | :update_rescheduled
+          | {:updating, integer()}
 
-    @type status ::
-            :idle
-            | {:fwup_error, String.t()}
-            | :update_rescheduled
-            | {:updating, integer()}
+  defmodule State do
+    @moduledoc false
 
     @type t :: %__MODULE__{
-            status: status(),
+            status: UpdateManager.status(),
             update_reschedule_timer: nil | :timer.tref(),
             download: nil | GenServer.server(),
             fwup: nil | GenServer.server(),
@@ -48,7 +46,8 @@ defmodule NervesHubLink.UpdateManager do
   Must be called when an update payload is dispatched from
   NervesHub. the map must contain a `"firmware_url"` key.
   """
-  @spec apply_update(GenServer.server(), UpdateInfo.t(), list(String.t())) :: State.status()
+  @spec apply_update(GenServer.server(), UpdateInfo.t(), list(String.t())) ::
+          UpdateManager.status()
   def apply_update(manager \\ __MODULE__, %UpdateInfo{} = update_info, fwup_public_keys) do
     GenServer.call(manager, {:apply_update, update_info, fwup_public_keys})
   end
@@ -56,7 +55,7 @@ defmodule NervesHubLink.UpdateManager do
   @doc """
   Returns the current status of the update manager
   """
-  @spec status(GenServer.server()) :: State.status()
+  @spec status(GenServer.server()) :: UpdateManager.status()
   def status(manager \\ __MODULE__) do
     GenServer.call(manager, :status)
   end

@@ -1,7 +1,7 @@
 defmodule NervesHubLink.Script do
-  @moduledoc """
-  Mechanism for running scripts from NervesHub on device.
-  """
+  @moduledoc false
+
+  # Mechanism for running scripts from NervesHub on device.
 
   use GenServer
 

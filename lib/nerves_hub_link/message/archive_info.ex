@@ -1,5 +1,7 @@
 defmodule NervesHubLink.Message.ArchiveInfo do
-  @moduledoc false
+  @moduledoc """
+  Payload received from NervesHub when an archive is available.
+  """
 
   defstruct [
     :architecture,
@@ -12,9 +14,6 @@ defmodule NervesHubLink.Message.ArchiveInfo do
     :version
   ]
 
-  @typedoc """
-  Payload that gets dispatched down to devices upon an archive being available
-  """
   @type t() :: %__MODULE__{
           architecture: String.t(),
           description: String.t(),
@@ -26,8 +25,8 @@ defmodule NervesHubLink.Message.ArchiveInfo do
           version: Version.t()
         }
 
-  @doc "Parse an update message from NervesHub"
-  @spec parse(map()) :: {:ok, t()}
+  @doc "Parse an update message from NervesHub."
+  @spec parse(message :: map()) :: {:ok, t()}
   def parse(params) do
     {:ok,
      %__MODULE__{

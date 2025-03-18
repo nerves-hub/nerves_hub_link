@@ -69,10 +69,10 @@ defmodule NervesHubLink.Downloader.RetryConfig do
         }
 
   @doc """
-  Validates a proposed configuration, raising on error
+  Validates a proposed configuration, returning the default configuration on error
   """
-  @spec validate!(Keyword.t()) :: t()
-  def validate!(opts) do
+  @spec validate(Keyword.t()) :: t()
+  def validate(opts) do
     case NimbleOptions.validate(opts, @definition) do
       {:ok, validated} ->
         struct(__MODULE__, validated)

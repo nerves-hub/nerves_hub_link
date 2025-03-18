@@ -109,7 +109,7 @@ defmodule NervesHubLink.Downloader do
   def start_download(url, fun) when is_function(fun, 1) do
     retry_config =
       Application.get_env(:nerves_hub_link, :retry_config, [])
-      |> RetryConfig.validate!()
+      |> RetryConfig.validate()
 
     GenServer.start_link(__MODULE__, [URI.parse(url), fun, retry_config])
   end

@@ -52,11 +52,57 @@ defmodule NervesHubLink.MixProject do
 
   defp docs do
     [
-      extras: ["README.md", "CHANGELOG.md"],
+      extras: [
+        "README.md",
+        "guides/configuration.md": [title: "Configuration"],
+        "guides/extensions.md": [title: "Extensions"],
+        "guides/debugging.md": [title: "Debugging"],
+        "CHANGELOG.md": [title: "Changelog"]
+      ],
       main: "readme",
       source_ref: "v#{@version}",
       source_url: @source_url,
-      skip_undefined_reference_warnings_on: ["CHANGELOG.md"]
+      skip_undefined_reference_warnings_on: ["CHANGELOG.md"],
+      groups_for_extras: [
+        Guides: Path.wildcard("guides/*.md")
+      ],
+      groups_for_modules: [
+        Client: [
+          NervesHubLink.Client,
+          NervesHubLink.Client.Default
+        ],
+        Configuration: [
+          NervesHubLink.Configurator,
+          NervesHubLink.Configurator.Config,
+          NervesHubLink.Configurator.LocalCertKey,
+          NervesHubLink.Configurator.NervesKey,
+          NervesHubLink.Configurator.SharedSecret,
+          NervesHubLink.FwupConfig
+        ],
+        Extensions: [
+          NervesHubLink.Extensions,
+          NervesHubLink.Extensions.Geo,
+          NervesHubLink.Extensions.Geo.DefaultResolver,
+          NervesHubLink.Extensions.Geo.Resolver,
+          NervesHubLink.Extensions.Health,
+          NervesHubLink.Extensions.Health.DefaultReport,
+          NervesHubLink.Extensions.Health.DeviceStatus,
+          NervesHubLink.Extensions.Health.Report
+        ],
+        "Downloads and Updates": [
+          NervesHubLink.UpdateManager,
+          NervesHubLink.UpdateManager.State,
+          NervesHubLink.ArchiveManager,
+          NervesHubLink.Downloader,
+          NervesHubLink.Downloader.RetryConfig,
+          NervesHubLink.Downloader.TimeoutCalculation
+        ],
+        "NervesHub Messages": [
+          NervesHubLink.Message.ArchiveInfo,
+          NervesHubLink.Message.FirmwareMetadata,
+          NervesHubLink.Message.UpdateInfo
+        ]
+      ]
     ]
   end
 

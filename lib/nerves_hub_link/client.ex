@@ -36,6 +36,8 @@ defmodule NervesHubLink.Client do
   ```
   """
 
+  alias NervesHubLink.Utils.Backoff
+
   require Logger
 
   @typedoc "Update that comes over a socket."
@@ -101,8 +103,8 @@ defmodule NervesHubLink.Client do
   @doc """
   Optional callback when the socket disconnected, before starting to reconnect.
 
-  The return value is used to reset the next socket's retry timeout. `nil` uses
-  the default. The default is a call to `NervesHubLink.Backoff.delay_list/3`.
+  The return value is used to reset the next socket's retry timeout. `nil` asks NervesHubLink
+  to calculate a set of random backoffs to use.
 
   You may wish to use this to dynamically change the reconnect backoffs. For instance,
   during a NervesHub deploy you may wish to change the reconnect based on your
@@ -238,7 +240,7 @@ defmodule NervesHubLink.Client do
     if is_list(backoff) do
       backoff
     else
-      NervesHubLink.Backoff.delay_list(1000, 60000, 0.50)
+      Backoff.delay_list(1000, 60000, 0.50)
     end
   end
 

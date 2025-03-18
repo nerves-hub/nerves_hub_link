@@ -20,6 +20,7 @@ defmodule NervesHubLink.ArchiveManager do
 
   @type status :: :idle | :downloading | :done | :update_rescheduled
 
+  @typedoc false
   @type t :: %__MODULE__{
           archive_info: nil | ArchiveInfo.t(),
           data_path: Path.t(),
