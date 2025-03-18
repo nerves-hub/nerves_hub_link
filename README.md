@@ -17,7 +17,8 @@ This integration includes out-of-the-box support for:
 
 Devices connect to the server by joining a long-lived websocket channel.
 
-The NervesHub platform helps schedule firmware updates, providing firmware download information to the device which can be applied immediately or [when convenient](https://github.com/nerves-hub/nerves_hub_link#conditionally-applying-updates).
+The NervesHub platform helps schedule firmware updates, providing firmware download information to the device which can be applied
+immediately or [when convenient](guides/configuration.md#conditionally-applying-updates).
 
 NervesHub does impose some requirements on devices and firmware that may require changes to your Nerves projects:
 
