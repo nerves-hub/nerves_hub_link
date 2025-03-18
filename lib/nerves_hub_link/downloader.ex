@@ -1,8 +1,8 @@
 defmodule NervesHubLink.Downloader do
   @moduledoc """
   Handles downloading files via HTTP.
-  internally caches several interesting properties about
-  the download such as:
+
+  Several interesting properties about the download are internally cached, such as:
 
     * the URI of the request
     * the total content amounts of bytes of the file being downloaded
@@ -13,11 +13,25 @@ defmodule NervesHubLink.Downloader do
 
   This process's **only** focus is obtaining data reliably. It doesn't have any
   side effects on the system.
+
+  You can configure various options related to how the `Downloader` handles timeouts,
+  disconnections, and other aspects of the retry logic by adding the following configuration
+  to your application's config file:
+
+      config :nerves_hub_link, :retry_config,
+        max_disconnects: 20,
+        idle_timeout: 75_000,
+        max_timeout: 10_800_000
+
+  For more information about the configuration options, see the [RetryConfig](`NervesHubLink.Downloader.RetryConfig`) module.
   """
 
   use GenServer
 
-  alias NervesHubLink.{Downloader, Downloader.RetryConfig, Downloader.TimeoutCalculation}
+  alias NervesHubLink.Downloader
+  alias NervesHubLink.Downloader.RetryConfig
+  alias NervesHubLink.Downloader.TimeoutCalculation
+
   require Logger
 
   defstruct uri: nil,
@@ -94,7 +108,8 @@ defmodule NervesHubLink.Downloader do
   @spec start_download(String.t() | URI.t(), event_handler_fun()) :: GenServer.on_start()
   def start_download(url, fun) when is_function(fun, 1) do
     retry_config =
-      struct(RetryConfig, Application.get_env(:nerves_hub_link_common, :retry_config, []))
+      Application.get_env(:nerves_hub_link, :retry_config, [])
+      |> RetryConfig.validate!()
 
     GenServer.start_link(__MODULE__, [URI.parse(url), fun, retry_config])
   end
@@ -418,5 +433,5 @@ defmodule NervesHubLink.Downloader do
     do: [{"X-Retry-Number", "#{retry_number}"} | headers]
 
   defp add_user_agent_header(headers, _),
-    do: [{"User-Agent", "NHL/#{Application.spec(:nerves_hub_link_common)[:vsn]}"} | headers]
+    do: [{"User-Agent", "NHL/#{Application.spec(:nerves_hub_link)[:vsn]}"} | headers]
 end
