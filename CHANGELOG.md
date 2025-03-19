@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.7.0] - 2025-03-19
+
+* Added
+  * Improve how custom sets of metrics are defined (#279)
+  * Optional network traffic metrics (#267)
+  * [REUSE compliance](https://reuse.software/)
+
+* Updated
+  * Use Credo within the CI build to ensure code quality (#257)
+  * Fix how download retry config is fetched (#280)
+  * Update documentation structure (#281)
+  * Require Alarmist when using alarms in the default health report (#263)
+
 ## [2.6.0] - 2024-12-03
 
 This update includes Extensions, a mechanism to handle extensions on a device
