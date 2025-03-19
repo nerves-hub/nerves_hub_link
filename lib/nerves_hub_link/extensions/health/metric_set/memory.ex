@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2025 Josh Kalderimis
+#
+# SPDX-License-Identifier: Apache-2.0
+#
 defmodule NervesHubLink.Extensions.Health.MetricSet.Memory do
   @moduledoc """
   Health report metrics for total, available, and used (percentage) memory.

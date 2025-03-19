@@ -1,3 +1,10 @@
+# SPDX-FileCopyrightText: 2024 Jon Carstens
+# SPDX-FileCopyrightText: 2024 Lars Wikman
+# SPDX-FileCopyrightText: 2025 Elin Olsson
+# SPDX-FileCopyrightText: 2025 Josh Kalderimis
+#
+# SPDX-License-Identifier: Apache-2.0
+#
 defmodule NervesHubLink.Extensions.Health.DefaultReport do
   @moduledoc """
   A default health report implementation with support for easily adding

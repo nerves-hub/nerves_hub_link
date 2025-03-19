@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2023 Eric Oestrich
+#
+# SPDX-License-Identifier: Apache-2.0
+#
 defmodule NervesHubLink.Support.FWUPStreamPlug do
   @moduledoc false
 

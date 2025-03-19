@@ -1,3 +1,8 @@
+# SPDX-FileCopyrightText: 2024 Eric Oestrich
+# SPDX-FileCopyrightText: 2025 Josh Kalderimis
+#
+# SPDX-License-Identifier: Apache-2.0
+#
 defmodule NervesHubLink.Message.ArchiveInfo do
   @moduledoc """
   Payload received from NervesHub when an archive is available.

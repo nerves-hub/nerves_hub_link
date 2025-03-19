@@ -1,3 +1,9 @@
+# SPDX-FileCopyrightText: 2023 Jon Carstens
+# SPDX-FileCopyrightText: 2024 Josh Kalderimis
+# SPDX-FileCopyrightText: 2024 Lars Wikman
+#
+# SPDX-License-Identifier: Apache-2.0
+#
 defmodule NervesHubLink.Configurator.SharedSecret do
   @moduledoc """
   Configurator allowing authentication with a shared secret.

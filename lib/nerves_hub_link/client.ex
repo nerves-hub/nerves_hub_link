@@ -1,3 +1,13 @@
+# SPDX-FileCopyrightText: 2018 Connor Rigby
+# SPDX-FileCopyrightText: 2019 Frank Hunleth
+# SPDX-FileCopyrightText: 2020 Jon Carstens
+# SPDX-FileCopyrightText: 2020 Justin Schneck
+# SPDX-FileCopyrightText: 2023 Eric Oestrich
+# SPDX-FileCopyrightText: 2024 Lars Wikman
+# SPDX-FileCopyrightText: 2025 Josh Kalderimis
+#
+# SPDX-License-Identifier: Apache-2.0
+#
 defmodule NervesHubLink.Client do
   @moduledoc """
   A behaviour module for customizing if and when firmware updates get applied.

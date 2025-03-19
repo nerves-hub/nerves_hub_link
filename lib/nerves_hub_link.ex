@@ -1,3 +1,12 @@
+# SPDX-FileCopyrightText: 2019 Jon Carstens
+# SPDX-FileCopyrightText: 2020 Justin Schneck
+# SPDX-FileCopyrightText: 2023 Eric Oestrich
+# SPDX-FileCopyrightText: 2023 Frank Hunleth
+# SPDX-FileCopyrightText: 2024 Lars Wikman
+# SPDX-FileCopyrightText: 2025 Josh Kalderimis
+#
+# SPDX-License-Identifier: Apache-2.0
+#
 defmodule NervesHubLink do
   @moduledoc """
   The Device-side client for NervesHub.

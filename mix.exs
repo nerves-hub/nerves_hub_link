@@ -108,15 +108,21 @@ defmodule NervesHubLink.MixProject do
 
   defp package do
     [
-      licenses: ["Apache-2.0"],
-      links: %{"GitHub" => @source_url},
       files: [
-        "lib",
         "CHANGELOG.md",
-        "LICENSE",
+        "lib",
+        "LICENSES/*",
         "mix.exs",
-        "README.md"
-      ]
+        "NOTICE",
+        "README.md",
+        "REUSE.toml"
+      ],
+      licenses: ["Apache-2.0"],
+      links: %{
+        "GitHub" => @source_url,
+        "REUSE Compliance" =>
+          "https://api.reuse.software/info/github.com/nerves-hub/nerves_hub_link"
+      }
     ]
   end
 

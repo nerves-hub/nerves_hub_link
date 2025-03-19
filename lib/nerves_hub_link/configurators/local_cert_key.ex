@@ -1,3 +1,8 @@
+# SPDX-FileCopyrightText: 2024 Josh Kalderimis
+# SPDX-FileCopyrightText: 2024 Lars Wikman
+#
+# SPDX-License-Identifier: Apache-2.0
+#
 defmodule NervesHubLink.Configurator.LocalCertKey do
   @moduledoc """
   Configurator allowing authentication via locally stored certificate key.

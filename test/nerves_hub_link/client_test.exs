@@ -1,3 +1,10 @@
+# SPDX-FileCopyrightText: 2019 Daniel Spofford
+# SPDX-FileCopyrightText: 2019 Frank Hunleth
+# SPDX-FileCopyrightText: 2020 Jon Carstens
+# SPDX-FileCopyrightText: 2020 Justin Schneck
+#
+# SPDX-License-Identifier: Apache-2.0
+#
 defmodule NervesHubLink.ClientTest do
   use ExUnit.Case, async: true
   alias NervesHubLink.{Client, ClientMock}

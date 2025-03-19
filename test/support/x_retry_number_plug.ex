@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2023 Eric Oestrich
+#
+# SPDX-License-Identifier: Apache-2.0
+#
 defmodule NervesHubLink.Support.XRetryNumberPlug do
   @moduledoc """
   Plug sends data in chunks, halting halfway thru to be resumed by a client

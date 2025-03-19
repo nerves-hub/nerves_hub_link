@@ -1,3 +1,13 @@
+# SPDX-FileCopyrightText: 2021 Connor Rigby
+# SPDX-FileCopyrightText: 2021 Frank Hunleth
+# SPDX-FileCopyrightText: 2021 Jon Carstens
+# SPDX-FileCopyrightText: 2023 Ben Youngblood
+# SPDX-FileCopyrightText: 2023 Eric Oestrich
+# SPDX-FileCopyrightText: 2024 Josh Kalderimis
+# SPDX-FileCopyrightText: 2024 Lars Wikman
+#
+# SPDX-License-Identifier: Apache-2.0
+#
 defmodule NervesHubLink.Socket do
   @moduledoc false
 

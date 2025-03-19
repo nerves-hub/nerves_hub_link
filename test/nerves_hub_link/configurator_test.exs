@@ -1,3 +1,8 @@
+# SPDX-FileCopyrightText: 2020 Jacob Arellano
+# SPDX-FileCopyrightText: 2020 Jon Carstens
+#
+# SPDX-License-Identifier: Apache-2.0
+#
 defmodule NervesHubLink.ConfiguratorTest do
   use ExUnit.Case, async: true
 

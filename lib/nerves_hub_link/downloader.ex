@@ -1,3 +1,8 @@
+# SPDX-FileCopyrightText: 2023 Eric Oestrich
+# SPDX-FileCopyrightText: 2024 Josh Kalderimis
+#
+# SPDX-License-Identifier: Apache-2.0
+#
 defmodule NervesHubLink.Downloader do
   @moduledoc """
   Handles downloading files via HTTP.

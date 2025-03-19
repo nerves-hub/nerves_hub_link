@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2023 Eric Oestrich
+#
+# SPDX-License-Identifier: Apache-2.0
+#
 defmodule NervesHubLink.Support.RangeRequestPlug do
   @moduledoc """
   Sends chunked response according to the value of the range-request header

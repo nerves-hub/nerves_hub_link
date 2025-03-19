@@ -1,3 +1,10 @@
+# SPDX-FileCopyrightText: 2020 Frank Hunleth
+# SPDX-FileCopyrightText: 2020 Jon Carstens
+# SPDX-FileCopyrightText: 2024 Josh Kalderimis
+# SPDX-FileCopyrightText: 2024 Lars Wikman
+#
+# SPDX-License-Identifier: Apache-2.0
+#
 if Code.ensure_loaded?(NervesKey) do
   defmodule NervesHubLink.Configurator.NervesKey do
     @moduledoc """

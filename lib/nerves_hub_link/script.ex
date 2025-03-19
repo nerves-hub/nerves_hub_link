@@ -1,3 +1,9 @@
+# SPDX-FileCopyrightText: 2024 Eric Oestrich
+# SPDX-FileCopyrightText: 2024 Lars Wikman
+# SPDX-FileCopyrightText: 2025 Josh Kalderimis
+#
+# SPDX-License-Identifier: Apache-2.0
+#
 defmodule NervesHubLink.Script do
   @moduledoc false
 

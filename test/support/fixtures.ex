@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2023 Eric Oestrich
+#
+# SPDX-License-Identifier: Apache-2.0
+#
 # Copy Paste of NervesHubCore.Support.Fwup
 # As found https://github.com/nerves-hub/nerves_hub_web/blob/37290d5e21c1a082ca7dccfd07227cf296b4f45d/test/support/fwup.ex
 defmodule Fwup.TestSupport.Fixtures do

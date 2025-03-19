@@ -1,3 +1,8 @@
+# SPDX-FileCopyrightText: 2023 Eric Oestrich
+# SPDX-FileCopyrightText: 2024 Josh Kalderimis
+#
+# SPDX-License-Identifier: Apache-2.0
+#
 defmodule NervesHubLink.DownloaderTest do
   use ExUnit.Case, async: true
 

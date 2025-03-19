@@ -1,3 +1,10 @@
+# SPDX-FileCopyrightText: 2019 Daniel Spofford
+# SPDX-FileCopyrightText: 2020 Jon Carstens
+# SPDX-FileCopyrightText: 2021 Connor Rigby
+# SPDX-FileCopyrightText: 2025 Josh Kalderimis
+#
+# SPDX-License-Identifier: Apache-2.0
+#
 defmodule NervesHubLink.CertificateTest do
   use ExUnit.Case, async: true
   alias NervesHubLink.Utils.Certificate

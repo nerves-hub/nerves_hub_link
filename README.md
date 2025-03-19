@@ -1,7 +1,9 @@
 # NervesHubLink
 
-[![CircleCI](https://circleci.com/gh/nerves-hub/nerves_hub_link/tree/main.svg?style=svg)](https://circleci.com/gh/nerves-hub/nerves_hub_link/tree/main)
 [![Hex version](https://img.shields.io/hexpm/v/nerves_hub_link.svg "Hex version")](https://hex.pm/packages/nerves_hub_link)
+[![API docs](https://img.shields.io/hexpm/v/nerves_hub_link.svg?label=hexdocs "API docs")](https://hexdocs.pm/nerves_hub_link/NervesHubLink.html)
+[![CircleCI](https://dl.circleci.com/status-badge/img/gh/nerves-hub/nerves_hub_link/tree/main.svg?style=svg)](https://dl.circleci.com/status-badge/redirect/gh/nerves-hub/nerves_hub_link/tree/main)
+[![REUSE status](https://api.reuse.software/badge/github.com/nerves-hub/nerves_hub_link)](https://api.reuse.software/info/github.com/nerves-hub/nerves_hub_link)
 
 `NervesHubLink` is the supported client library for connecting devices to [NervesHub](https://github.com/nerves-hub/nerves_hub_web).
 

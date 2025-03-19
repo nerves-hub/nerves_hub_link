@@ -1,3 +1,14 @@
+# SPDX-FileCopyrightText: 2020 Jacob Arellano
+# SPDX-FileCopyrightText: 2020 Jon Carstens
+# SPDX-FileCopyrightText: 2021 Connor Rigby
+# SPDX-FileCopyrightText: 2021 Frank Hunleth
+# SPDX-FileCopyrightText: 2023 Eric Oestrich
+# SPDX-FileCopyrightText: 2024 Josh Kalderimis
+# SPDX-FileCopyrightText: 2024 Lars Wikman
+# SPDX-FileCopyrightText: 2024 Nate Shoemaker
+#
+# SPDX-License-Identifier: Apache-2.0
+#
 defmodule NervesHubLink.Configurator do
   @moduledoc """
   Behaviour for implementing a configurator.

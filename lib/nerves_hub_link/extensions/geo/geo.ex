@@ -1,3 +1,8 @@
+# SPDX-FileCopyrightText: 2024 Jon Carstens
+# SPDX-FileCopyrightText: 2024 Lars Wikman
+#
+# SPDX-License-Identifier: Apache-2.0
+#
 defmodule NervesHubLink.Extensions.Geo do
   @moduledoc """
   The Geo Extension.

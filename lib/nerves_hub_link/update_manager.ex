@@ -1,3 +1,10 @@
+# SPDX-FileCopyrightText: 2023 Eric Oestrich
+# SPDX-FileCopyrightText: 2024 Connor Rigby
+# SPDX-FileCopyrightText: 2024 Frank Hunleth
+# SPDX-FileCopyrightText: 2024 Josh Kalderimis
+#
+# SPDX-License-Identifier: Apache-2.0
+#
 defmodule NervesHubLink.UpdateManager do
   @moduledoc """
   GenServer responsible for brokering messages between:

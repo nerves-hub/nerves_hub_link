@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2023 Eric Oestrich
+#
+# SPDX-License-Identifier: Apache-2.0
+#
 # https://github.com/elixir-ecto/ecto/blob/v2.2.11/lib/ecto/uuid.ex
 defmodule Ecto.UUID do
   @moduledoc """

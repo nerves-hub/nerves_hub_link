@@ -1,3 +1,9 @@
+# SPDX-FileCopyrightText: 2024 Eric Oestrich
+# SPDX-FileCopyrightText: 2024 Josh Kalderimis
+# SPDX-FileCopyrightText: 2024 Lars Wikman
+#
+# SPDX-License-Identifier: Apache-2.0
+#
 defmodule NervesHubLink.ArchiveManager do
   @moduledoc """
   GenServer for handling downloading archives from NervesHub
