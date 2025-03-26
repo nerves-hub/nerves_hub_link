@@ -1,6 +1,15 @@
 # Changelog
 
+## [2.7.1] - 2025-03-26
+
+* Fixed
+  * Revert Backoff/Certificate move to fix breaking change
+
 ## [2.7.0] - 2025-03-19
+**Invalid Release**
+
+This release is now invalid, it contains unintended breaking changes to
+`NervesHubLink.Certificate` and `NervesHubLink.Backoff`. Please use 2.7.1.
 
 * Added
   * Improve how custom sets of metrics are defined (#279)
