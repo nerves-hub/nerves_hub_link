@@ -46,6 +46,7 @@ jobs:
           keys:
             - v1-mix-cache-<< parameters.tag >>-{{ checksum "mix.lock" }}
       - run: mix deps.get
+      - run: mix compile --warnings-as-errors
       - run: mix test
       - when:
           condition:
@@ -53,7 +54,6 @@ jobs:
           steps:
             - run: mix format --check-formatted
             - run: mix deps.unlock --check-unused
-            - run: mix compile --warnings-as-errors
             - run: mix docs
             - run: mix hex.build
             - run: mix credo -a --strict
