@@ -11,8 +11,8 @@ defmodule NervesHubLink.Configurator.SharedSecret do
   @behaviour NervesHubLink.Configurator
 
   alias Nerves.Runtime.KV
+  alias NervesHubLink.Certificate
   alias NervesHubLink.Configurator.Config
-  alias NervesHubLink.Utils.Certificate
 
   @impl NervesHubLink.Configurator
   def build(%Config{ssl: ssl, socket: socket} = config) do

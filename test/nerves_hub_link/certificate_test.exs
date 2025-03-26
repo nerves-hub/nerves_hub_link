@@ -7,7 +7,7 @@
 #
 defmodule NervesHubLink.CertificateTest do
   use ExUnit.Case, async: true
-  alias NervesHubLink.Utils.Certificate
+  alias NervesHubLink.Certificate
 
   doctest Certificate
 

@@ -8,10 +8,10 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-defmodule NervesHubLink.Utils.Certificate do
-  @moduledoc false
-
-  # Certificate management utilities.
+defmodule NervesHubLink.Certificate do
+  @moduledoc """
+  Certificate management utilities
+  """
 
   require Logger
 

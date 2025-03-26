@@ -3,8 +3,10 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-defmodule NervesHubLink.Utils.Backoff do
-  @moduledoc false
+defmodule NervesHubLink.Backoff do
+  @moduledoc """
+  Functions for computing network connect backoff intervals
+  """
 
   # Compute retry backoff intervals used by Slipstream
 
