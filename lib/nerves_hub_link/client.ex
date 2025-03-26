@@ -46,7 +46,7 @@ defmodule NervesHubLink.Client do
   ```
   """
 
-  alias NervesHubLink.Utils.Backoff
+  alias NervesHubLink.Backoff
 
   require Logger
 
