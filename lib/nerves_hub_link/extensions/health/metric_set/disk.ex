@@ -15,19 +15,21 @@ defmodule NervesHubLink.Extensions.Health.MetricSet.Disk do
 
   @impl NervesHubLink.Extensions.Health.MetricSet
   def sample() do
+    otp_version = :erlang.system_info(:otp_release) |> List.to_integer()
+
     case Application.ensure_all_started(:os_mon) do
       {:ok, _} ->
-        disk_info()
+        disk_info(otp_version)
 
       {:error, {:already_started, _}} ->
-        disk_info()
+        disk_info(otp_version)
 
       _ ->
         %{}
     end
   end
 
-  defp disk_info() do
+  defp disk_info(otp_version) when otp_version >= 26 do
     data =
       Enum.find(:disksup.get_disk_info(), fn {key, _, _, _} ->
         key == ~c"/root"
@@ -41,6 +43,25 @@ defmodule NervesHubLink.Extensions.Health.MetricSet.Disk do
         %{
           disk_total_kb: total_kb,
           disk_available_kb: available_kb,
+          disk_used_percentage: capacity_percentage
+        }
+    end
+  end
+
+  defp disk_info(_otp_version) do
+    data =
+      Enum.find(:disksup.get_disk_data(), fn {key, _, _, _} ->
+        key == ~c"/root"
+      end)
+
+    case data do
+      nil ->
+        %{}
+
+      {_, total_kb, capacity_percentage} ->
+        %{
+          disk_total_kb: total_kb,
+          disk_available_kb: capacity_percentage / 100 * total_kb,
           disk_used_percentage: capacity_percentage
         }
     end
