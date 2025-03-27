@@ -28,8 +28,12 @@ defmodule NervesHubLink.Extensions.Health.MetricSet.Disk do
   end
 
   defp disk_info() do
+    # TODO: :disksup.get_disk_info/0 can be used here instead when
+    # the lowest OTP version we support is 26. That function
+    # returns the available disk space in KB so we don't have
+    # to calculate it ourselves.
     data =
-      Enum.find(:disksup.get_disk_info(), fn {key, _, _, _} ->
+      Enum.find(:disksup.get_disk_data(), fn {key, _, _, _} ->
         key == ~c"/root"
       end)
 
@@ -37,10 +41,10 @@ defmodule NervesHubLink.Extensions.Health.MetricSet.Disk do
       nil ->
         %{}
 
-      {_, total_kb, available_kb, capacity_percentage} ->
+      {_, total_kb, capacity_percentage} ->
         %{
           disk_total_kb: total_kb,
-          disk_available_kb: available_kb,
+          disk_available_kb: round(capacity_percentage / 100 * total_kb),
           disk_used_percentage: capacity_percentage
         }
     end
