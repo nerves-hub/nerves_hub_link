@@ -64,7 +64,21 @@ defmodule NervesHubLink.Certificate do
           "[NervesHubLink] Using default system certificates. Requests may fail if the NervesHub server certificate is not signed by a globally trusted CA, or the installed system certificates are old."
         )
 
-        :public_key.cacerts_get()
+        maybe_public_certs()
+    end
+  end
+
+  # TODO: We can drop this check once OTP 25
+  # is our lowest supported version
+  if String.to_integer(System.otp_release()) >= 25 do
+    defp maybe_public_certs(), do: :public_key.cacerts_get()
+  else
+    defp maybe_public_certs() do
+      Logger.debug(
+        "[NervesHubLink] Cannot retrieve public certs without CAStore on OTP 24 and below. Please add it as a dependency: https://hex.pm/packages/castore."
+      )
+
+      []
     end
   end
 end
