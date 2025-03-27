@@ -15,40 +15,23 @@ defmodule NervesHubLink.Extensions.Health.MetricSet.Disk do
 
   @impl NervesHubLink.Extensions.Health.MetricSet
   def sample() do
-    otp_version = :erlang.system_info(:otp_release) |> List.to_integer()
-
     case Application.ensure_all_started(:os_mon) do
       {:ok, _} ->
-        disk_info(otp_version)
+        disk_info()
 
       {:error, {:already_started, _}} ->
-        disk_info(otp_version)
+        disk_info()
 
       _ ->
         %{}
     end
   end
 
-  defp disk_info(otp_version) when otp_version >= 26 do
-    data =
-      Enum.find(:disksup.get_disk_info(), fn {key, _, _, _} ->
-        key == ~c"/root"
-      end)
-
-    case data do
-      nil ->
-        %{}
-
-      {_, total_kb, available_kb, capacity_percentage} ->
-        %{
-          disk_total_kb: total_kb,
-          disk_available_kb: available_kb,
-          disk_used_percentage: capacity_percentage
-        }
-    end
-  end
-
-  defp disk_info(_otp_version) do
+  defp disk_info() do
+    # TODO: :disksup.get_disk_info/0 can be used here instead when
+    # the lowest OTP version we support is 26. That function
+    # returns the available disk space in KB so we don't have
+    # to calculate it ourselves.
     data =
       Enum.find(:disksup.get_disk_data(), fn {key, _, _, _} ->
         key == ~c"/root"
