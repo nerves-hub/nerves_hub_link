@@ -44,7 +44,7 @@ defmodule NervesHubLink.Extensions.Health.MetricSet.Disk do
       {_, total_kb, capacity_percentage} ->
         %{
           disk_total_kb: total_kb,
-          disk_available_kb: capacity_percentage / 100 * total_kb,
+          disk_available_kb: round(capacity_percentage / 100 * total_kb),
           disk_used_percentage: capacity_percentage
         }
     end
