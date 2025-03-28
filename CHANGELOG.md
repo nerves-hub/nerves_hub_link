@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.7.2] - 2025-03-28
+
+* Fixed
+  * Retrieve disk info differently based on OTP version
+  * Emit a warning when trying to retrieve public certs through Erlang on < OTP 25
+  * Always run 'mix compile --warnings-as-errors' in CI
+
+* Updated
+  * whenwhere 0.1.1 => 0.1.2
+  * nerves_runtime 0.13.7 => 0.13.8
+
 ## [2.7.1] - 2025-03-26
 
 * Fixed
