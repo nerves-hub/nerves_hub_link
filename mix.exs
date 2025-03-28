@@ -1,7 +1,7 @@
 defmodule NervesHubLink.MixProject do
   use Mix.Project
 
-  @version "2.7.1"
+  @version "2.7.2"
   @description "Manage your Nerves fleet by connecting it to NervesHub"
   @source_url "https://github.com/nerves-hub/nerves_hub_link"
 
