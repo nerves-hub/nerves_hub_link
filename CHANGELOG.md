@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.7.2] - 2025-03-28
+
+* Fixed
+  * Retrieve disk info differently based on OTP version
+  * Emit a warning when trying to retrieve public certs through Erlang on < OTP 25
+
+* Updated
+  * Force whenwhere 0.1.2 to fix compatibility with OTP 24 and earlier
+
 ## [2.7.1] - 2025-03-26
 
 * Fixed
