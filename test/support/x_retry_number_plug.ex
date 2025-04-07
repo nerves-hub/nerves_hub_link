@@ -51,6 +51,7 @@ defmodule NervesHubLink.Support.XRetryNumberPlug do
     case String.split(range, "-") do
       [start, ""] ->
         {String.to_integer(start), 0}
+
       [start, finish] ->
         {String.to_integer(start), String.to_integer(finish)}
     end

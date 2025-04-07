@@ -15,8 +15,8 @@ defmodule NervesHubLink.UrlToFileTest do
     XRetryNumberPlug
   }
 
-  alias NervesHubLink.Downloader.UrlToFile
   alias NervesHubLink.Downloader.RetryConfig
+  alias NervesHubLink.Downloader.UrlToFile
 
   @short_retry_args %RetryConfig{
     max_disconnects: 10,

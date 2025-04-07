@@ -11,8 +11,8 @@ defmodule NervesHubLink.Downloader.UrlToFile do
 
   use GenServer
 
-  alias NervesHubLink.Downloader.UrlToFile
   alias NervesHubLink.Downloader.RetryConfig
+  alias NervesHubLink.Downloader.UrlToFile
 
   require Logger
 
@@ -116,6 +116,9 @@ defmodule NervesHubLink.Downloader.UrlToFile do
     {:ok, state}
   end
 
+  @spec handle_chunk(pid(), integer(), {:data, binary()}, {Req.Request.t(), Req.Response.t()}) ::
+          {:cont, {Req.Request.t(), Req.Response.t()}}
+          | {:halt, {Req.Request.t(), Req.Response.t()}}
   def handle_chunk(pid, ref, {:data, data}, {req, res}) do
     # This uses a call to be able to apply backpressure which should propagate
     # into Req not producing more chunks
@@ -227,7 +230,11 @@ defmodule NervesHubLink.Downloader.UrlToFile do
           {:noreply, reschedule_resume(state)}
         else
           firmware_path = path(state.uuid)
-          Logger.info("[NervesHubLink] Download succeeded for UUID #{state.uuid} in: #{firmware_path}")
+
+          Logger.info(
+            "[NervesHubLink] Download succeeded for UUID #{state.uuid} in: #{firmware_path}"
+          )
+
           _ = state.handler_fun.({:complete, firmware_path})
           {:stop, {:done, firmware_path}, state}
         end
