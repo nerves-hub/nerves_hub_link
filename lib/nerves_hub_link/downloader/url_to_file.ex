@@ -331,12 +331,20 @@ defmodule NervesHubLink.Downloader.UrlToFile do
     time = System.monotonic_time(:millisecond)
 
     Logger.info("Resuming from #{state.downloaded_length}")
+
+    range =
+      if state.content_length > 0 do
+        "#{state.downloaded_length}-#{state.content_length}"
+      else
+        "#{state.downloaded_length}-"
+      end
+
     t =
       Task.Supervisor.async_nolink(NervesHubLink.TaskSupervisor, fn ->
         Req.get(URI.to_string(uri),
           into: &handle_chunk(pid, ref, &1, &2),
           # Using a range header without known total, is simpler
-          range: "bytes=#{state.downloaded_length}-",
+          range: "bytes=#{range}",
           headers: [
             content_type: "application/octet-stream",
             x_retry_number: to_string(state.retry_without_progress),
