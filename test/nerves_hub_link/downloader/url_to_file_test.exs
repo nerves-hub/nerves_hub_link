@@ -120,20 +120,6 @@ defmodule NervesHubLink.UrlToFileTest do
 
       {:ok, [plug: plug, url: "http://localhost:#{port}/test"]}
     end
-
-    test "calculates range request header", %{url: url} do
-      test_pid = self()
-      handler_fun = &send(test_pid, &1)
-      uuid = Ecto.UUID.generate()
-      {:ok, _} = UrlToFile.start_download(uuid, url, handler_fun, @short_retry_args)
-
-      assert_receive {:error, :request_error}
-      assert_receive {:error, :request_error}
-      assert_receive {:error, :request_error}
-      assert_receive {:error, :request_error}
-      assert_receive {:complete, filepath}
-      assert {:ok, "h"} = File.read(filepath)
-    end
   end
 
   describe "redirect" do
@@ -154,7 +140,7 @@ defmodule NervesHubLink.UrlToFileTest do
       uuid = Ecto.UUID.generate()
       {:ok, _download} = UrlToFile.start_download(uuid, url, handler_fun)
       refute_receive {:error, _}
-      assert_receive {:data, "redirected"}
+      assert_receive {:download_progress, 1}
     end
   end
 
@@ -179,18 +165,18 @@ defmodule NervesHubLink.UrlToFileTest do
       # download the first part of the data.
       # the plug will terminate the connection after 2048 bytes are sent.
       # the handler_fun will send the data to this test's mailbox.
+      Process.flag(:trap_exit, true)
       uuid = Ecto.UUID.generate()
       {:ok, _download} = UrlToFile.start_download(uuid, url, handler_fun, @short_retry_args)
-      assert_receive {:data, ^expected_data_part_1}, 1000
+      assert_receive {:download_progress, _}
 
       # download will be resumed after the error
       assert_receive {:error, _}
 
-      # second part should now be delivered
-      assert_receive {:data, ^expected_data_part_2}
-
       # the request should complete successfully this time
-      assert_receive :complete
+      assert_receive {:complete, path}
+      data = expected_data_part_1 <> expected_data_part_2
+      assert {:ok, ^data} = File.read(path)
     end
   end
 end

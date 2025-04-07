@@ -131,7 +131,6 @@ defmodule NervesHubLink.Downloader.UrlToFile do
           state
       )
       when chunk_ref == ref do
-    Logger.info("chunk: #{data}")
     IO.write(io, data)
 
     # Performs state updates and reporting progress
@@ -220,6 +219,18 @@ defmodule NervesHubLink.Downloader.UrlToFile do
         Logger.error("[NervesHubLink] Download failed for #{url} with error status:\n#{status}")
         _ = state.handler_fun.({:error, {:http_error, status}})
         {:stop, {:http_error, status}, state}
+
+      {:error, %Req.TransportError{reason: :closed}} ->
+        if state.downloaded_length < state.content_length do
+          Logger.warning("[NervesHubLink] Download interrupted for #{url}, connection closed.")
+          _ = state.handler_fun.({:error, :connection_closed})
+          {:noreply, reschedule_resume(state)}
+        else
+          firmware_path = path(state.uuid)
+          Logger.info("[NervesHubLink] Download succeeded for UUID #{state.uuid} in: #{firmware_path}")
+          _ = state.handler_fun.({:complete, firmware_path})
+          {:stop, {:done, firmware_path}, state}
+        end
 
       {:error, %Req.TransportError{reason: :timeout}} ->
         Logger.warning("[NervesHubLink] Download failed for #{url} idle timeout.")
@@ -445,7 +456,7 @@ defmodule NervesHubLink.Downloader.UrlToFile do
          new_mb > old_mb do
       t = System.monotonic_time(:millisecond)
       # We make sure we don't divide by zero, occasionally happened in tests
-      bytes_per_second = 1000 / max((t - time) * (new_size - downloaded_length), 1)
+      bytes_per_second = min(1.0, 1000 / max((t - time) * (new_size - downloaded_length), 1))
 
       # If size is known we also report the percentage
       if total_size > 0 do
@@ -486,6 +497,6 @@ defmodule NervesHubLink.Downloader.UrlToFile do
     4 => "TB/s"
   }
   defp pretty_speed(bps, scale) do
-    "#{Float.round(bps, 1)}#{Map.get(@units, scale, "???/s")}"
+    "#{Float.round(bps, 1)} #{Map.get(@units, scale, "???/s")}"
   end
 end

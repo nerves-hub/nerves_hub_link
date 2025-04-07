@@ -17,7 +17,7 @@ defmodule NervesHubLink.Support.RangeRequestPlug do
   @impl Plug
   def call(%Plug.Conn{} = conn, _opts) do
     {start, finish} = fetch_range_header(conn.req_headers)
-    IO.inspect({start, finish}, label: "range in plug")
+    IO.inspect({start, finish})
     payload = "hello, world"
     resp = fetch_range(payload, start, finish)
 
@@ -37,7 +37,6 @@ defmodule NervesHubLink.Support.RangeRequestPlug do
 
   defp fetch_range(payload, start, 0) do
     finish = byte_size(payload)
-    IO.inspect({payload, start, finish})
     {_, tail} = String.split_at(payload, start)
     fetch_range_until(tail, <<>>, start, finish)
   end
@@ -58,14 +57,11 @@ defmodule NervesHubLink.Support.RangeRequestPlug do
   defp fetch_range_header([]), do: {0, 1}
 
   defp fetch_range_header([{"range", "bytes=" <> range} | _rest]) do
-    IO.inspect(range, label: "range")
     case String.split(range, "-") do
-      [start, ] ->
+      [start, ""] ->
         {String.to_integer(start), 0}
       [start, finish] ->
         {String.to_integer(start), String.to_integer(finish)}
-      other ->
-        IO.inspect(other)
     end
   end
 
