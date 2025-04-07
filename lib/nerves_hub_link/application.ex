@@ -35,13 +35,16 @@ defmodule NervesHubLink.Application do
 
         [
           {DynamicSupervisor, name: ExtensionsSupervisor},
+          {Task.Supervisor, name: NervesHubLink.TaskSupervisor},
           Extensions,
           {UpdateManager, fwup_config},
           {ArchiveManager, config},
           {Socket, config}
         ]
       else
-        []
+        [
+          {Task.Supervisor, name: NervesHubLink.TaskSupervisor}
+        ]
       end
 
     Supervisor.start_link(children, strategy: :one_for_one, name: NervesHubLink.Supervisor)
