@@ -23,7 +23,7 @@ defmodule NervesHubLink.UpdateManagerTest do
 
       update_payload = %UpdateInfo{
         firmware_url: "http://localhost:#{port}/test.fw",
-        firmware_meta: %FirmwareMetadata{}
+        firmware_meta: %FirmwareMetadata{uuid: Ecto.UUID.generate()}
       }
 
       {:ok, [plug: plug, update_payload: update_payload, devpath: "/tmp/fwup_output"]}
@@ -33,7 +33,7 @@ defmodule NervesHubLink.UpdateManagerTest do
       fwup_config = %{default_config() | fwup_devpath: devpath}
 
       {:ok, manager} = UpdateManager.start_link(fwup_config)
-      assert UpdateManager.apply_update(manager, update_payload, []) == {:updating, 0}
+      assert UpdateManager.apply_update(manager, update_payload, []) == {:download, 0}
 
       assert_receive {:fwup, {:progress, 0}}
       assert_receive {:fwup, {:progress, 100}}
@@ -84,7 +84,7 @@ defmodule NervesHubLink.UpdateManagerTest do
       # If setting SUPER_SECRET in the environment doesn't happen, then test fails
       # due to fwup getting a bad aes key.
       {:ok, manager} = UpdateManager.start_link(fwup_config)
-      assert UpdateManager.apply_update(manager, update_payload, []) == {:updating, 0}
+      assert UpdateManager.apply_update(manager, update_payload, []) == {:download, 0}
 
       assert_receive {:fwup, {:progress, 0}}
       assert_receive {:fwup, {:progress, 100}}

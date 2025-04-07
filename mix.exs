@@ -145,6 +145,7 @@ defmodule NervesHubLink.MixProject do
       {:nimble_options, "~> 1.0"},
       {:plug_crypto, "~> 2.0"},
       {:plug_cowboy, "~> 2.0", only: :test},
+      {:req, "~> 0.5.10"},
       {:slipstream, "~> 1.0 or ~> 0.8"},
       {:whenwhere, "~> 0.1.2"},
       {:x509, "~> 0.5"}

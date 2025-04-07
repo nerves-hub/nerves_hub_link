@@ -1,5 +1,11 @@
 import Config
 
+persist_dir =
+  System.tmp_dir!()
+  |> Path.join("nerves_hub_link_test")
+
+File.mkdir_p!(persist_dir)
+
 # Device HTTP connection.
 config :nerves_hub_link,
   archive_public_keys: ["a key?"],
@@ -17,7 +23,8 @@ config :nerves_hub_link,
   ],
   rejoin_after: 0,
   remote_iex: true,
-  ensure_reboot: false
+  ensure_reboot: false,
+  persist_dir: persist_dir
 
 config :nerves_runtime,
   target: "host",

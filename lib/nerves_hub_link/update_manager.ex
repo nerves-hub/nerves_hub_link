@@ -17,6 +17,7 @@ defmodule NervesHubLink.UpdateManager do
   use GenServer
 
   alias NervesHubLink.Downloader
+  alias NervesHubLink.Downloader.UrlToFile
   alias NervesHubLink.FwupConfig
   alias NervesHubLink.Message.UpdateInfo
   alias NervesHubLink.UpdateManager
@@ -27,6 +28,7 @@ defmodule NervesHubLink.UpdateManager do
           :idle
           | {:fwup_error, String.t()}
           | :update_rescheduled
+          | {:download, integer()}
           | {:updating, integer()}
 
   defmodule State do
@@ -38,7 +40,8 @@ defmodule NervesHubLink.UpdateManager do
             download: nil | GenServer.server(),
             fwup: nil | GenServer.server(),
             fwup_config: FwupConfig.t(),
-            update_info: nil | UpdateInfo.t()
+            update_info: nil | UpdateInfo.t(),
+            fwup_public_keys: [String.t()]
           }
 
     defstruct status: :idle,
@@ -46,7 +49,8 @@ defmodule NervesHubLink.UpdateManager do
               fwup: nil,
               download: nil,
               fwup_config: nil,
-              update_info: nil
+              update_info: nil,
+              fwup_public_keys: []
   end
 
   @doc """
@@ -132,20 +136,44 @@ defmodule NervesHubLink.UpdateManager do
     {:reply, state.status, state}
   end
 
+  # Data from the downloader is sent to fwup
+  def handle_call({:download, {:data, data}}, _from, state) do
+    _ = Fwup.Stream.send_chunk(state.fwup, data)
+    {:reply, :ok, state}
+  end
+
   # messages from Downloader
   def handle_call({:download, :complete}, _from, state) do
     Logger.info("[NervesHubLink] Firmware Download complete")
     {:reply, :ok, %State{state | download: nil}}
   end
 
-  def handle_call({:download, {:error, reason}}, _from, state) do
-    Logger.error("[NervesHubLink] Nonfatal HTTP download error: #{inspect(reason)}")
+  def handle_call({:download, {:download_progress, percentage}}, _from, state) do
+    # TODO: Make a separate download update inidcator
+    {:reply, :ok, %{state | status: {:download, percentage}}}
+  end
+
+  def handle_call({:download, {:complete, filepath}}, _from, state) do
+    Logger.info(
+      "[NervesHubLink] Firmware Download complete, applying #{state.fwup_config.fwup_task} with #{filepath}..."
+    )
+
+    {:ok, fwup} =
+      Fwup.stream(self(), fwup_args(state.fwup_config, state.fwup_public_keys, filepath),
+        fwup_env: state.fwup_config.fwup_env
+      )
+
+    {:reply, :ok, %State{state | download: nil, fwup: fwup}}
+  end
+
+  def handle_call({:download, {:reauth, _bytes, _time_elapsed}}, _from, state) do
+    Logger.info("[NervesHubLink] Downloader wants a new authenticated download URL")
+    # TODO: implement
     {:reply, :ok, state}
   end
 
-  # Data from the downloader is sent to fwup
-  def handle_call({:download, {:data, data}}, _from, state) do
-    _ = Fwup.Stream.send_chunk(state.fwup, data)
+  def handle_call({:download, {:error, reason}}, _from, state) do
+    Logger.error("[NervesHubLink] Nonfatal HTTP download error: #{inspect(reason)}")
     {:reply, :ok, state}
   end
 
@@ -207,7 +235,7 @@ defmodule NervesHubLink.UpdateManager do
     # note: update_available is a behaviour function
     case state.fwup_config.update_available.(update_info) do
       :apply ->
-        start_fwup_stream(update_info, fwup_public_keys, state)
+        select_download_mechanism(update_info, fwup_public_keys, state)
 
       :ignore ->
         state
@@ -229,6 +257,29 @@ defmodule NervesHubLink.UpdateManager do
     _ = Process.cancel_timer(timer)
 
     %{state | update_reschedule_timer: nil}
+  end
+
+  @spec select_download_mechanism(UpdateInfo.t(), [binary()], State.t()) :: State.t()
+  defp select_download_mechanism(update_info, fwup_public_keys, state) do
+    pid = self()
+    fun = &report_download(pid, &1)
+
+    case UrlToFile.start_download(update_info.firmware_meta.uuid, update_info.firmware_url, fun) do
+      {:ok, download} ->
+        Logger.info("[NervesHubLink] Downloading firmware: #{update_info.firmware_url}")
+        :alarm_handler.set_alarm({NervesHubLink.UpdateInProgress, []})
+
+        %State{
+          state
+          | status: {:download, 0},
+            download: download,
+            update_info: update_info,
+            fwup_public_keys: fwup_public_keys
+        }
+
+      {:error, :disk_error} ->
+        start_fwup_stream(update_info, fwup_public_keys, state)
+    end
   end
 
   @spec start_fwup_stream(UpdateInfo.t(), [binary()], State.t()) :: State.t()
@@ -257,6 +308,24 @@ defmodule NervesHubLink.UpdateManager do
   @spec fwup_args(FwupConfig.t(), list(String.t())) :: [String.t()]
   defp fwup_args(%FwupConfig{} = config, fwup_public_keys) do
     args = ["--apply", "--no-unmount", "-d", config.fwup_devpath, "--task", config.fwup_task]
+
+    Enum.reduce(fwup_public_keys, args, fn public_key, args ->
+      args ++ ["--public-key", public_key]
+    end)
+  end
+
+  @spec fwup_args(FwupConfig.t(), list(String.t()), String.t()) :: [String.t()]
+  defp fwup_args(%FwupConfig{} = config, fwup_public_keys, fw_path) do
+    args = [
+      "-i",
+      fw_path,
+      "--apply",
+      "--no-unmount",
+      "-d",
+      config.fwup_devpath,
+      "--task",
+      config.fwup_task
+    ]
 
     Enum.reduce(fwup_public_keys, args, fn public_key, args ->
       args ++ ["--public-key", public_key]
