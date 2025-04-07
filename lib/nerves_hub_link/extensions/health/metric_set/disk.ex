@@ -33,7 +33,7 @@ defmodule NervesHubLink.Extensions.Health.MetricSet.Disk do
     # returns the available disk space in KB so we don't have
     # to calculate it ourselves.
     data =
-      Enum.find(:disksup.get_disk_data(), fn {key, _, _, _} ->
+      Enum.find(:disksup.get_disk_data(), fn {key, _, _} ->
         key == ~c"/root"
       end)
 
