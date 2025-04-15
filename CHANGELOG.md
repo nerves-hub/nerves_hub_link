@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.7.3] - 2025-04-15
+
+* Fixed
+  * Fix pattern match for :disksup.get_disk_data()
+
 ## [2.7.2] - 2025-03-28
 
 * Fixed
