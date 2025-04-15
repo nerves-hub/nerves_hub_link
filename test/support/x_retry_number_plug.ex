@@ -20,17 +20,22 @@ defmodule NervesHubLink.Support.XRetryNumberPlug do
   @impl Plug
   def call(conn, _opts) do
     retry_number = find_x_retry_number_header(conn.req_headers)
+    range = fetch_range_header(conn.req_headers)
 
     conn
     |> put_resp_header("accept-ranges", "bytes")
     |> put_resp_header("content-length", "4096")
     |> send_chunked(200)
-    |> do_stream(retry_number)
+    |> do_stream(retry_number, range)
   end
 
-  defp do_stream(conn, retry_number) do
-    {:ok, conn} = chunk(conn, :binary.copy(<<retry_number::8>>, 2048))
-    halt(conn)
+  defp do_stream(conn, retry_number, {start, _finish}) do
+    if start < 4096 do
+      {:ok, conn} = chunk(conn, :binary.copy(<<retry_number::8>>, 2048))
+      halt(conn)
+    else
+      halt(conn)
+    end
   end
 
   # i have no idea why get_req_header/2 doesn't work here.
@@ -39,4 +44,18 @@ defmodule NervesHubLink.Support.XRetryNumberPlug do
 
   defp find_x_retry_number_header([_ | rest]), do: find_x_retry_number_header(rest)
   defp find_x_retry_number_header([]), do: raise("Could not find x-retry-number header")
+
+  defp fetch_range_header([]), do: {0, 1}
+
+  defp fetch_range_header([{"range", "bytes=" <> range} | _rest]) do
+    case String.split(range, "-") do
+      [start, ""] ->
+        {String.to_integer(start), 0}
+
+      [start, finish] ->
+        {String.to_integer(start), String.to_integer(finish)}
+    end
+  end
+
+  defp fetch_range_header([_ | rest]), do: fetch_range_header(rest)
 end

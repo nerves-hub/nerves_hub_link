@@ -132,20 +132,36 @@ defmodule NervesHubLink.UpdateManager do
     {:reply, state.status, state}
   end
 
+  # Data from the downloader is sent to fwup
+  def handle_call({:download, {:data, data}}, _from, state) do
+    _ = Fwup.Stream.send_chunk(state.fwup, data)
+    {:reply, :ok, state}
+  end
+
   # messages from Downloader
   def handle_call({:download, :complete}, _from, state) do
     Logger.info("[NervesHubLink] Firmware Download complete")
     {:reply, :ok, %State{state | download: nil}}
   end
 
-  def handle_call({:download, {:error, reason}}, _from, state) do
-    Logger.error("[NervesHubLink] Nonfatal HTTP download error: #{inspect(reason)}")
+  def handle_call({:download, {:download_progress, _percentage}}, _from, state) do
+    # TODO: Report progress up the socket
     {:reply, :ok, state}
   end
 
-  # Data from the downloader is sent to fwup
-  def handle_call({:download, {:data, data}}, _from, state) do
-    _ = Fwup.Stream.send_chunk(state.fwup, data)
+  def handle_call({:download, {:complete, _filepath}}, _from, state) do
+    Logger.info("[NervesHubLink] Firmware Download complete")
+    {:reply, :ok, %State{state | download: nil}}
+  end
+
+  def handle_call({:download, {:reauth, _bytes, _time_elapsed}}, _from, state) do
+    Logger.info("[NervesHubLink] Downloader wants a new authenticated download URL")
+    # TODO: implement
+    {:reply, :ok, state}
+  end
+
+  def handle_call({:download, {:error, reason}}, _from, state) do
+    Logger.error("[NervesHubLink] Nonfatal HTTP download error: #{inspect(reason)}")
     {:reply, :ok, state}
   end
 
