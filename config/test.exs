@@ -12,7 +12,7 @@ config :nerves_hub_link,
     cert: "ima cert!",
     key: "ima key!",
     cacerts: ["Everyone", "gets", "a", "CA"],
-    server_name_indication: "waddup",
+    server_name_indication: "what_is_up",
     verify: :verify_peer
   ],
   rejoin_after: 0,

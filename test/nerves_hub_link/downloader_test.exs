@@ -120,6 +120,7 @@ defmodule NervesHubLink.DownloaderTest do
       assert_receive {:error, _}
 
       refute_receive {:error, _}
+      # cspell:disable-next-line
       assert_receive {:data, "ello, world"}
     end
   end
@@ -143,7 +144,7 @@ defmodule NervesHubLink.DownloaderTest do
     end
   end
 
-  describe "xretry" do
+  describe "x retry" do
     setup do
       {:ok, plug, port} =
         Utils.supervise_with_port(fn port ->
