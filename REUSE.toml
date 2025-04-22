@@ -8,6 +8,7 @@ path = [
  ".github/dependabot.yml",
  ".gitignore",
  ".iex.exs",
+ ".cspell.json",
  "CHANGELOG.md",
  "config/**",
  "CONTRIBUTING.md",
