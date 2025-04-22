@@ -18,7 +18,7 @@ defmodule NervesHubLink.Extensions.Health.DeviceStatus do
 
   @type alarm_id() :: String.t()
   @type alarm_description() :: String.t()
-  @type interface_identifer() :: String.t()
+  @type interface_identifier() :: String.t()
 
   @type connection_status :: :lan | :internet | :disconnected
   @type interface_type :: :ethernet | :wifi | :mobile | :local | :unknown
@@ -30,7 +30,7 @@ defmodule NervesHubLink.Extensions.Health.DeviceStatus do
           metrics: %{String.t() => number()},
           checks: %{String.t() => %{pass: boolean(), note: String.t()}},
           connectivity: %{
-            interface_identifer() => %{
+            interface_identifier() => %{
               type: interface_type(),
               present: boolean(),
               state: atom(),

@@ -76,7 +76,7 @@ defmodule NervesHubLink.UpdateManager do
   end
 
   # Private API for reporting download progress. This wraps a GenServer.call so
-  # that it can apply backpressure to the downloader if applying the update is
+  # that it can apply back pressure to the downloader if applying the update is
   # slow.
   defp report_download(manager, message) do
     # 60 seconds is arbitrary, but currently matches the `fwup` library's

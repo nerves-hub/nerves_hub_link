@@ -14,7 +14,7 @@ defmodule NervesHubLink.Configurator.DefaultTest do
         cert: "ima cert!",
         key: "ima key!",
         cacerts: ["Everyone", "gets", "a", "CA"],
-        server_name_indication: "waddup"
+        server_name_indication: "what_is_up"
       ]
     }
 

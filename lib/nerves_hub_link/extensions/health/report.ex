@@ -20,7 +20,7 @@ defmodule NervesHubLink.Extensions.Health.Report do
   @callback metrics() :: %{String.t() => number()}
   @callback checks() :: %{String.t() => %{pass: boolean(), note: String.t()}}
   @callback connectivity() :: %{
-              DeviceStatus.interface_identifer() => %{
+              DeviceStatus.interface_identifier() => %{
                 type: DeviceStatus.interface_type(),
                 present: boolean(),
                 state: atom(),

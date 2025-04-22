@@ -12,7 +12,7 @@ defmodule NervesHubLink.ConfiguratorTest do
       cert: "ima cert!",
       key: "ima key!",
       cacerts: ["Everyone", "gets", "a", "CA"],
-      server_name_indication: "waddup",
+      server_name_indication: "what_is_up",
       verify: :verify_peer
     ]
 
@@ -27,6 +27,7 @@ defmodule NervesHubLink.ConfiguratorTest do
 
   test "only includes binary in fwup_public_keys" do
     keys = [
+      # cspell:disable-next-line
       "thisisavalidkey==",
       :not_valid,
       false,
@@ -39,6 +40,7 @@ defmodule NervesHubLink.ConfiguratorTest do
 
     config = NervesHubLink.Configurator.build()
 
+    # cspell:disable-next-line
     assert ["thisisavalidkey=="] == config.fwup_public_keys
   end
 end

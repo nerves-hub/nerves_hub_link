@@ -553,7 +553,7 @@ defmodule NervesHubLink.Socket do
     channel_config =
       case Configurator.fetch_configurator() do
         SharedSecret ->
-          # TODO: I don't know when reconnect/1 actually gets valudated. It could be that
+          # TODO: I don't know when reconnect/1 actually gets validated. It could be that
           # the signature we create here will be too old before the headers are used
           # in a connection attempt again
           headers = SharedSecret.headers(socket.assigns.config)

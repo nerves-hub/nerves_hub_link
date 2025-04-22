@@ -77,7 +77,7 @@ This latest release requires Elixir 1.13 or later.
 
 * Added
   * Configure heartbeat msec (#197)
-  * Apply backpressure to downloader on slow updates (#202)
+  * Apply back pressure to downloader on slow updates (#202)
 * Updated
   * Fix no match error when uploading files (#190)
   * Make shared secret auth the default (#176)
@@ -122,7 +122,7 @@ firmware. Archives are validated with separate public keys for safety.
 
 This update should be relatively safe and backwards compatible. It introduces some
 new features with NervesHub including Pre-shared key authentication and file
-upload/download ability through the console channge. If you were previously
+upload/download ability through the console change. If you were previously
 relying on `NervesHubLink.Connection` functions then you will need to review
 and update your code to use `NervesHubLink` connection functions instead.
 
@@ -366,7 +366,7 @@ Various cleanup and structure changes
   * Rename to `NervesHubDevice`
   * Remove `HTTP` support to use channels exclusively
   * Reorganize as a an `Application` and remove ability to start a supervisor separately
-  * Support using `NervesKey` via a configuartion flag
+  * Support using `NervesKey` via a configuration flag
 
 ## v0.7.3
 
