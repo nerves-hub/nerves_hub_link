@@ -10,4 +10,24 @@ defmodule NervesHubLink.Support.Utils do
   def unique_port_number() do
     System.unique_integer([:positive, :monotonic]) + 6000
   end
+
+  @spec supervise_with_port(function(), integer() | nil) :: {:ok, pid, integer()}
+  def supervise_with_port(child_spec_fn, port \\ nil) do
+    port =
+      if port do
+        port + 1
+      else
+        unique_port_number()
+      end
+
+    child_spec = child_spec_fn.(port)
+
+    case ExUnit.Callbacks.start_supervised(child_spec) do
+      {:ok, plug} ->
+        {:ok, plug, port}
+
+      {:error, :eaddrinuse} ->
+        supervise_with_port(child_spec_fn, port)
+    end
+  end
 end
