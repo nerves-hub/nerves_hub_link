@@ -25,7 +25,7 @@ defmodule NervesHubLink.DownloaderTest do
     worst_case_download_speed: 30_000
   }
 
-  @failure_url "http://localhost/this_should_fail"
+  @failure_url "http://localhost:#{Utils.unique_port_number()}/this_should_fail"
 
   test "max_disconnects" do
     test_pid = self()
@@ -56,12 +56,10 @@ defmodule NervesHubLink.DownloaderTest do
 
   describe "idle timeout" do
     setup do
-      port = Utils.unique_port_number()
-
-      {:ok, plug} =
-        start_supervised(
+      {:ok, plug, port} =
+        Utils.supervise_with_port(fn port ->
           {Plug.Cowboy, scheme: :http, plug: IdleTimeoutPlug, options: [port: port]}
-        )
+        end)
 
       {:ok, [plug: plug, url: "http://localhost:#{port}/test"]}
     end
@@ -85,10 +83,10 @@ defmodule NervesHubLink.DownloaderTest do
 
   describe "http error" do
     setup do
-      port = Utils.unique_port_number()
-
-      {:ok, plug} =
-        start_supervised({Plug.Cowboy, scheme: :http, plug: HTTPErrorPlug, options: [port: port]})
+      {:ok, plug, port} =
+        Utils.supervise_with_port(fn port ->
+          {Plug.Cowboy, scheme: :http, plug: HTTPErrorPlug, options: [port: port]}
+        end)
 
       {:ok, [plug: plug, url: "http://localhost:#{port}/test"]}
     end
@@ -105,12 +103,10 @@ defmodule NervesHubLink.DownloaderTest do
 
   describe "range" do
     setup do
-      port = Utils.unique_port_number()
-
-      {:ok, plug} =
-        start_supervised(
+      {:ok, plug, port} =
+        Utils.supervise_with_port(fn port ->
           {Plug.Cowboy, scheme: :http, plug: RangeRequestPlug, options: [port: port]}
-        )
+        end)
 
       {:ok, [plug: plug, url: "http://localhost:#{port}/test"]}
     end
@@ -130,12 +126,10 @@ defmodule NervesHubLink.DownloaderTest do
 
   describe "redirect" do
     setup do
-      port = Utils.unique_port_number()
-
-      {:ok, plug} =
-        start_supervised(
+      {:ok, plug, port} =
+        Utils.supervise_with_port(fn port ->
           {Plug.Cowboy, scheme: :http, plug: {RedirectPlug, port: port}, options: [port: port]}
-        )
+        end)
 
       {:ok, [plug: plug, url: "http://localhost:#{port}/redirect"]}
     end
@@ -151,12 +145,10 @@ defmodule NervesHubLink.DownloaderTest do
 
   describe "xretry" do
     setup do
-      port = Utils.unique_port_number()
-
-      {:ok, plug} =
-        start_supervised(
+      {:ok, plug, port} =
+        Utils.supervise_with_port(fn port ->
           {Plug.Cowboy, scheme: :http, plug: XRetryNumberPlug, options: [port: port]}
-        )
+        end)
 
       {:ok, [plug: plug, url: "http://localhost:#{port}/test"]}
     end

@@ -12,20 +12,19 @@ defmodule NervesHubLink.UpdateManagerTest do
 
   describe "fwup stream" do
     setup do
-      port = Utils.unique_port_number()
       devpath = "/tmp/fwup_output"
+
+      {:ok, plug, port} =
+        Utils.supervise_with_port(fn port ->
+          {Plug.Cowboy, scheme: :http, plug: FWUPStreamPlug, options: [port: port]}
+        end)
+
+      File.rm(devpath)
 
       update_payload = %UpdateInfo{
         firmware_url: "http://localhost:#{port}/test.fw",
         firmware_meta: %FirmwareMetadata{}
       }
-
-      {:ok, plug} =
-        start_supervised(
-          {Plug.Cowboy, scheme: :http, plug: FWUPStreamPlug, options: [port: port]}
-        )
-
-      File.rm(devpath)
 
       {:ok, [plug: plug, update_payload: update_payload, devpath: "/tmp/fwup_output"]}
     end
