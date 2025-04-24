@@ -8,16 +8,14 @@ defmodule NervesHubLink.UpdateManagerTest do
   use ExUnit.Case
   alias NervesHubLink.{FwupConfig, UpdateManager}
   alias NervesHubLink.Message.{FirmwareMetadata, UpdateInfo}
-  alias NervesHubLink.Support.{FWUPStreamPlug, Utils}
+  alias NervesHubLink.Support.FWUPStreamPlug
 
   describe "fwup stream" do
     setup do
       devpath = "/tmp/fwup_output"
 
-      {:ok, plug, port} =
-        Utils.supervise_with_port(fn port ->
-          {Plug.Cowboy, scheme: :http, plug: FWUPStreamPlug, options: [port: port]}
-        end)
+      {:ok, pid} = Bandit.start_link(plug: FWUPStreamPlug, port: 0)
+      {:ok, {_ip, port}} = ThousandIsland.listener_info(pid)
 
       File.rm(devpath)
 
@@ -26,7 +24,7 @@ defmodule NervesHubLink.UpdateManagerTest do
         firmware_meta: %FirmwareMetadata{uuid: Ecto.UUID.generate()}
       }
 
-      {:ok, [plug: plug, update_payload: update_payload, devpath: "/tmp/fwup_output"]}
+      {:ok, [update_payload: update_payload, devpath: devpath]}
     end
 
     test "apply", %{update_payload: update_payload, devpath: devpath} do

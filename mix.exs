@@ -128,6 +128,7 @@ defmodule NervesHubLink.MixProject do
 
   defp deps do
     [
+      {:bandit, "~> 1.6", only: :test},
       {:castore, "~> 0.1 or ~> 1.0", optional: true},
       {:credo, "~> 1.2", only: :dev, runtime: false},
       {:dialyxir, "~> 1.1", only: [:dev, :test], runtime: false},
@@ -144,7 +145,6 @@ defmodule NervesHubLink.MixProject do
       {:nerves_time, "~> 0.4"},
       {:nimble_options, "~> 1.0"},
       {:plug_crypto, "~> 2.0"},
-      {:plug_cowboy, "~> 2.0", only: :test},
       {:req, "~> 0.5.10"},
       {:slipstream, "~> 1.0 or ~> 0.8"},
       {:whenwhere, "~> 0.1.2"},
