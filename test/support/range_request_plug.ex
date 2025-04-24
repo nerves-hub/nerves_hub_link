@@ -34,6 +34,12 @@ defmodule NervesHubLink.Support.RangeRequestPlug do
     halt(conn)
   end
 
+  defp fetch_range(payload, start, 0) do
+    finish = byte_size(payload)
+    {_, tail} = String.split_at(payload, start)
+    fetch_range_until(tail, <<>>, start, finish)
+  end
+
   defp fetch_range(payload, start, finish) do
     {_, tail} = String.split_at(payload, start)
     fetch_range_until(tail, <<>>, start, finish)
@@ -50,8 +56,16 @@ defmodule NervesHubLink.Support.RangeRequestPlug do
   defp fetch_range_header([]), do: {0, 1}
 
   defp fetch_range_header([{"range", "bytes=" <> range} | _rest]) do
-    [start, finish] = String.split(range, "-", parts: 2)
-    {String.to_integer(start), String.to_integer(finish)}
+    case String.split(range, "-") do
+      [start] ->
+        {String.to_integer(start), 0}
+
+      [start, ""] ->
+        {String.to_integer(start), 0}
+
+      [start, finish] ->
+        {String.to_integer(start), String.to_integer(finish)}
+    end
   end
 
   defp fetch_range_header([_ | rest]), do: fetch_range_header(rest)
