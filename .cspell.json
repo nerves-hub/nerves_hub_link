@@ -3,10 +3,7 @@
   "version": "0.2",
   "language": "en",
   "useGitignore": true,
-  "ignorePaths": [
-    "**/*.yml",
-    "mix.exs"
-  ],
+  "ignorePaths": ["**/*.yml", "mix.exs"],
   "words": [
     "arellano",
     "ATECC",
@@ -62,6 +59,7 @@
     "waivable",
     "whenwhere",
     "wikman",
-    "youngblood"
+    "youngblood",
+    "eaddrinuse"
   ]
 }
