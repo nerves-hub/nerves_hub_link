@@ -33,8 +33,13 @@ defmodule NervesHubLink.Extensions.Logging do
     {:ok, %{}}
   end
 
+  @impl NervesHubLink.Extensions
+  def handle_event(_, _msg, state) do
+    {:noreply, state}
+  end
+
   @impl GenServer
-  def handle_cast(:send_logs, log_payload, state) do
+  def handle_cast({:send_logs, log_payload}, state) do
     _ = send_logs(log_payload, state)
     {:noreply, state}
   end
