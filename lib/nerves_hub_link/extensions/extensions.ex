@@ -26,8 +26,9 @@ defmodule NervesHubLink.Extensions do
   require Logger
 
   @default_extension_modules [
+    NervesHubLink.Extensions.Geo,
     NervesHubLink.Extensions.Health,
-    NervesHubLink.Extensions.Geo
+    NervesHubLink.Extensions.Logging
   ]
 
   @doc """
