@@ -14,7 +14,7 @@ Your NervesHub server controls enabling and disabling extensions to allow you to
 
 It is intended to be easy to replace the default Geo Resolver with your own. Maybe you have a GPS module or can resolve a reasonably precise location via LTE. Just change config:
 
-```
+```elixir
 config :nerves_hub_link,
   geo: [
     resolver: CatCounter.MyResolver
@@ -45,7 +45,7 @@ to include all the metric sets you want to use. If you want to include the full 
 
 eg.
 
-```
+```elixir
 config :nerves_hub_link,
   health: [
     metric_sets: [
@@ -58,7 +58,7 @@ config :nerves_hub_link,
 
 If you only want to use some of the default metrics, you can specify them explicitly:
 
-```
+```elixir
 config :nerves_hub_link,
   health: [
     metric_sets: [
@@ -71,7 +71,7 @@ config :nerves_hub_link,
 
 And if you don't want to use any metric sets, you can set the `metric_sets` option to an empty list.
 
-```
+```elixir
 config :nerves_hub_link,
   health: [
     metric_sets: []
@@ -80,7 +80,7 @@ config :nerves_hub_link,
 
 If you want to add custom metadata to the default health report, you can specify it with:
 
-```
+```elixir
 config :nerves_hub_link,
   health: [
     # metadata is added with a key and MFA
@@ -93,7 +93,7 @@ config :nerves_hub_link,
 
 Or you can implement a completely custom reporting module by implementing `NervesHubLink.Extensions.Health.Report` and configuring it:
 
-```
+```elixir
 config :nerves_hub_link,
   health: [
     report: CatCounter.MyHealthReport
@@ -109,4 +109,15 @@ recommend the [`alarmist`](https://hex.pm/packages/alarmist) library for improve
 
 The Logging extension is responsible for sending logs to the NervesHub platform.
 
-No further configuration is required.
+This extension is disabled by default while in Early Release.
+
+You can enable the extension by explicitly defining the `extension_modules` option and including the `NervesHubLink.Extensions.Logging` module in the list:
+
+```elixir
+config :nerves_hub_link,
+  extension_modules: [
+    NervesHubLink.Extensions.Geo,
+    NervesHubLink.Extensions.Health,
+    NervesHubLink.Extensions.Logging
+  ]
+```
