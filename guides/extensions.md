@@ -1,13 +1,27 @@
-# Extensions: Health and Geo
+# Extensions: Geo, Health, and Logging
 
 Extensions are pieces of non-critical functionality going over the NervesHub WebSocket. They are separated out under the Extensions mechanism so that the client can happily ignore anything extension-related in service of keeping firmware updates healthy. That is always the top priority.
 
-There are two extensions currently:
+There are currently three extensions:
 
-- **Health** reports device metrics, alarms, metadata and similar.
 - **Geo** provides GeoIP information and allows slotting in a better source.
+- **Health** reports device metrics, alarms, metadata and similar.
+- **Logging** provides the ability to send and store logs on NervesHub.
 
 Your NervesHub server controls enabling and disabling extensions to allow you to switch them off if they impact operations.
+
+## Geolocation
+
+It is intended to be easy to replace the default Geo Resolver with your own. Maybe you have a GPS module or can resolve a reasonably precise location via LTE. Just change config:
+
+```
+config :nerves_hub_link,
+  geo: [
+    resolver: CatCounter.MyResolver
+  ]
+```
+
+Your module only needs to implement a single function, see `NervesHubLink.Extensions.Geo.Resolver` for details.
 
 ## Health
 
@@ -86,21 +100,13 @@ config :nerves_hub_link,
   ]
 ```
 
-## Geolocation
-
-It is intended to be easy to replace the default Geo Resolver with your own. Maybe you have a GPS module or can resolve a reasonably precise location via LTE. Just change config:
-
-```
-config :nerves_hub_link,
-  geo: [
-    resolver: CatCounter.MyResolver
-  ]
-```
-
-Your module only needs to implement a single function, see `NervesHubLink.Extensions.Geo.Resolver` for details.
-
-
-## Alarms
+### Alarms
 
 The [default health report](`NervesHubLink.Extensions.Health.DefaultReport`) uses `:alarm_handler`, but we
 recommend the [`alarmist`](https://hex.pm/packages/alarmist) library for improved alarms handling.
+
+## Logging
+
+The Logging extension is responsible for sending logs to the NervesHub platform.
+
+No further configuration is required.

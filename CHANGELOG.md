@@ -4,11 +4,13 @@
 
 * Added
   * Add a client callback for when the device is connected (#312) (Thanks @amclain)
+  * Add support for a new Logging extension
 
 * Updated
   * Don't create duplicate Disconnected alarms
   * Clear previous `CheckFailed` alarms before setting a new one
   * Support the use of `:alarm_handler` for health reports, removing the `Alarmist` requirement
+
 
 ## [2.7.3] - 2025-04-15
 
