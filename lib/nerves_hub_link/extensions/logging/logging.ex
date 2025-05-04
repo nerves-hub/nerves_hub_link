@@ -7,6 +7,8 @@ defmodule NervesHubLink.Extensions.Logging do
   The Logging Extension.
 
   Send logs to NervesHub for easy debugging.
+
+  This extension is disabled by default while in Early Release.
   """
   use NervesHubLink.Extensions, name: "logging", version: "0.0.1"
 
