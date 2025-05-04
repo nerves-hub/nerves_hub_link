@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2025 Josh Kalderimis
+#
+# SPDX-License-Identifier: Apache-2.0
+#
 defmodule NervesHubLink.Utils.LoggerHandler do
   @moduledoc """
   Send logs to NervesHub.
