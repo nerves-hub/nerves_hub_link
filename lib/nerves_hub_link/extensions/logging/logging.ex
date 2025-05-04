@@ -28,11 +28,12 @@ defmodule NervesHubLink.Extensions.Logging do
 
   @impl GenServer
   def init(_opts) do
-    :logger.add_handler(
-      :nerves_hub_link_logger_extension_handler,
-      NervesHubLink.Utils.LoggerHandler,
-      %{}
-    )
+    _ =
+      :logger.add_handler(
+        :nerves_hub_link_logger_extension_handler,
+        NervesHubLink.Extensions.Logging.LoggerHandler,
+        %{}
+      )
 
     {:ok, %{}}
   end

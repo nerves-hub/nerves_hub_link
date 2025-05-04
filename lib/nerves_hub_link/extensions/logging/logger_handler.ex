@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-defmodule NervesHubLink.Utils.LoggerHandler do
+defmodule NervesHubLink.Extensions.Logging.LoggerHandler do
   @moduledoc """
   Send logs to NervesHub.
   """
@@ -11,7 +11,7 @@ defmodule NervesHubLink.Utils.LoggerHandler do
 
   # Callback for :logger handlers
   @doc false
-  @spec log(:logger.log_event(), :logger.handler_config()) :: :ok
+  @spec log(:logger.log_event(), :logger.handler_config()) :: term()
   def log(%{msg: {:string, unicode_chardata}} = log_event, _) do
     Logging.send_log_line(log_event.level, unicode_chardata, log_event.meta)
     :ok
