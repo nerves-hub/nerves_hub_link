@@ -14,7 +14,6 @@ defmodule NervesHubLink.Extensions.Logging.LoggerHandler do
   @spec log(:logger.log_event(), :logger.handler_config()) :: term()
   def log(%{msg: {:string, unicode_chardata}} = log_event, _) do
     Logging.send_log_line(log_event.level, unicode_chardata, log_event.meta)
-    :ok
   end
 
   def log(_, _) do
