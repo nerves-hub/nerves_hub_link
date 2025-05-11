@@ -129,7 +129,11 @@ defmodule NervesHubLink.Extensions do
             do: event,
             else: "#{extension}:#{event}"
 
-        Socket.push("extensions", scoped_event, payload)
+        if Socket.check_connection(:extensions) do
+          Socket.push("extensions", scoped_event, payload)
+        else
+          {:ok, :disconnected}
+        end
       else
         {:error, :detached}
       end
