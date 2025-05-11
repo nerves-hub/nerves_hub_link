@@ -109,15 +109,13 @@ recommend the [`alarmist`](https://hex.pm/packages/alarmist) library for improve
 
 The Logging extension is responsible for sending logs to the NervesHub platform.
 
-This extension is disabled by default while in Early Release.
-
-You can enable the extension by explicitly defining the `extension_modules` option and including the `NervesHubLink.Extensions.Logging` module in the list:
+You can disable the extension by explicitly defining the `extension_modules` option and excluding the `NervesHubLink.Extensions.Logging` module from the list:
 
 ```elixir
 config :nerves_hub_link,
   extension_modules: [
     NervesHubLink.Extensions.Geo,
     NervesHubLink.Extensions.Health,
-    NervesHubLink.Extensions.Logging
+    # NervesHubLink.Extensions.Logging
   ]
 ```
