@@ -47,14 +47,7 @@ defmodule NervesHubLink.Extensions.Logging do
 
   @impl GenServer
   def handle_cast({:send_logs, log_payload}, state) do
-    _ = send_logs(log_payload, state)
+    _ = push("send", log_payload)
     {:noreply, state}
-  end
-
-  defp send_logs(log_payload, state) do
-    case push("send", log_payload) do
-      {:ok, _} -> {:ok, state}
-      {:error, _reason} -> {:error, state}
-    end
   end
 end
