@@ -1,5 +1,6 @@
 # SPDX-FileCopyrightText: 2024 Jon Carstens
 # SPDX-FileCopyrightText: 2024 Lars Wikman
+# SPDX-FileCopyrightText: 2025 Josh Kalderimis
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -26,8 +27,9 @@ defmodule NervesHubLink.Extensions do
   require Logger
 
   @default_extension_modules [
+    NervesHubLink.Extensions.Geo,
     NervesHubLink.Extensions.Health,
-    NervesHubLink.Extensions.Geo
+    NervesHubLink.Extensions.Logging
   ]
 
   @doc """
@@ -127,7 +129,11 @@ defmodule NervesHubLink.Extensions do
             do: event,
             else: "#{extension}:#{event}"
 
-        Socket.push("extensions", scoped_event, payload)
+        if Socket.check_connection(:extensions) do
+          Socket.push("extensions", scoped_event, payload)
+        else
+          {:ok, :disconnected}
+        end
       else
         {:error, :detached}
       end

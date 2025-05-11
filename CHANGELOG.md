@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+* Added
+  * Add support for a new Logging extension
+
 ## [2.7.3] - 2025-04-15
 
 * Fixed
