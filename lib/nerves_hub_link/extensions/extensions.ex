@@ -28,7 +28,8 @@ defmodule NervesHubLink.Extensions do
 
   @default_extension_modules [
     NervesHubLink.Extensions.Geo,
-    NervesHubLink.Extensions.Health
+    NervesHubLink.Extensions.Health,
+    NervesHubLink.Extensions.Logging
   ]
 
   @doc """
