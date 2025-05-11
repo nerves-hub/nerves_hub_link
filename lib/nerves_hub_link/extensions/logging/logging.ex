@@ -25,7 +25,8 @@ defmodule NervesHubLink.Extensions.Logging do
   """
   @spec send_log_line(atom(), String.t(), map()) :: :ok
   def send_log_line(level, message, meta) do
-    GenServer.cast(__MODULE__, {:send_logs, %{level: level, message: message, meta: meta}})
+    formatted = for {k, v} <- meta, into: %{}, do: {k, inspect(v)}
+    GenServer.cast(__MODULE__, {:send_logs, %{level: level, message: message, meta: formatted}})
   end
 
   @impl GenServer
