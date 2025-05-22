@@ -70,6 +70,15 @@ defmodule NervesHubLink.Client do
           | {:progress, 0..100}
 
   @doc """
+  Called before starting the NervesHubLink supervision tree.
+
+  May return:
+    * `{:ok, continue :: bool()}` - function completed successfully, and indicate if NervesHubLink should startup.
+    * `{:error, reason :: any()}` - error occurred, startup will be skipped.
+  """
+  @callback before_startup() :: {:ok, bool()} | {:error, any()}
+
+  @doc """
   Called to find out what to do when a firmware update is available.
 
   May return one of:
@@ -138,7 +147,40 @@ defmodule NervesHubLink.Client do
   """
   @callback reboot() :: no_return()
 
-  @optional_callbacks [reconnect_backoff: 0, reboot: 0]
+  @optional_callbacks [before_startup: 0, reconnect_backoff: 0, reboot: 0]
+
+  @doc """
+  This function is called internally by NervesHubLink to notify clients.
+  """
+  @spec before_startup() :: bool()
+  defp before_startup() do
+    if function_exported?(mod(), :before_startup, 0) do
+      Logger.debug("before_started callback defined")
+
+      case apply_wrap(mod(), :before_startup, []) do
+        {:ok, connect} when is_boolean(connect) ->
+          connect_message = (connect && "connecting") || "skipping connection"
+          Logger.debug("before_started callback completed successfully, #{connect_message}")
+          connect
+
+        {:error, reason} ->
+          Logger.error(
+            "before_started callback returned an error, aborting connection : #{inspect(reason)}"
+          )
+
+          false
+
+        other ->
+          Logger.error(
+            "invalid before_started callback result, aborting connection : #{inspect(other)}"
+          )
+
+          false
+      end
+    else
+      true
+    end
+  end
 
   @doc """
   This function is called internally by NervesHubLink to notify clients.

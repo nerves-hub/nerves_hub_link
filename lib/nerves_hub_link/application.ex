@@ -22,7 +22,7 @@ defmodule NervesHubLink.Application do
     connect? = Application.get_env(:nerves_hub_link, :connect, true)
 
     children =
-      if connect? do
+      if connect? && Client.before_startup() do
         config = Configurator.build()
 
         fwup_config = %FwupConfig{
