@@ -35,10 +35,15 @@ defmodule NervesHubLink.Downloader.UrlToFile do
             worst_case_timeout_remaining_ms: nil
 
   @type handler_event ::
-          {:data, binary()}
-          | {:error, any()}
-          | {:complete, filepath :: String.t()}
-          | {:reauth, non_neg_integer()}
+          {:complete, filepath :: String.t()}
+          | {:reauth, download_length_bytes :: non_neg_integer(),
+             time_taken_ms :: non_neg_integer()}
+          | {:download_progress, percentage :: non_neg_integer()}
+          | {:error,
+             :unexpected_redirect
+             | :idle_timeout
+             | :request_error
+             | {:http_error, status_code :: non_neg_integer()}}
   @type event_handler_fun :: (handler_event -> any())
   @type retry_args :: RetryConfig.t()
 
