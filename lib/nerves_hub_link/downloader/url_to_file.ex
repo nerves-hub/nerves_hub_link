@@ -412,7 +412,6 @@ defmodule NervesHubLink.Downloader.UrlToFile do
 
   defp open_file(firmware_path, size, state) do
     with :ok <- File.mkdir_p(Path.dirname(firmware_path)),
-         :ok <- File.touch(firmware_path),
          {:ok, io} <- File.open(firmware_path, [:binary, :append]) do
       Logger.info(
         "[NervesHubLink] Starting firmware download from #{size} bytes at #{firmware_path}"
