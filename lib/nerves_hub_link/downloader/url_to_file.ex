@@ -193,7 +193,7 @@ defmodule NervesHubLink.Downloader.UrlToFile do
   end
 
   def handle_info(:resume, %UrlToFile{} = state) do
-    case check_progress(state) do
+    case setup_io_device(state) do
       {:ok, state} ->
         {:ok, state} = resume_download(state.uri, state)
         {:noreply, state}
@@ -449,7 +449,7 @@ defmodule NervesHubLink.Downloader.UrlToFile do
     end
   end
 
-  defp check_progress(%UrlToFile{uuid: uuid} = state) do
+  defp setup_io_device(%UrlToFile{uuid: uuid} = state) do
     :ok = remove_old_persisted_firmwares(uuid)
     firmware_path = path(uuid)
 
