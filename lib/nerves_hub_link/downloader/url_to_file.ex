@@ -6,7 +6,7 @@
 #
 defmodule NervesHubLink.Downloader.UrlToFile do
   @moduledoc """
-  Handles downloading files via HTTP with persistant storage.
+  Handles downloading files via HTTP with persistent storage.
   """
 
   use GenServer
@@ -111,14 +111,13 @@ defmodule NervesHubLink.Downloader.UrlToFile do
   def init([uuid, %URI{} = uri, fun, %RetryConfig{} = retry_args]) do
     timer = Process.send_after(self(), :max_timeout, retry_args.max_timeout)
 
-    state =
-      reset(%UrlToFile{
-        retry_args: retry_args,
-        max_timeout: timer,
-        uri: uri,
-        uuid: uuid,
-        handler_fun: fun
-      })
+    state = %UrlToFile{
+      retry_args: retry_args,
+      max_timeout: timer,
+      uri: uri,
+      uuid: uuid,
+      handler_fun: fun
+    }
 
     case check_disk() do
       :ok ->
@@ -332,15 +331,6 @@ defmodule NervesHubLink.Downloader.UrlToFile do
     }
   end
 
-  defp reset(%UrlToFile{} = state) do
-    %UrlToFile{
-      state
-      | retry_number: 0,
-        downloaded_length: 0,
-        content_length: 0
-    }
-  end
-
   @spec resume_download(URI.t(), t()) :: {:ok, initialized_download()}
   defp resume_download(
          %URI{} = uri,
@@ -407,13 +397,13 @@ defmodule NervesHubLink.Downloader.UrlToFile do
     Path.join(base_path, "#{uuid}.fw")
   end
 
-  defp clean_others(uuid) do
+  defp remove_old_persisted_firmwares(uuid) do
     base_path =
       Application.get_env(:nerves_hub_link, :persist_dir, "/data/nerves_hub_link/firmware")
 
     Path.join(base_path, "**.fw")
     |> Path.wildcard()
-    |> Enum.reject(&(&1 && String.contains?(&1, uuid)))
+    |> Enum.reject(&String.contains?(&1, uuid))
     |> Enum.each(fn filepath ->
       Logger.info("[NervesHubLink] Removing old firmware: #{filepath}")
       File.rm(filepath)
@@ -461,7 +451,7 @@ defmodule NervesHubLink.Downloader.UrlToFile do
   end
 
   defp check_progress(%UrlToFile{uuid: uuid} = state) do
-    clean_others(uuid)
+    :ok = remove_old_persisted_firmwares(uuid)
     firmware_path = path(uuid)
 
     case File.stat(firmware_path) do
@@ -475,7 +465,7 @@ defmodule NervesHubLink.Downloader.UrlToFile do
 
       {:error, reason} ->
         Logger.error(
-          "[NervesHubLink] Failed to stat firmware file on disk #{firmware_path} with #{inspect(reason)}. Download failed."
+          "[NervesHubLink] Failed to retrieve firmware file stats on disk at #{firmware_path} with: #{inspect(reason)}."
         )
 
         {:error, {:disk_failure, reason}}
