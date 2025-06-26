@@ -176,6 +176,9 @@ defmodule NervesHubLink.Socket do
       |> assign(connected_at: System.monotonic_time(:millisecond))
 
     :alarm_handler.clear_alarm(NervesHubLink.Disconnected)
+
+    Client.connected()
+
     {:ok, socket}
   end
 
