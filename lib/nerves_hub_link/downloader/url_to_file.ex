@@ -332,9 +332,9 @@ defmodule NervesHubLink.Downloader.UrlToFile do
   end
 
   @spec resume_download(t()) :: {:ok, initialized_download()}
-  defp resume_download(state) do
+  defp resume_download(%UrlToFile{} = state) do
     Logger.info(
-      "[NervesHubLink] Resuming download attempt number #{state.retry_without_progress} (total #{state.retry_number}) for #{uri}"
+      "[NervesHubLink] Resuming download attempt number #{state.retry_without_progress} (total #{state.retry_number}) for #{state.uri}"
     )
 
     pid = self()
@@ -375,7 +375,7 @@ defmodule NervesHubLink.Downloader.UrlToFile do
     {:ok,
      %{
        state
-       | uri: uri,
+       | uri: state.uri,
          task: t,
          ref: ref,
          time: time,
@@ -392,37 +392,6 @@ defmodule NervesHubLink.Downloader.UrlToFile do
       Application.get_env(:nerves_hub_link, :persist_dir, "/data/nerves_hub_link/firmware")
 
     Path.join(base_path, "#{uuid}.fw")
-  end
-
-  defp remove_old_persisted_firmwares(uuid) do
-    base_path =
-      Application.get_env(:nerves_hub_link, :persist_dir, "/data/nerves_hub_link/firmware")
-
-    Path.join(base_path, "**.fw")
-    |> Path.wildcard()
-    |> Enum.reject(&String.contains?(&1, uuid))
-    |> Enum.each(fn filepath ->
-      Logger.info("[NervesHubLink] Removing old firmware: #{filepath}")
-      File.rm(filepath)
-    end)
-  end
-
-  defp open_file(firmware_path, size, state) do
-    with :ok <- File.mkdir_p(Path.dirname(firmware_path)),
-         {:ok, io} <- File.open(firmware_path, [:binary, :append]) do
-      Logger.info(
-        "[NervesHubLink] Starting firmware download from #{size} bytes at #{firmware_path}"
-      )
-
-      {:ok, %{state | downloaded_length: size, io: io}}
-    else
-      {:error, reason} ->
-        Logger.error(
-          "[NervesHubLink] Failed to create firmware file on disk #{firmware_path} with #{inspect(reason)}. Download failed."
-        )
-
-        {:error, {:disk_failure, reason}}
-    end
   end
 
   defp check_disk() do
@@ -446,6 +415,8 @@ defmodule NervesHubLink.Downloader.UrlToFile do
     end
   end
 
+  @spec setup_io_device(t()) ::
+          {:ok, t()} | {:error, {:disk_failure, any()}}
   defp setup_io_device(%UrlToFile{uuid: uuid} = state) do
     :ok = remove_old_persisted_firmwares(uuid)
     firmware_path = path(uuid)
@@ -453,14 +424,48 @@ defmodule NervesHubLink.Downloader.UrlToFile do
     case File.stat(firmware_path) do
       # does not exist, start fresh
       {:error, :enoent} ->
-        open_file(firmware_path, 0, state)
+        open_path(firmware_path, 0, state)
 
       {:ok, %{type: :regular, size: size}} ->
-        open_file(firmware_path, size, state)
+        open_path(firmware_path, size, state)
 
       {:error, reason} ->
         Logger.error(
           "[NervesHubLink] Failed to retrieve firmware file stats on disk at #{firmware_path} with: #{inspect(reason)}."
+        )
+
+        {:error, {:disk_failure, reason}}
+    end
+  end
+
+  @spec remove_old_persisted_firmwares(String.t()) :: :ok
+  defp remove_old_persisted_firmwares(uuid) do
+    base_path =
+      Application.get_env(:nerves_hub_link, :persist_dir, "/data/nerves_hub_link/firmware")
+
+    Path.join(base_path, "**.fw")
+    |> Path.wildcard()
+    |> Enum.reject(&String.contains?(&1, uuid))
+    |> Enum.each(fn filepath ->
+      Logger.info("[NervesHubLink] Removing old firmware: #{filepath}")
+      File.rm(filepath)
+    end)
+  end
+
+  @spec open_path(String.t(), non_neg_integer(), t()) ::
+          {:ok, t()} | {:error, {:disk_failure, any()}}
+  defp open_path(firmware_path, size, state) do
+    with :ok <- File.mkdir_p(Path.dirname(firmware_path)),
+         {:ok, io} <- File.open(firmware_path, [:binary, :append]) do
+      Logger.info(
+        "[NervesHubLink] Starting firmware download from #{size} bytes at #{firmware_path}"
+      )
+
+      {:ok, %{state | downloaded_length: size, io: io}}
+    else
+      {:error, reason} ->
+        Logger.error(
+          "[NervesHubLink] Failed to create firmware file on disk #{firmware_path} with #{inspect(reason)}. Download failed."
         )
 
         {:error, {:disk_failure, reason}}
