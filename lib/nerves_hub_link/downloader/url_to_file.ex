@@ -195,7 +195,7 @@ defmodule NervesHubLink.Downloader.UrlToFile do
   def handle_info(:resume, %UrlToFile{} = state) do
     case setup_io_device(state) do
       {:ok, state} ->
-        {:ok, state} = resume_download(state.uri, state)
+        {:ok, state} = resume_download(state)
         {:noreply, state}
 
       {:error, reason} ->
@@ -331,11 +331,8 @@ defmodule NervesHubLink.Downloader.UrlToFile do
     }
   end
 
-  @spec resume_download(URI.t(), t()) :: {:ok, initialized_download()}
-  defp resume_download(
-         %URI{} = uri,
-         %UrlToFile{} = state
-       ) do
+  @spec resume_download(t()) :: {:ok, initialized_download()}
+  defp resume_download(state) do
     Logger.info(
       "[NervesHubLink] Resuming download attempt number #{state.retry_without_progress} (total #{state.retry_number}) for #{uri}"
     )
@@ -357,7 +354,7 @@ defmodule NervesHubLink.Downloader.UrlToFile do
     t =
       Task.Supervisor.async_nolink(NervesHubLink.TaskSupervisor, fn ->
         res =
-          Req.get(URI.to_string(uri),
+          Req.get(URI.to_string(state.uri),
             into: &handle_chunk(pid, ref, &1, &2),
             # Using a range header without known total, is simpler
             range: "bytes=#{range}",
@@ -459,7 +456,6 @@ defmodule NervesHubLink.Downloader.UrlToFile do
         open_file(firmware_path, 0, state)
 
       {:ok, %{type: :regular, size: size}} ->
-        Logger.info("[NervesHubLink] Resuming firmware download at #{size} bytes...")
         open_file(firmware_path, size, state)
 
       {:error, reason} ->
