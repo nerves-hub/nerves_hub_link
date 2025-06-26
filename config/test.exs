@@ -8,6 +8,7 @@ File.mkdir_p!(persist_dir)
 
 # Device HTTP connection.
 config :nerves_hub_link,
+  env: :test,
   archive_public_keys: ["a key?"],
   connect: false,
   client: NervesHubLink.ClientMock,

@@ -349,7 +349,7 @@ defmodule NervesHubLink.Downloader.UrlToFile do
         "#{state.downloaded_length}-"
       end
 
-    Logger.info("Resuming from #{state.downloaded_length}, range #{range}")
+    Logger.info("Resuming from #{state.downloaded_length} bytes and range #{range}")
 
     t =
       Task.Supervisor.async_nolink(NervesHubLink.TaskSupervisor, fn ->
@@ -358,11 +358,7 @@ defmodule NervesHubLink.Downloader.UrlToFile do
             into: &handle_chunk(pid, ref, &1, &2),
             # Using a range header without known total, is simpler
             range: "bytes=#{range}",
-            headers: [
-              content_type: "application/octet-stream",
-              x_retry_number: to_string(state.retry_without_progress),
-              user_agent: "NHL/#{Application.spec(:nerves_hub_link)[:vsn]}"
-            ],
+            headers: get_request_headers(state),
             # Note: We don't use Req's built-in retries because they don't support
             #       resuming our downloads where we left off.
             max_retries: 0,
@@ -375,12 +371,27 @@ defmodule NervesHubLink.Downloader.UrlToFile do
     {:ok,
      %{
        state
-       | uri: state.uri,
-         task: t,
+       | task: t,
          ref: ref,
          time: time,
          start_time: time
      }}
+  end
+
+  @spec get_request_headers(t()) :: Keyword.t()
+  defp get_request_headers(%UrlToFile{} = state) do
+    base_headers = [
+      content_type: "application/octet-stream",
+      user_agent: "NHL/#{Application.spec(:nerves_hub_link)[:vsn]}"
+    ]
+
+    case Application.get_env(:nerves_hub_link, :env) do
+      :test ->
+        base_headers ++ [x_retry_number: to_string(state.retry_without_progress)]
+
+      _ ->
+        base_headers
+    end
   end
 
   @doc """
