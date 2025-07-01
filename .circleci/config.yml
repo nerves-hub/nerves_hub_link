@@ -40,7 +40,7 @@ jobs:
       - run:
           name: Code spell check
           command: |
-            apk add --no-cache nodejs-lts
+            apk add --no-cache nodejs-lts npm
             npx --yes cspell . --quiet
       - run:
           name: Install hex and rebar
