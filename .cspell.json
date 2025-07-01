@@ -5,7 +5,8 @@
   "useGitignore": true,
   "ignorePaths": [
     "**/*.yml",
-    "mix.exs"
+    "mix.exs",
+    "test"
   ],
   "words": [
     "arellano",
