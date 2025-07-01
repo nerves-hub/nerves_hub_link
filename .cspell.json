@@ -20,25 +20,28 @@
     "LICENSES"
   ],
   "words": [
+    // Contributor names
     "arellano",
+    "bmteller",
+    "elin",
+    "olsson",
+    "youngblood",
+
+    // Technical terms
     "backoffs",
     "bingenerate",
-    "bmteller",
     "configurator",
     "defmock",
     "disksup",
-    "elin",
     "fwupdate",
     "Geolocation",
     "geoip",
     "kbps",
     "maint",
     "nerveshub",
-    "olsson",
     "reconnections",
     "subkey",
     "vcgencmd",
     "whenwhere",
-    "youngblood"
   ]
 }
