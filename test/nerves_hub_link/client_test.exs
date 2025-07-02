@@ -18,6 +18,11 @@ defmodule NervesHubLink.ClientTest do
     Mox.verify_on_exit!(context)
   end
 
+  test "connected/0" do
+    Mox.expect(ClientMock, :connected, fn -> :ok end)
+    assert Client.connected() == :ok
+  end
+
   test "update_available/2" do
     Mox.expect(ClientMock, :update_available, fn :data -> :apply end)
     assert Client.update_available(:data) == :apply

@@ -70,6 +70,13 @@ defmodule NervesHubLink.Client do
           | {:progress, 0..100}
 
   @doc """
+  Called when the connection to NervesHub has been established.
+
+  The return value of this function is not checked.
+  """
+  @callback connected() :: any
+
+  @doc """
   Called to find out what to do when a firmware update is available.
 
   May return one of:
@@ -138,7 +145,16 @@ defmodule NervesHubLink.Client do
   """
   @callback reboot() :: no_return()
 
-  @optional_callbacks [reconnect_backoff: 0, reboot: 0]
+  @optional_callbacks [connected: 0, reconnect_backoff: 0, reboot: 0]
+
+  @spec connected() :: any
+  def connected() do
+    if function_exported?(mod(), :connected, 0) do
+      apply_wrap(mod(), :connected, [])
+    else
+      nil
+    end
+  end
 
   @doc """
   This function is called internally by NervesHubLink to notify clients.
