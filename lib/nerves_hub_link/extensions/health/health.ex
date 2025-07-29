@@ -117,6 +117,7 @@ defmodule NervesHubLink.Extensions.Health do
         end
 
       Logger.error("Health check failed due to error: #{reason}")
+      :alarm_handler.clear_alarm(NervesHubLink.Extensions.Health.CheckFailed)
       :alarm_handler.set_alarm({NervesHubLink.Extensions.Health.CheckFailed, [reason: reason]})
 
       DeviceStatus.new(
