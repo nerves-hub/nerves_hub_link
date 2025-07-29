@@ -21,6 +21,8 @@ defmodule NervesHubLink.Application do
   def start(_type, _args) do
     connect? = Application.get_env(:nerves_hub_link, :connect, true)
 
+    maybe_create_firmware_reverted_alarm()
+
     children =
       if connect? do
         config = Configurator.build()
@@ -45,5 +47,13 @@ defmodule NervesHubLink.Application do
       end
 
     Supervisor.start_link(children, strategy: :one_for_one, name: NervesHubLink.Supervisor)
+  end
+
+  def maybe_create_firmware_reverted_alarm() do
+    if Nerves.Runtime.KV.get("nerves_fw_reverted") == "true" do
+      :alarm_handler.set_alarm({Nerves.FirmwareReverted, []})
+    end
+
+    :ok
   end
 end
