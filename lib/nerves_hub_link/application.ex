@@ -17,8 +17,6 @@ defmodule NervesHubLink.Application do
   alias NervesHubLink.Socket
   alias NervesHubLink.UpdateManager
 
-  alias Nerves.Runtime.KV
-
   @impl Application
   def start(_type, _args) do
     connect? = Application.get_env(:nerves_hub_link, :connect, true)
