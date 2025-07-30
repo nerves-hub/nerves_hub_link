@@ -33,7 +33,12 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
     metadata_from_config()
   end
 
-  # The Alarmist library is required for alarms handling.
+  @doc """
+  The alarm callback will use `Alarmist`, if it is available,
+  otherwise it will default to `:alarm_handler`.
+  """
+  def alarms()
+
   if Code.ensure_loaded?(Alarmist) do
     @impl Report
     def alarms() do

@@ -102,8 +102,5 @@ Your module only needs to implement a single function, see `NervesHubLink.Extens
 
 ## Alarms
 
-The [default health report](`NervesHubLink.Extensions.Health.DefaultReport`) requires the use of
-the [`alarmist`](https://hex.pm/packages/alarmist) library for correct alarms handling.
-
-To use another handler, you will need to create a custom [health report](`NervesHubLink.Extensions.Health.Report`)
-which implements the [`alarms/0`](`c:NervesHubLink.Extensions.Health.Report.alarms/0`) callback.
+The [default health report](`NervesHubLink.Extensions.Health.DefaultReport`) uses `:alarm_handler`, but we
+recommend the [`alarmist`](https://hex.pm/packages/alarmist) library for improved alarms handling.
