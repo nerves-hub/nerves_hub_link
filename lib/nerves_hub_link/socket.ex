@@ -136,15 +136,9 @@ defmodule NervesHubLink.Socket do
 
     rejoin_after = Application.get_env(:nerves_hub_link, :rejoin_after, 5_000)
 
-    mint_opts =
-      if config.socket[:url].scheme == "wss" do
-        [protocols: [:http1], transport_opts: config.ssl]
-      else
-        [protocols: [:http1]]
-      end
-
     opts = [
-      mint_opts: mint_opts,
+      mint_opts: mint_opts(config),
+      extensions: mint_extensions(config),
       headers: config.socket[:headers] || [],
       uri: config.socket[:url],
       rejoin_after_msec: [rejoin_after],
@@ -574,6 +568,22 @@ defmodule NervesHubLink.Socket do
   @impl Slipstream
   def terminate(_reason, socket) do
     disconnect(socket)
+  end
+
+  defp mint_opts(config) do
+    if config.socket[:url].scheme == "wss" do
+      [protocols: [:http1], transport_opts: config.ssl]
+    else
+      [protocols: [:http1]]
+    end
+  end
+
+  defp mint_extensions(config) do
+    if config.compress do
+      [Mint.WebSocket.PerMessageDeflate]
+    else
+      []
+    end
   end
 
   defp schedule_network_availability_check(delay \\ 100) do
