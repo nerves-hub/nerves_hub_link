@@ -27,7 +27,14 @@ defmodule NervesHubLink.Configurator.LocalCertKey do
   end
 
   defp maybe_add_cacerts(%{ssl: ssl} = config) do
-    %{config | ssl: Keyword.put_new(ssl, :cacerts, Certificate.ca_certs())}
+    ssl =
+      if ssl[:cacerts] || ssl[:cacertfile] do
+        ssl
+      else
+        Keyword.put_new(ssl, :cacerts, Certificate.ca_certs())
+      end
+
+    %{config | ssl: ssl}
   end
 
   defp maybe_add_cert(%{ssl: ssl} = config) do
