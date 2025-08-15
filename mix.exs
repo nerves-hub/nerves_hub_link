@@ -128,6 +128,7 @@ defmodule NervesHubLink.MixProject do
 
   defp deps do
     [
+      {:alarmist, "~> 0.3", optional: true},
       {:castore, "~> 0.1 or ~> 1.0", optional: true},
       {:credo, "~> 1.2", only: :dev, runtime: false},
       {:dialyxir, "~> 1.1", only: [:dev, :test], runtime: false},
