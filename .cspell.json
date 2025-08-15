@@ -10,15 +10,8 @@
       "addWords": false
     }
   ],
-  "dictionaries": [
-    "elixir", 
-    "fhunleth-cspell-dictionary"
-  ],
-  "ignorePaths": [
-    "**/*.yml",
-    "mix.exs",
-    "LICENSES"
-  ],
+  "dictionaries": ["elixir", "fhunleth-cspell-dictionary"],
+  "ignorePaths": ["**/*.yml", "mix.exs", "LICENSES", "CHANGELOG.md"],
   "words": [
     // Contributor names
     "arellano",
@@ -42,6 +35,6 @@
     "reconnections",
     "subkey",
     "vcgencmd",
-    "whenwhere",
+    "whenwhere"
   ]
 }
