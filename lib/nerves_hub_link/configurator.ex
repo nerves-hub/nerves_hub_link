@@ -36,7 +36,7 @@ defmodule NervesHubLink.Configurator do
     """
 
     defstruct archive_public_keys: [],
-              compress: false,
+              compress: true,
               connect: true,
               connect_wait_for_network: true,
               data_path: "/data/nerves-hub",
