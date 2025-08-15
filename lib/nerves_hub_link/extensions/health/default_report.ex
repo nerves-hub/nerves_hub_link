@@ -12,6 +12,7 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
   """
   @behaviour NervesHubLink.Extensions.Health.Report
 
+  alias NervesHubLink.Alarms
   alias NervesHubLink.Extensions.Health.Report
 
   @default_metric_sets [
@@ -37,24 +38,9 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
   The alarm callback will use `Alarmist`, if it is available,
   otherwise it will default to `:alarm_handler`.
   """
-  def alarms()
-
-  if Code.ensure_loaded?(Alarmist) do
-    @impl Report
-    def alarms() do
-      Alarmist.get_alarms()
-      |> filter_and_format_alarms()
-    end
-  else
-    @impl Report
-    def alarms() do
-      :alarm_handler.get_alarms()
-      |> filter_and_format_alarms()
-    end
-  end
-
-  defp filter_and_format_alarms(alarms) do
-    alarms
+  @impl Report
+  def alarms() do
+    Alarms.get_alarms()
     |> Enum.reject(fn {id, _} -> id == {:disk_almost_full, ~c"/"} end)
     |> Enum.into(%{}, fn {id, description} ->
       try do
