@@ -5,6 +5,11 @@
 defmodule NervesHubLink.Alarms do
   @moduledoc """
   A slim adapter for `Alarmist` and `:alarm_handler`, providing a unified interface for setting and clearing alarms.
+
+  This primarily exists because `:alarm_handler.get_alarms()` will fail if the default alarm_handler
+  has been replaced. Until a path is decided for account for that, this keeps the implementations
+  separate with minimal set/clear handling adjustment when the default handler is used in order to
+  match Alarmist experience better.
   """
 
   if Code.ensure_loaded?(Alarmist) do
