@@ -13,6 +13,7 @@ defmodule NervesHubLink.Socket do
 
   use Slipstream
 
+  alias NervesHubLink.Alarms
   alias NervesHubLink.ArchiveManager
   alias NervesHubLink.Client
   alias NervesHubLink.Configurator
@@ -107,7 +108,7 @@ defmodule NervesHubLink.Socket do
 
   @impl Slipstream
   def init(config) do
-    set_disconnected_alarm()
+    Alarms.set_alarm({NervesHubLink.Disconnected, []})
 
     socket =
       new_socket()
@@ -169,7 +170,7 @@ defmodule NervesHubLink.Socket do
       |> maybe_join_console()
       |> assign(connected_at: System.monotonic_time(:millisecond))
 
-    clear_disconnected_alarm()
+    Alarms.clear_alarm(NervesHubLink.Disconnected)
 
     Client.connected()
 
@@ -568,20 +569,6 @@ defmodule NervesHubLink.Socket do
   @impl Slipstream
   def terminate(_reason, socket) do
     disconnect(socket)
-  end
-
-  defp set_disconnected_alarm() do
-    if !Enum.any?(:alarm_handler.get_alarms(), &(elem(&1, 0) == NervesHubLink.Disconnected)) do
-      :alarm_handler.set_alarm({NervesHubLink.Disconnected, []})
-    end
-
-    :ok
-  end
-
-  defp clear_disconnected_alarm() do
-    :alarm_handler.clear_alarm(NervesHubLink.Disconnected)
-
-    :ok
   end
 
   defp mint_opts(config) do
