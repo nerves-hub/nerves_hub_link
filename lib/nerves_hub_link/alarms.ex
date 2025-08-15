@@ -13,7 +13,7 @@ defmodule NervesHubLink.Alarms do
   """
 
   if Code.ensure_loaded?(Alarmist) do
-    @spec get_alarms() :: [{term(), term()}]
+    @spec get_alarms() :: [Alarmist.alarm()]
     def get_alarms(), do: Alarmist.get_alarms()
 
     @spec clear_alarm(term()) :: :ok
