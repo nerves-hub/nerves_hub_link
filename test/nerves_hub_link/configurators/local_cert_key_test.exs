@@ -22,6 +22,17 @@ defmodule NervesHubLink.Configurator.DefaultTest do
     assert new_config.ssl == config.ssl
   end
 
+  test "doesn't add cacerts when cacertfile is provided" do
+    config = %Config{
+      ssl: [
+        cacertfile: ~c"/cacert.pem"
+      ]
+    }
+
+    new_config = LocalCertKey.build(config)
+    refute new_config.ssl[:cacerts]
+  end
+
   test "reads values from Nerves.Runtime.KV" do
     config = LocalCertKey.build(%Config{})
 
