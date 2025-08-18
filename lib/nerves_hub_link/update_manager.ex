@@ -29,15 +29,8 @@ defmodule NervesHubLink.UpdateManager do
           | {:updating, integer()}
           | :finalizing
 
-  @type previous_status ::
-          :ignored
-          | :rescheduled
-          | :successful
-          | {:error, String.t()}
-
   @type t :: %__MODULE__{
           status: status(),
-          previous_status: previous_status(),
           download: nil | GenServer.server(),
           fwup: nil | GenServer.server(),
           fwup_config: FwupConfig.t(),
@@ -45,7 +38,6 @@ defmodule NervesHubLink.UpdateManager do
         }
 
   defstruct status: :idle,
-            previous_status: nil,
             fwup: nil,
             download: nil,
             fwup_config: nil,
@@ -166,8 +158,7 @@ defmodule NervesHubLink.UpdateManager do
            state
            | fwup: nil,
              update_info: nil,
-             status: :finalizing,
-             previous_status: :successful
+             status: :finalizing
          }}
 
       {:progress, percent} ->
@@ -175,7 +166,7 @@ defmodule NervesHubLink.UpdateManager do
 
       {:error, _, message} ->
         Alarms.clear_alarm(NervesHubLink.UpdateInProgress)
-        {:noreply, %State{state | status: :idle, previous_status: {:error, message}}}
+        {:noreply, %State{state | status: :idle}}
 
       _ ->
         {:noreply, state}
@@ -210,7 +201,7 @@ defmodule NervesHubLink.UpdateManager do
       :ignore ->
         NervesHubLink.send_firmware_update_status(:ignored)
         Logger.info("[NervesHubLink] ignoring firmware update request")
-        {:ignored, %{state | status: :idle, previous_status: :ignored}}
+        {:ignored, %{state | status: :idle}}
 
       {:reschedule, minutes, :minutes} ->
         until =
@@ -219,7 +210,7 @@ defmodule NervesHubLink.UpdateManager do
 
         NervesHubLink.send_firmware_update_status(:reschedule, %{until: until})
         Logger.info("[NervesHubLink] rescheduling firmware update in #{minutes} minutes")
-        {:rescheduled, %{state | status: :idle, previous_status: :rescheduled}}
+        {:rescheduled, %{state | status: :idle}}
 
       {:reschedule, ms} ->
         until =
@@ -228,7 +219,7 @@ defmodule NervesHubLink.UpdateManager do
 
         NervesHubLink.send_firmware_update_status(:reschedule, %{until: until})
         Logger.info("[NervesHubLink] rescheduling firmware update in #{ms / 1_000} seconds")
-        {:rescheduled, %{state | status: :idle, previous_status: :rescheduled}}
+        {:rescheduled, %{state | status: :idle}}
     end
   end
 
