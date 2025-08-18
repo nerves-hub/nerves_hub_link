@@ -21,6 +21,14 @@ jobs:
       - checkout
       - run: reuse lint
 
+  cspell:
+    docker:
+      - image: cimg/node:current
+    working_directory: ~/repo
+    steps:
+      - checkout
+      - run: npx --yes cspell . --quiet
+
   build-test:
     parameters:
       tag:
@@ -37,11 +45,6 @@ jobs:
             apk add --no-cache build-base libmnl-dev
             apk add fwup --repository=http://dl-cdn.alpinelinux.org/alpine/edge/community
       - checkout
-      - run:
-          name: Code spell check
-          command: |
-            apk add --no-cache npm
-            npx --yes cspell . --quiet
       - run:
           name: Install hex and rebar
           command: |
@@ -91,6 +94,7 @@ workflows:
   checks:
     jobs:
       - check-license
+      - cspell
       - build-test:
           name: << matrix.tag >>
           matrix:

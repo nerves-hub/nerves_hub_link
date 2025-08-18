@@ -12,6 +12,7 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
   """
   @behaviour NervesHubLink.Extensions.Health.Report
 
+  alias NervesHubLink.Alarms
   alias NervesHubLink.Extensions.Health.Report
 
   @default_metric_sets [
@@ -33,24 +34,22 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
     metadata_from_config()
   end
 
-  # The Alarmist library is required for alarms handling.
-  if Code.ensure_loaded?(Alarmist) do
-    @impl Report
-    def alarms() do
-      for {id, description} <- Alarmist.get_alarms(), into: %{} do
-        try do
-          {inspect(id), inspect(description)}
-        catch
-          _, _ ->
-            {"bad alarm term", ""}
-        end
+  @doc """
+  The alarm callback will use `Alarmist`, if it is available,
+  otherwise it will default to `:alarm_handler`.
+  """
+  @impl Report
+  def alarms() do
+    Alarms.get_alarms()
+    |> Enum.reject(fn {id, _} -> id == {:disk_almost_full, ~c"/"} end)
+    |> Enum.into(%{}, fn {id, description} ->
+      try do
+        {inspect(id), inspect(description)}
+      catch
+        _, _ ->
+          {"bad alarm term", ""}
       end
-    end
-  else
-    @impl Report
-    def alarms() do
-      %{}
-    end
+    end)
   end
 
   @impl Report

@@ -16,6 +16,7 @@ defmodule NervesHubLink.UpdateManager do
   """
   use GenServer
 
+  alias NervesHubLink.Alarms
   alias NervesHubLink.Downloader
   alias NervesHubLink.FwupConfig
   alias NervesHubLink.Message.UpdateInfo
@@ -105,7 +106,7 @@ defmodule NervesHubLink.UpdateManager do
 
   @impl GenServer
   def init(%FwupConfig{} = fwup_config) do
-    :alarm_handler.clear_alarm(NervesHubLink.UpdateInProgress)
+    Alarms.clear_alarm(NervesHubLink.UpdateInProgress)
     fwup_config = FwupConfig.validate!(fwup_config)
     {:ok, %State{fwup_config: fwup_config}}
   end
@@ -165,14 +166,14 @@ defmodule NervesHubLink.UpdateManager do
     case message do
       {:ok, 0, _message} ->
         Logger.info("[NervesHubLink] FWUP Finished")
-        :alarm_handler.clear_alarm(NervesHubLink.UpdateInProgress)
+        Alarms.clear_alarm(NervesHubLink.UpdateInProgress)
         {:noreply, %State{state | fwup: nil, update_info: nil, status: :idle}}
 
       {:progress, percent} ->
         {:noreply, %State{state | status: {:updating, percent}}}
 
       {:error, _, message} ->
-        :alarm_handler.clear_alarm(NervesHubLink.UpdateInProgress)
+        Alarms.clear_alarm(NervesHubLink.UpdateInProgress)
         {:noreply, %State{state | status: {:fwup_error, message}}}
 
       _ ->
@@ -243,7 +244,7 @@ defmodule NervesHubLink.UpdateManager do
       )
 
     Logger.info("[NervesHubLink] Downloading firmware: #{update_info.firmware_url}")
-    :alarm_handler.set_alarm({NervesHubLink.UpdateInProgress, []})
+    Alarms.set_alarm({NervesHubLink.UpdateInProgress, []})
 
     %State{
       state

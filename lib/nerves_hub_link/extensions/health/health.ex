@@ -17,6 +17,7 @@ defmodule NervesHubLink.Extensions.Health do
 
   use NervesHubLink.Extensions, name: "health", version: "0.0.1"
 
+  alias NervesHubLink.Alarms
   alias NervesHubLink.Extensions.Health.DefaultReport
   alias NervesHubLink.Extensions.Health.DeviceStatus
 
@@ -96,7 +97,7 @@ defmodule NervesHubLink.Extensions.Health do
     report = Keyword.get(config, :report, default_report)
 
     if report do
-      :alarm_handler.clear_alarm(NervesHubLink.Extensions.Health.CheckFailed)
+      Alarms.clear_alarm(NervesHubLink.Extensions.Health.CheckFailed)
 
       DeviceStatus.new(
         timestamp: report.timestamp(),
@@ -117,7 +118,9 @@ defmodule NervesHubLink.Extensions.Health do
         end
 
       Logger.error("Health check failed due to error: #{reason}")
-      :alarm_handler.set_alarm({NervesHubLink.Extensions.Health.CheckFailed, [reason: reason]})
+
+      Alarms.clear_alarm(NervesHubLink.Extensions.Health.CheckFailed)
+      Alarms.set_alarm({NervesHubLink.Extensions.Health.CheckFailed, [reason: reason]})
 
       DeviceStatus.new(
         timestamp: DateTime.utc_now(),
