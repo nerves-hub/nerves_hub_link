@@ -48,5 +48,5 @@
   "uboot_env": {:hex, :uboot_env, "1.0.1", "b0e136cf1a561412ff7db23ed2b6df18d7c7ce2fc59941afd851006788a67f3d", [:mix], [], "hexpm", "b6d4fe7c24123be57ed946c48116d23173e37944bc945b8b76fccc437909c60b"},
   "vintage_net": {:hex, :vintage_net, "0.13.7", "83ee4ada0489634e88a68028ae21473c81bd7c952434e4caba4b602f6230ae9e", [:make, :mix], [{:beam_notify, "~> 0.2.0 or ~> 1.0", [hex: :beam_notify, repo: "hexpm", optional: false]}, {:elixir_make, "~> 0.6", [hex: :elixir_make, repo: "hexpm", optional: false]}, {:muontrap, "~> 0.5.1 or ~> 0.6.0 or ~> 1.0", [hex: :muontrap, repo: "hexpm", optional: false]}, {:property_table, "~> 0.2.0 or ~> 0.3.0", [hex: :property_table, repo: "hexpm", optional: false]}], "hexpm", "4872ddb497141aff62328dd4547824cabb0992d2437ad27f5c196af3b9d8d1f2"},
   "whenwhere": {:hex, :whenwhere, "0.1.2", "d0b9928061b3e49dc9ade45db95206fb740ab00ca2283da331f0f9590e6f970e", [:mix], [], "hexpm", "b438bd7650571e4e94a59b31f0828287c93e8ca1064da5b6b1f2d5e7122b748b"},
-  "x509": {:hex, :x509, "0.8.10", "5d1ec6d5f4db31982f9dc34e6a1eebd631d04599e0b6c1c259f1dadd4495e11f", [:mix], [], "hexpm", "a191221665af28b9bdfff0c986ef55f80e126d8ce751bbdf6cefa846410140c0"},
+  "x509": {:hex, :x509, "0.9.2", "a75aa605348abd905990f3d2dc1b155fcde4e030fa2f90c4a91534405dce0f6e", [:mix], [], "hexpm", "4c5ede75697e565d4b0f5be04c3b71bb1fd3a090ea243af4bd7dae144e48cfc7"},
 }
