@@ -507,6 +507,14 @@ defmodule NervesHubLink.Socket do
     {:noreply, assign(socket, :uploader_pid, nil)}
   end
 
+  def handle_info({:EXIT, port, reason}, socket) when is_port(port) do
+    Logger.debug(
+      "[NervesHubLink] Ignoring :Exit message from Slipstream connection Port (#{inspect(port)} : #{reason})"
+    )
+
+    {:noreply, socket}
+  end
+
   def handle_info(:iex_timeout, socket) do
     msg = """
     \r
