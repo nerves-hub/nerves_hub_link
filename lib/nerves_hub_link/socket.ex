@@ -486,8 +486,8 @@ defmodule NervesHubLink.Socket do
   end
 
   def handle_info({:EXIT, iex_pid, reason}, %{assigns: %{iex_pid: iex_pid}} = socket) do
-    msg = "\r******* Remote IEx stopped: #{inspect(reason)} *******\r"
-    _ = push(socket, @console_topic, "up", %{data: msg})
+    msg = "Remote IEx stopped: #{inspect(reason)}"
+    _ = push(socket, @console_topic, "up", %{data: "\r******* #{msg} *******\r"})
     Logger.warning("[NervesHubLink] #{msg}")
 
     socket =
