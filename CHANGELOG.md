@@ -4,11 +4,15 @@
 
 * Added
   * Add a client callback for when the device is connected (#312) (Thanks @amclain)
+  * Enable per-message WebSocket compression via Mint extensions (#318)
 
 * Updated
-  * Don't create duplicate Disconnected alarms
-  * Clear previous `CheckFailed` alarms before setting a new one
-  * Support the use of `:alarm_handler` for health reports, removing the `Alarmist` requirement
+  * Don't create duplicate Disconnected alarms (#317)
+  * Clear previous `CheckFailed` alarms before setting a new one (#317)
+  * Support the use of `:alarm_handler` for health reports, removing the `Alarmist` requirement (#317)
+
+* Fixed
+  * SSL: `cacerts` no longer override `cacertfile` (#321) (Thanks @D4no0)
 
 ## [2.7.3] - 2025-04-15
 
