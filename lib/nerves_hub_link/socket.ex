@@ -486,8 +486,8 @@ defmodule NervesHubLink.Socket do
   end
 
   def handle_info({:EXIT, iex_pid, reason}, %{assigns: %{iex_pid: iex_pid}} = socket) do
-    msg = "\r******* Remote IEx stopped: #{inspect(reason)} *******\r"
-    _ = push(socket, @console_topic, "up", %{data: msg})
+    msg = "Remote IEx stopped: #{inspect(reason)}"
+    _ = push(socket, @console_topic, "up", %{data: "\r******* #{msg} *******\r"})
     Logger.warning("[NervesHubLink] #{msg}")
 
     socket =
@@ -505,6 +505,14 @@ defmodule NervesHubLink.Socket do
     Logger.info("[#{inspect(__MODULE__)}] Upload cancelled")
 
     {:noreply, assign(socket, :uploader_pid, nil)}
+  end
+
+  def handle_info({:EXIT, port, reason}, socket) when is_port(port) do
+    Logger.debug(
+      "[NervesHubLink] Ignoring :Exit message from Slipstream connection Port (#{inspect(port)} : #{reason})"
+    )
+
+    {:noreply, socket}
   end
 
   def handle_info(:iex_timeout, socket) do

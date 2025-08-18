@@ -391,7 +391,9 @@ defmodule NervesHubLink.Downloader do
     # like this. There may be a better way to do this..
     path = if query, do: "#{path}?#{query}", else: path
 
-    Logger.info("[NervesHubLink] Resuming download attempt number #{state.retry_number} #{uri}")
+    if state.retry_number > 0 do
+      Logger.info("[NervesHubLink] Resuming download attempt number #{state.retry_number} #{uri}")
+    end
 
     with {:ok, conn} <- Mint.HTTP.connect(String.to_existing_atom(scheme), host, port),
          {:ok, conn, request_ref} <- Mint.HTTP.request(conn, "GET", path, request_headers, nil) do
