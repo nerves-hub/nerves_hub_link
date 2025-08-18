@@ -29,19 +29,22 @@ defmodule NervesHubLink.UpdateManager do
           | {:updating, integer()}
           | :finalizing
 
-  @type t :: %__MODULE__{
-          status: status(),
-          download: nil | GenServer.server(),
-          fwup: nil | GenServer.server(),
-          fwup_config: FwupConfig.t(),
-          update_info: nil | UpdateInfo.t()
-        }
+  defmodule State do
+    @moduledoc false
+    @type t :: %__MODULE__{
+            status: UpdateManager.status(),
+            download: nil | GenServer.server(),
+            fwup: nil | GenServer.server(),
+            fwup_config: FwupConfig.t(),
+            update_info: nil | UpdateInfo.t()
+          }
 
-  defstruct status: :idle,
-            fwup: nil,
-            download: nil,
-            fwup_config: nil,
-            update_info: nil
+    defstruct status: :idle,
+              fwup: nil,
+              download: nil,
+              fwup_config: nil,
+              update_info: nil
+  end
 
   @doc """
   Must be called when an update payload is dispatched from
@@ -164,7 +167,7 @@ defmodule NervesHubLink.UpdateManager do
       {:progress, percent} ->
         {:noreply, %State{state | status: {:updating, percent}}}
 
-      {:error, _, message} ->
+      {:error, _, _message} ->
         Alarms.clear_alarm(NervesHubLink.UpdateInProgress)
         {:noreply, %State{state | status: :idle}}
 
