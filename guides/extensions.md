@@ -1,13 +1,27 @@
-# Extensions: Health and Geo
+# Extensions: Geo, Health, and Logging
 
 Extensions are pieces of non-critical functionality going over the NervesHub WebSocket. They are separated out under the Extensions mechanism so that the client can happily ignore anything extension-related in service of keeping firmware updates healthy. That is always the top priority.
 
-There are two extensions currently:
+There are currently three extensions:
 
-- **Health** reports device metrics, alarms, metadata and similar.
 - **Geo** provides GeoIP information and allows slotting in a better source.
+- **Health** reports device metrics, alarms, metadata and similar.
+- **Logging** provides the ability to send and store logs on NervesHub.
 
 Your NervesHub server controls enabling and disabling extensions to allow you to switch them off if they impact operations.
+
+## Geolocation
+
+It is intended to be easy to replace the default Geo Resolver with your own. Maybe you have a GPS module or can resolve a reasonably precise location via LTE. Just change config:
+
+```elixir
+config :nerves_hub_link,
+  geo: [
+    resolver: CatCounter.MyResolver
+  ]
+```
+
+Your module only needs to implement a single function, see `NervesHubLink.Extensions.Geo.Resolver` for details.
 
 ## Health
 
@@ -31,7 +45,7 @@ to include all the metric sets you want to use. If you want to include the full 
 
 eg.
 
-```
+```elixir
 config :nerves_hub_link,
   health: [
     metric_sets: [
@@ -44,7 +58,7 @@ config :nerves_hub_link,
 
 If you only want to use some of the default metrics, you can specify them explicitly:
 
-```
+```elixir
 config :nerves_hub_link,
   health: [
     metric_sets: [
@@ -57,7 +71,7 @@ config :nerves_hub_link,
 
 And if you don't want to use any metric sets, you can set the `metric_sets` option to an empty list.
 
-```
+```elixir
 config :nerves_hub_link,
   health: [
     metric_sets: []
@@ -66,7 +80,7 @@ config :nerves_hub_link,
 
 If you want to add custom metadata to the default health report, you can specify it with:
 
-```
+```elixir
 config :nerves_hub_link,
   health: [
     # metadata is added with a key and MFA
@@ -79,28 +93,29 @@ config :nerves_hub_link,
 
 Or you can implement a completely custom reporting module by implementing `NervesHubLink.Extensions.Health.Report` and configuring it:
 
-```
+```elixir
 config :nerves_hub_link,
   health: [
     report: CatCounter.MyHealthReport
   ]
 ```
 
-## Geolocation
-
-It is intended to be easy to replace the default Geo Resolver with your own. Maybe you have a GPS module or can resolve a reasonably precise location via LTE. Just change config:
-
-```
-config :nerves_hub_link,
-  geo: [
-    resolver: CatCounter.MyResolver
-  ]
-```
-
-Your module only needs to implement a single function, see `NervesHubLink.Extensions.Geo.Resolver` for details.
-
-
-## Alarms
+### Alarms
 
 The [default health report](`NervesHubLink.Extensions.Health.DefaultReport`) uses `:alarm_handler`, but we
 recommend the [`alarmist`](https://hex.pm/packages/alarmist) library for improved alarms handling.
+
+## Logging
+
+The Logging extension is responsible for sending logs to the NervesHub platform.
+
+You can disable the extension by explicitly defining the `extension_modules` option and excluding the `NervesHubLink.Extensions.Logging` module from the list:
+
+```elixir
+config :nerves_hub_link,
+  extension_modules: [
+    NervesHubLink.Extensions.Geo,
+    NervesHubLink.Extensions.Health,
+    # NervesHubLink.Extensions.Logging
+  ]
+```

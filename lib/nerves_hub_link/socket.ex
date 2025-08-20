@@ -53,6 +53,8 @@ defmodule NervesHubLink.Socket do
   @spec check_connection(atom()) :: boolean()
   def check_connection(type) do
     GenServer.call(__MODULE__, {:check_connection, type})
+  catch
+    :exit, _ -> false
   end
 
   @spec send_file(Path.t()) :: :ok | {:error, :too_large | File.posix()}
