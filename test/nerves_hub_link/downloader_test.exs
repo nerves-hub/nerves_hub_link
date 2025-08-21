@@ -34,7 +34,10 @@ defmodule NervesHubLink.DownloaderTest do
     retry_args = RetryConfig.validate(max_disconnects: 2, time_between_retries: 1)
 
     Process.flag(:trap_exit, true)
-    {:ok, download} = Downloader.start_download(@failure_url, handler_fun, retry_args)
+
+    {:ok, download} =
+      Downloader.start_download(@failure_url, handler_fun, retry_config: retry_args)
+
     # should receive this one twice
     assert_receive {:error, %Mint.TransportError{reason: :econnrefused}}, 1000
     assert_receive {:error, %Mint.TransportError{reason: :econnrefused}}
@@ -49,7 +52,10 @@ defmodule NervesHubLink.DownloaderTest do
     retry_args = RetryConfig.validate(max_timeout: 10)
 
     Process.flag(:trap_exit, true)
-    {:ok, download} = Downloader.start_download(@failure_url, handler_fun, retry_args)
+
+    {:ok, download} =
+      Downloader.start_download(@failure_url, handler_fun, retry_config: retry_args)
+
     assert_receive {:error, %Mint.TransportError{reason: :econnrefused}}, 1000
     assert_receive {:EXIT, ^download, :max_timeout_reached}
   end
@@ -74,9 +80,9 @@ defmodule NervesHubLink.DownloaderTest do
           time_between_retries: 10
         )
 
-      {:ok, _download} = Downloader.start_download(url, handler_fun, retry_args)
+      {:ok, _download} = Downloader.start_download(url, handler_fun, retry_config: retry_args)
       assert_receive {:error, :idle_timeout}, 1000
-      assert_receive {:data, "content"}
+      assert_receive {:data, "content", _}
       assert_receive :complete
     end
   end
@@ -95,7 +101,10 @@ defmodule NervesHubLink.DownloaderTest do
       test_pid = self()
       handler_fun = &send(test_pid, &1)
       Process.flag(:trap_exit, true)
-      {:ok, download} = Downloader.start_download(url, handler_fun, @short_retry_args)
+
+      {:ok, download} =
+        Downloader.start_download(url, handler_fun, retry_config: @short_retry_args)
+
       assert_receive {:error, %Mint.HTTPError{reason: {:http_error, 416}}}, 1000
       assert_receive {:EXIT, ^download, {:http_error, 416}}
     end
@@ -114,14 +123,14 @@ defmodule NervesHubLink.DownloaderTest do
     test "calculates range request header", %{url: url} do
       test_pid = self()
       handler_fun = &send(test_pid, &1)
-      {:ok, _} = Downloader.start_download(url, handler_fun, @short_retry_args)
+      {:ok, _} = Downloader.start_download(url, handler_fun, retry_config: @short_retry_args)
 
-      assert_receive {:data, "h"}, 1000
+      assert_receive {:data, "h", _}, 1000
       assert_receive {:error, _}
 
       refute_receive {:error, _}
       # cspell:disable-next-line
-      assert_receive {:data, "ello, world"}
+      assert_receive {:data, "ello, world", _}
     end
   end
 
@@ -140,7 +149,7 @@ defmodule NervesHubLink.DownloaderTest do
       handler_fun = &send(test_pid, &1)
       {:ok, _download} = Downloader.start_download(url, handler_fun)
       refute_receive {:error, _}
-      assert_receive {:data, "redirected"}
+      assert_receive {:data, "redirected", _}
     end
   end
 
@@ -163,14 +172,16 @@ defmodule NervesHubLink.DownloaderTest do
       # download the first part of the data.
       # the plug will terminate the connection after 2048 bytes are sent.
       # the handler_fun will send the data to this test's mailbox.
-      {:ok, _download} = Downloader.start_download(url, handler_fun, @short_retry_args)
-      assert_receive {:data, ^expected_data_part_1}, 1000
+      {:ok, _download} =
+        Downloader.start_download(url, handler_fun, retry_config: @short_retry_args)
+
+      assert_receive {:data, ^expected_data_part_1, _}, 1000
 
       # download will be resumed after the error
       assert_receive {:error, _}
 
       # second part should now be delivered
-      assert_receive {:data, ^expected_data_part_2}
+      assert_receive {:data, ^expected_data_part_2, _}
 
       # the request should complete successfully this time
       assert_receive :complete
