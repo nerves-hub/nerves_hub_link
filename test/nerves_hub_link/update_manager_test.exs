@@ -32,7 +32,7 @@ defmodule NervesHubLink.UpdateManagerTest do
     test "apply", %{update_payload: update_payload, devpath: devpath} do
       fwup_config = %{default_config() | fwup_devpath: devpath}
 
-      {:ok, manager} = UpdateManager.start_link(fwup_config)
+      {:ok, manager} = UpdateManager.start_link({fwup_config, %{}})
       assert UpdateManager.apply_update(manager, update_payload, []) == {:updating, 0}
 
       assert_receive {:fwup, {:progress, 0}}
@@ -61,7 +61,7 @@ defmodule NervesHubLink.UpdateManagerTest do
           update_available: update_available_fun
       }
 
-      {:ok, manager} = UpdateManager.start_link(fwup_config)
+      {:ok, manager} = UpdateManager.start_link({fwup_config, %{}})
       assert UpdateManager.apply_update(manager, update_payload, []) == :update_rescheduled
       assert_received :rescheduled
       refute_received {:fwup, _}
@@ -83,7 +83,7 @@ defmodule NervesHubLink.UpdateManagerTest do
 
       # If setting SUPER_SECRET in the environment doesn't happen, then test fails
       # due to fwup getting a bad aes key.
-      {:ok, manager} = UpdateManager.start_link(fwup_config)
+      {:ok, manager} = UpdateManager.start_link({fwup_config, %{}})
       assert UpdateManager.apply_update(manager, update_payload, []) == {:updating, 0}
 
       assert_receive {:fwup, {:progress, 0}}
