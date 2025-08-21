@@ -36,6 +36,8 @@ defmodule NervesHubLink.Configurator do
     """
 
     defstruct archive_public_keys: [],
+              cache_firmware_to_disk: false,
+              cache_firmware_dir: "/data/nerves_hub_link/firmware",
               compress: true,
               connect: true,
               connect_wait_for_network: true,
@@ -61,6 +63,8 @@ defmodule NervesHubLink.Configurator do
 
     @type t() :: %__MODULE__{
             archive_public_keys: [binary()],
+            cache_firmware_to_disk: false,
+            cache_firmware_dir: String.t(),
             compress: boolean(),
             connect: boolean(),
             connect_wait_for_network: boolean(),

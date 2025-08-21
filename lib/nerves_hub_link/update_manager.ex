@@ -28,7 +28,9 @@ defmodule NervesHubLink.UpdateManager do
           :idle
           | {:fwup_error, String.t()}
           | :update_rescheduled
+          | {:downloading, integer()}
           | {:updating, integer()}
+          | :applying
 
   defmodule State do
     @moduledoc false
@@ -37,6 +39,9 @@ defmodule NervesHubLink.UpdateManager do
             status: UpdateManager.status(),
             update_reschedule_timer: nil | :timer.tref(),
             download: nil | GenServer.server(),
+            downloader_config: map(),
+            cached_download_pid: nil | pid(),
+            cached_download_path: nil | String.t(),
             fwup: nil | GenServer.server(),
             fwup_config: FwupConfig.t(),
             update_info: nil | UpdateInfo.t()
@@ -46,6 +51,9 @@ defmodule NervesHubLink.UpdateManager do
               update_reschedule_timer: nil,
               fwup: nil,
               download: nil,
+              downloader_config: nil,
+              cached_download_pid: nil,
+              cached_download_path: nil,
               fwup_config: nil,
               update_info: nil
   end
@@ -79,19 +87,29 @@ defmodule NervesHubLink.UpdateManager do
   # Private API for reporting download progress. This wraps a GenServer.call so
   # that it can apply back pressure to the downloader if applying the update is
   # slow.
-  defp report_download(manager, message) do
+  defp report_stream(manager, message) do
     # 60 seconds is arbitrary, but currently matches the `fwup` library's
     # default timeout. Having fwup take longer than 5 seconds to perform a
     # write operation seems remote except for perhaps an exceptionally well
     # compressed delta update. The consequences of crashing here because fwup
     # doesn't have enough time are severe, though, since they prevent an
     # update.
-    GenServer.call(manager, {:download, message}, 60_000)
+    GenServer.call(manager, {:stream, message}, 60_000)
+  end
+
+  defp report_download(manager, message, fwup_public_keys) do
+    # 60 seconds is arbitrary, but currently matches the `fwup` library's
+    # default timeout. Having fwup take longer than 5 seconds to perform a
+    # write operation seems remote except for perhaps an exceptionally well
+    # compressed delta update. The consequences of crashing here because fwup
+    # doesn't have enough time are severe, though, since they prevent an
+    # update.
+    GenServer.call(manager, {:download, message, fwup_public_keys}, 60_000)
   end
 
   @doc false
-  @spec child_spec(FwupConfig.t()) :: Supervisor.child_spec()
-  def child_spec(%FwupConfig{} = args) do
+  @spec child_spec({FwupConfig.t(), map()}) :: Supervisor.child_spec()
+  def child_spec({%FwupConfig{} = _fwup_config, %{}} = args) do
     %{
       start: {__MODULE__, :start_link, [args, [name: __MODULE__]]},
       id: __MODULE__
@@ -99,16 +117,17 @@ defmodule NervesHubLink.UpdateManager do
   end
 
   @doc false
-  @spec start_link(FwupConfig.t(), GenServer.options()) :: GenServer.on_start()
-  def start_link(%FwupConfig{} = args, opts \\ []) do
+  @spec start_link({FwupConfig.t(), map()}, GenServer.options()) :: GenServer.on_start()
+  def start_link({%FwupConfig{} = _fwup_config, %{}} = args, opts \\ []) do
     GenServer.start_link(__MODULE__, args, opts)
   end
 
   @impl GenServer
-  def init(%FwupConfig{} = fwup_config) do
+  def init({%FwupConfig{} = fwup_config, downloader_config}) do
     Alarms.clear_alarm(NervesHubLink.UpdateInProgress)
     fwup_config = FwupConfig.validate!(fwup_config)
-    {:ok, %State{fwup_config: fwup_config}}
+
+    {:ok, %State{fwup_config: fwup_config, downloader_config: downloader_config}}
   end
 
   @impl GenServer
@@ -134,20 +153,57 @@ defmodule NervesHubLink.UpdateManager do
   end
 
   # messages from Downloader
-  def handle_call({:download, :complete}, _from, state) do
+  def handle_call({:stream, :complete}, _from, state) do
     Logger.info("[NervesHubLink] Firmware Download complete")
     {:reply, :ok, %State{state | download: nil}}
   end
 
-  def handle_call({:download, {:error, reason}}, _from, state) do
+  def handle_call({:stream, {:error, reason}}, _from, state) do
     Logger.error("[NervesHubLink] Nonfatal HTTP download error: #{inspect(reason)}")
     {:reply, :ok, state}
   end
 
   # Data from the downloader is sent to fwup
-  def handle_call({:download, {:data, data}}, _from, state) do
+  def handle_call({:stream, {:data, data, _percent}}, _from, state) do
     _ = Fwup.Stream.send_chunk(state.fwup, data)
     {:reply, :ok, state}
+  end
+
+  # messages from Downloader
+  def handle_call({:download, :complete, fwup_public_keys}, _from, state) do
+    :ok = File.close(state.cached_download_pid)
+
+    firmware_file_path = String.trim_trailing(state.cached_download_path, ".partial")
+    :ok = File.rename(state.cached_download_path, firmware_file_path)
+
+    stat = File.stat(firmware_file_path)
+
+    Logger.info("[NervesHubLink] Firmware download complete (#{stat.size} bytes)")
+
+    send(self(), {:send_cached_firmware_to_fwup, firmware_file_path, fwup_public_keys})
+
+    {:reply, :ok,
+     %State{
+       state
+       | download: nil,
+         cached_download_pid: nil,
+         cached_download_path: firmware_file_path
+     }}
+  end
+
+  def handle_call({:download, {:error, reason}}, _from, state) do
+    :ok = File.close(state.cached_download_pid)
+    Logger.error("[NervesHubLink] Nonfatal HTTP download error: #{inspect(reason)}")
+    {:reply, :ok, state}
+  end
+
+  # Data from the downloader is sent to fwup
+  def handle_call({:download, {:data, data, percent}}, _from, state) do
+    IO.binwrite(state.cached_download_pid, data)
+
+    NervesHubLink.send_update_progress(round(percent))
+
+    {:reply, :ok, %State{state | status: {:downloading, percent}}}
   end
 
   @impl GenServer
@@ -181,6 +237,22 @@ defmodule NervesHubLink.UpdateManager do
     end
   end
 
+  def handle_info({:send_cached_firmware_to_fwup, firmware_path, fwup_public_keys}, state) do
+    public_keys =
+      Enum.reduce(fwup_public_keys, [], fn public_key, args ->
+        args ++ ["--public-key", public_key]
+      end)
+
+    Logger.info("[NervesHubLink] Requesting FWUP apply the firmware update : #{firmware_path}")
+
+    {:ok, fwup} =
+      Fwup.apply(state.fwup_config.fwup_devpath, state.fwup_config.fwup_task, firmware_path,
+        fwup_env: public_keys
+      )
+
+    {:noreply, %State{state | status: :applying, fwup: fwup}}
+  end
+
   @spec maybe_update_firmware(UpdateInfo.t(), [binary()], State.t()) :: State.t()
   defp maybe_update_firmware(
          %UpdateInfo{} = _update_info,
@@ -208,7 +280,11 @@ defmodule NervesHubLink.UpdateManager do
     # note: update_available is a behaviour function
     case state.fwup_config.update_available.(update_info) do
       :apply ->
-        start_fwup_stream(update_info, fwup_public_keys, state)
+        if state.downloader_config[:cache_firmware_to_disk] do
+          start_cached_fwup_stream(update_info, fwup_public_keys, state)
+        else
+          start_fwup_stream(update_info, fwup_public_keys, state)
+        end
 
       :ignore ->
         state
@@ -235,7 +311,7 @@ defmodule NervesHubLink.UpdateManager do
   @spec start_fwup_stream(UpdateInfo.t(), [binary()], State.t()) :: State.t()
   defp start_fwup_stream(%UpdateInfo{} = update_info, fwup_public_keys, state) do
     pid = self()
-    fun = &report_download(pid, &1)
+    fun = &report_stream(pid, &1)
     {:ok, download} = Downloader.start_download(update_info.firmware_url, fun)
 
     {:ok, fwup} =
@@ -252,6 +328,48 @@ defmodule NervesHubLink.UpdateManager do
         download: download,
         fwup: fwup,
         update_info: update_info
+    }
+  end
+
+  defp start_cached_fwup_stream(%UpdateInfo{} = update_info, fwup_public_keys, state) do
+    path_parts = String.split(update_info.firmware_url, "/")
+    file_name_with_query = List.last(path_parts)
+    file_name = String.replace(file_name_with_query, ~r/\?.*/, "")
+
+    firmware_dir = state.downloader_config.cache_firmware_dir
+
+    full_path = Path.join(firmware_dir, "#{file_name}.partial")
+
+    start_from =
+      case File.stat(full_path) do
+        {:ok, stat} ->
+          Logger.info("[NervesHubLink] Partial firmware download exists (#{stat.size} bytes)")
+          stat.size
+
+        {:error, _} ->
+          _ = File.rmdir(firmware_dir)
+          :ok = File.mkdir_p(firmware_dir)
+          0
+      end
+
+    file_pid = File.open!("#{file_name}.partial", [:read, :write, :append, :binary])
+
+    pid = self()
+    fun = &report_download(pid, &1, fwup_public_keys)
+
+    {:ok, download} =
+      Downloader.start_download(update_info.firmware_url, fun, resume_from_bytes: start_from)
+
+    Logger.info("[NervesHubLink] Downloading firmware: #{update_info.firmware_url}")
+    Alarms.set_alarm({NervesHubLink.UpdateInProgress, []})
+
+    %State{
+      state
+      | status: {:downloading, 0},
+        download: download,
+        update_info: update_info,
+        cached_download_pid: file_pid,
+        cached_download_path: full_path
     }
   end
 
