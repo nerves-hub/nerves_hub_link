@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [2.8.0] - 2025-08-22
 
 * Added
   * Add a client callback for when the device is connected (#312) (Thanks @amclain)
