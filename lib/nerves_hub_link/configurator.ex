@@ -27,7 +27,7 @@ defmodule NervesHubLink.Configurator do
 
   require Logger
 
-  @device_api_version "2.2.0"
+  @device_api_version "2.3.0"
   @console_version "2.0.0"
 
   defmodule Config do
@@ -169,6 +169,8 @@ defmodule NervesHubLink.Configurator do
       |> Map.put("fwup_version", fwup_version())
       |> Map.put("device_api_version", @device_api_version)
       |> Map.put("console_version", @console_version)
+      |> Map.put("client", "nerves_hub_link")
+      |> Map.put("client_version", to_string(Application.spec(:nerves_hub_link, :vsn)))
 
     %{base | params: params, socket: socket, ssl: ssl, fwup_devpath: fwup_devpath}
   end
