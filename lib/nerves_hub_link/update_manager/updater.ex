@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2025 Josh Kalderimis
+#
+# SPDX-License-Identifier: Apache-2.0
+#
 defmodule NervesHubLink.UpdateManager.Updater do
   @moduledoc """
   `Updater`s orchestrate the complete workflow of downloading and installing/applying
