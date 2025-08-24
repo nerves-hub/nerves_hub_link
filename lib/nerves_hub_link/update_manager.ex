@@ -33,17 +33,15 @@ defmodule NervesHubLink.UpdateManager do
     @moduledoc false
 
     @type t :: %__MODULE__{
-            status: UpdateManager.status(),
-            update_reschedule_timer: nil | :timer.tref(),
-            updater: nil | GenServer.server(),
-            fwup: nil | GenServer.server(),
             fwup_config: FwupConfig.t(),
+            status: UpdateManager.status(),
             update_info: nil | UpdateInfo.t(),
+            update_reschedule_timer: nil | :timer.tref(),
+            updater: nil | Updater.t(),
             updater_pid: nil | pid()
           }
 
-    defstruct fwup: nil,
-              fwup_config: nil,
+    defstruct fwup_config: nil,
               status: :idle,
               update_info: nil,
               update_reschedule_timer: nil,
