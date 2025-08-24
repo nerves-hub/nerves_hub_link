@@ -1,5 +1,5 @@
 defmodule NervesHubLink.UpdateManager.Updater do
-  @doc """
+  @moduledoc """
   `Updater`s orchestrate the complete workflow of downloading and installing/applying
   firmware updates.
   """
@@ -17,6 +17,7 @@ defmodule NervesHubLink.UpdateManager.Updater do
               {:ok, new_state :: term()} | {:stop, reason :: term(), new_state :: term()}
   @callback handle_fwup_message(message :: term(), state :: term()) ::
               {:ok, new_state :: term()} | {:stop, reason :: term(), new_state :: term()}
+  @callback log_prefix() :: String.t()
 
   defmacro __using__(_opts) do
     quote do
@@ -53,8 +54,6 @@ defmodule NervesHubLink.UpdateManager.Updater do
           opts
         )
       end
-
-      def log_prefix(), do: "NervesHubLink:Updater"
 
       @impl GenServer
       def init([update_info, fwup_config, fwup_public_keys]) do
@@ -115,6 +114,9 @@ defmodule NervesHubLink.UpdateManager.Updater do
             {:ok, state}
         end
       end
+
+      @impl NervesHubLink.UpdateManager.Updater
+      def log_prefix(), do: "NervesHubLink:Updater"
 
       defp report_download(updater, message) do
         # 60 seconds is arbitrary, but currently matches the `fwup` library's
