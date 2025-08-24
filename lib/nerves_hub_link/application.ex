@@ -33,15 +33,10 @@ defmodule NervesHubLink.Application do
           update_available: &Client.update_available/1
         }
 
-        downloader_config = %{
-          cache_firmware_to_disk: config.cache_firmware_to_disk,
-          cache_firmware_dir: config.cache_firmware_dir
-        }
-
         [
           {DynamicSupervisor, name: ExtensionsSupervisor},
           Extensions,
-          {UpdateManager, {fwup_config, downloader_config}},
+          {UpdateManager, {fwup_config, config.updater}},
           {ArchiveManager, config},
           {Socket, config}
         ]
