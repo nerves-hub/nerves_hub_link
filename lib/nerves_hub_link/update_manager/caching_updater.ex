@@ -1,4 +1,5 @@
 defmodule NervesHubLink.UpdateManager.CachingUpdater do
+  @moduledoc false
   use NervesHubLink.UpdateManager.Updater
 
   alias NervesHubLink.Downloader
@@ -110,7 +111,7 @@ defmodule NervesHubLink.UpdateManager.CachingUpdater do
             "[#{log_prefix()}] Removing #{Enum.count(file_list)} previous firmware files from the cache directory"
           )
 
-          Enum.each(file_list, fn file -> File.rm(Path.join(caching_dir, file)) end)
+          Enum.each(file_list, &File.rm(Path.join(caching_dir, &1)))
         end
 
         :ok
@@ -137,6 +138,7 @@ defmodule NervesHubLink.UpdateManager.CachingUpdater do
     end)
   end
 
+  @impl NervesHubLink.UpdateManager.Updater
   def log_prefix(), do: "NervesHubLink:CachingUpdater"
 
   defp settings() do

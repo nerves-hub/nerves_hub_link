@@ -1,4 +1,5 @@
 defmodule NervesHubLink.UpdateManager.StreamingUpdater do
+  @moduledoc false
   use NervesHubLink.UpdateManager.Updater
 
   alias NervesHubLink.Downloader
@@ -58,5 +59,6 @@ defmodule NervesHubLink.UpdateManager.StreamingUpdater do
     end)
   end
 
+  @impl NervesHubLink.UpdateManager.Updater
   def log_prefix(), do: "NervesHubLink:StreamingUpdater"
 end
