@@ -22,25 +22,31 @@ defmodule NervesHubLink.UpdateManagerTest do
       File.rm(devpath)
 
       update_payload = %UpdateInfo{
-        firmware_url: "http://localhost:#{port}/test.fw",
+        firmware_url: URI.parse("http://localhost:#{port}/test.fw"),
         firmware_meta: %FirmwareMetadata{}
       }
 
-      {:ok, [plug: plug, update_payload: update_payload, devpath: "/tmp/fwup_output"]}
+      {:ok,
+       [
+         plug: plug,
+         update_payload: update_payload,
+         devpath: "/tmp/fwup_output",
+         updater: NervesHubLink.UpdateManager.StreamingUpdater
+       ]}
     end
 
-    test "apply", %{update_payload: update_payload, devpath: devpath} do
+    test "apply", %{update_payload: update_payload, devpath: devpath, updater: updater} do
       fwup_config = %{default_config() | fwup_devpath: devpath}
 
-      {:ok, manager} = UpdateManager.start_link({fwup_config, %{}})
-      assert UpdateManager.apply_update(manager, update_payload, []) == {:updating, 0}
+      {:ok, manager} = UpdateManager.start_link({fwup_config, updater})
+      assert UpdateManager.apply_update(manager, update_payload, []) == :updating
 
       assert_receive {:fwup, {:progress, 0}}
       assert_receive {:fwup, {:progress, 100}}
       assert_receive {:fwup, {:ok, 0, ""}}
     end
 
-    test "reschedule", %{update_payload: update_payload, devpath: devpath} do
+    test "reschedule", %{update_payload: update_payload, devpath: devpath, updater: updater} do
       test_pid = self()
 
       update_available_fun = fn _ ->
@@ -61,7 +67,7 @@ defmodule NervesHubLink.UpdateManagerTest do
           update_available: update_available_fun
       }
 
-      {:ok, manager} = UpdateManager.start_link({fwup_config, %{}})
+      {:ok, manager} = UpdateManager.start_link({fwup_config, updater})
       assert UpdateManager.apply_update(manager, update_payload, []) == :update_rescheduled
       assert_received :rescheduled
       refute_received {:fwup, _}
@@ -71,7 +77,11 @@ defmodule NervesHubLink.UpdateManagerTest do
       assert_receive {:fwup, {:ok, 0, ""}}
     end
 
-    test "apply with fwup environment", %{update_payload: update_payload, devpath: devpath} do
+    test "apply with fwup environment", %{
+      update_payload: update_payload,
+      devpath: devpath,
+      updater: updater
+    } do
       fwup_config = %{
         default_config()
         | fwup_devpath: devpath,
@@ -83,8 +93,8 @@ defmodule NervesHubLink.UpdateManagerTest do
 
       # If setting SUPER_SECRET in the environment doesn't happen, then test fails
       # due to fwup getting a bad aes key.
-      {:ok, manager} = UpdateManager.start_link({fwup_config, %{}})
-      assert UpdateManager.apply_update(manager, update_payload, []) == {:updating, 0}
+      {:ok, manager} = UpdateManager.start_link({fwup_config, updater})
+      assert UpdateManager.apply_update(manager, update_payload, []) == :updating
 
       assert_receive {:fwup, {:progress, 0}}
       assert_receive {:fwup, {:progress, 100}}
