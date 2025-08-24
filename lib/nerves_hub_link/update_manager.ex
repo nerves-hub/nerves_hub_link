@@ -133,10 +133,11 @@ defmodule NervesHubLink.UpdateManager do
   end
 
   @impl GenServer
-  def handle_info({:change_updater, updater}, state) do
+  def handle_cast({:change_updater, updater}, state) do
     {:noreply, %State{state | updater: updater}}
   end
 
+  @impl GenServer
   def handle_info({:update_reschedule, response, fwup_public_keys}, state) do
     {:noreply,
      maybe_update_firmware(response, fwup_public_keys, %State{
