@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2025 Josh Kalderimis
+#
+# SPDX-License-Identifier: Apache-2.0
+#
 defmodule NervesHubLink.UpdateManager.CachingUpdater do
   @moduledoc false
   use NervesHubLink.UpdateManager.Updater
