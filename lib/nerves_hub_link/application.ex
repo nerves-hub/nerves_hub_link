@@ -36,7 +36,7 @@ defmodule NervesHubLink.Application do
         [
           {DynamicSupervisor, name: ExtensionsSupervisor},
           Extensions,
-          {UpdateManager, fwup_config},
+          {UpdateManager, {fwup_config, config.updater}},
           {ArchiveManager, config},
           {Socket, config}
         ]

@@ -23,15 +23,29 @@ defmodule NervesHubLink.Support.RangeRequestPlug do
     conn =
       conn
       |> put_resp_header("accept-ranges", "bytes")
-      |> put_resp_header("content-length", to_string(byte_size(payload)))
-      |> put_resp_header(
-        "content-range",
-        "bytes #{start}-#{finish}/#{to_string(byte_size(payload))}"
-      )
+      |> put_resp_header("content-length", to_string(byte_size(payload) - start))
+      |> maybe_put_content_range(start, resp)
       |> send_chunked(206)
 
     {:ok, conn} = chunk(conn, resp)
-    halt(conn)
+
+    if byte_size(resp) + start == byte_size(payload) do
+      chunk(conn, "")
+    else
+      halt(conn)
+    end
+  end
+
+  defp maybe_put_content_range(conn, 0, _resp) do
+    conn
+  end
+
+  defp maybe_put_content_range(conn, starting_bytes, resp) do
+    put_resp_header(
+      conn,
+      "content-range",
+      "bytes #{starting_bytes}-#{byte_size(resp)}/#{byte_size(resp) + 1}"
+    )
   end
 
   defp fetch_range(payload, start, finish) do
