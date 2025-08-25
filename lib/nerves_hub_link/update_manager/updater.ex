@@ -65,6 +65,9 @@ defmodule NervesHubLink.UpdateManager.Updater do
 
         pid = self()
 
+        # Listen for downloader or fwup exits
+        Process.flag(:trap_exit, true)
+
         send(pid, :start)
 
         {:ok,
@@ -88,6 +91,20 @@ defmodule NervesHubLink.UpdateManager.Updater do
           {:ok, state} -> {:noreply, state}
           {:stop, _reason, _state} = result -> result
         end
+      end
+
+      def handle_info({:EXIT, download_pid, :normal}, %{download: download_pid} = state) do
+        Logger.debug("[#{log_prefix()}] Downloader exited")
+
+        {:noreply, state}
+      end
+
+      def handle_info({:EXIT, _, _} = msg, state) do
+        Logger.info(
+          "[#{log_prefix()}] :EXIT received (#{inspect(msg)}), state: #{inspect(state)}"
+        )
+
+        {:noreply, state}
       end
 
       @impl GenServer
