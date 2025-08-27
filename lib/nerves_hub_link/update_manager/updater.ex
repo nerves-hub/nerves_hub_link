@@ -20,11 +20,27 @@ defmodule NervesHubLink.UpdateManager.Updater do
   Setup and prepare for the firmware update.
   """
   @callback start(state :: term()) :: {:ok, new_state :: term()}
+
+  @doc """
+  Process messages from the `Downloader`
+  """
   @callback handle_downloader_message(message :: term(), state :: term()) ::
               {:ok, new_state :: term()} | {:stop, reason :: term(), new_state :: term()}
+
+  @doc """
+  Process messages received from the `Fwup` library
+  """
   @callback handle_fwup_message(message :: term(), state :: term()) ::
               {:ok, new_state :: term()} | {:stop, reason :: term(), new_state :: term()}
+
+  @doc """
+  Run any cleanup that might need to take place
+  """
   @callback cleanup(state :: term()) :: :ok
+
+  @doc """
+  A little hook to allow for customization of the logging prefix
+  """
   @callback log_prefix() :: String.t()
 
   defmacro __using__(_opts) do
