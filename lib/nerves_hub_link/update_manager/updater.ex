@@ -98,6 +98,12 @@ defmodule NervesHubLink.UpdateManager.Updater do
         {:noreply, state}
       end
 
+      def handle_info({:EXIT, download_pid, reason}, %{download: download_pid} = state) do
+        Logger.debug("[#{log_prefix()}] Downloader exited with reason \"#{reason}\"")
+
+        {:stop, {:shutdown, {:download_error, reason}}, state}
+      end
+
       def handle_info({:EXIT, _, _} = msg, state) do
         Logger.info(
           "[#{log_prefix()}] :EXIT received (#{inspect(msg)}), state: #{inspect(state)}"
