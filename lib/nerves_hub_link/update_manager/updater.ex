@@ -21,6 +21,7 @@ defmodule NervesHubLink.UpdateManager.Updater do
               {:ok, new_state :: term()} | {:stop, reason :: term(), new_state :: term()}
   @callback handle_fwup_message(message :: term(), state :: term()) ::
               {:ok, new_state :: term()} | {:stop, reason :: term(), new_state :: term()}
+  @callback cleanup(state :: term()) :: :ok
   @callback log_prefix() :: String.t()
 
   defmacro __using__(_opts) do
@@ -94,13 +95,12 @@ defmodule NervesHubLink.UpdateManager.Updater do
 
       def handle_info({:EXIT, download_pid, :normal}, %{download: download_pid} = state) do
         Logger.debug("[#{log_prefix()}] Downloader exited")
-
         {:noreply, state}
       end
 
       def handle_info({:EXIT, download_pid, reason}, %{download: download_pid} = state) do
         Logger.debug("[#{log_prefix()}] Downloader exited with reason \"#{reason}\"")
-
+        cleanup(state)
         {:stop, {:shutdown, {:download_error, reason}}, state}
       end
 
@@ -116,6 +116,17 @@ defmodule NervesHubLink.UpdateManager.Updater do
       def handle_call({:downloader, message}, _from, state) do
         {:ok, state} = handle_downloader_message(message, state)
         {:reply, :ok, state}
+      end
+
+      @impl GenServer
+      def terminate(reason, state) do
+        cleanup(state)
+        :ok
+      end
+
+      @impl NervesHubLink.UpdateManager.Updater
+      def cleanup(state) do
+        :ok
       end
 
       @impl NervesHubLink.UpdateManager.Updater
@@ -157,7 +168,7 @@ defmodule NervesHubLink.UpdateManager.Updater do
         GenServer.call(updater, {:downloader, message}, 60_000)
       end
 
-      defoverridable init: 1, handle_fwup_message: 2, log_prefix: 0
+      defoverridable init: 1, handle_fwup_message: 2, cleanup: 1, log_prefix: 0
     end
   end
 end
