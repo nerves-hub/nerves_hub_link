@@ -37,7 +37,7 @@ defmodule NervesHubLink.UpdateManager.CachingUpdater do
           0
       end
 
-    file_pid = File.open!(full_path, [:read, :write, :append, :binary])
+    file_pid = File.open!(full_path, [:read, :append, :raw, :binary])
 
     {:ok, download} =
       Downloader.start_download(firmware_url, state.reporting_download_fun,
@@ -101,6 +101,16 @@ defmodule NervesHubLink.UpdateManager.CachingUpdater do
     NervesHubLink.send_update_progress(round(percent))
 
     {:ok, state}
+  end
+
+  @impl NervesHubLink.UpdateManager.Updater
+  def cleanup(state) do
+    _ =
+      if state.cached_download_pid do
+        File.close(state.cached_download_pid)
+      end
+
+    :ok
   end
 
   defp clean_caching_directory(caching_dir, file_name) do
