@@ -6,7 +6,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 defmodule NervesHubLink.CertificateTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
   alias NervesHubLink.Certificate
 
   doctest Certificate
