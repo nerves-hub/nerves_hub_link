@@ -48,8 +48,6 @@ defmodule NervesHubLink.UpdateManager.CachingUpdater do
       "[#{log_prefix()}] Downloading firmware: #{String.replace(firmware_url, ~r/\?.*/, "?...")}"
     )
 
-    Alarms.set_alarm({NervesHubLink.UpdateInProgress, []})
-
     {:ok,
      Map.merge(
        state,
