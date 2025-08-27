@@ -5,7 +5,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 defmodule NervesHubLink.UpdateManagerTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: false
   use Mimic
 
   alias NervesHubLink.{FwupConfig, UpdateManager}

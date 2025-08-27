@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 defmodule NervesHubLink.BackoffTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
   alias NervesHubLink.Backoff
 
   test "no jitter" do

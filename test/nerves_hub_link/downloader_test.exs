@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 defmodule NervesHubLink.DownloaderTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias NervesHubLink.Support.{
     HTTPErrorPlug,
