@@ -159,6 +159,16 @@ defmodule NervesHubLink.UpdateManager do
         %State{updater_pid: updater_pid} = state
       ) do
     Logger.info("Update failed with reason : #{inspect(reason)}")
+    Alarms.clear_alarm(NervesHubLink.UpdateInProgress)
+    {:noreply, %State{state | status: :idle, updater_pid: nil, update_info: nil}}
+  end
+
+  def handle_info(
+        {:EXIT, updater_pid, {:shutdown, {:download_error, reason}}},
+        %State{updater_pid: updater_pid} = state
+      ) do
+    Logger.info("Update download failed with reason : #{inspect(reason)}")
+    Alarms.clear_alarm(NervesHubLink.UpdateInProgress)
     {:noreply, %State{state | status: :idle, updater_pid: nil, update_info: nil}}
   end
 
@@ -166,7 +176,8 @@ defmodule NervesHubLink.UpdateManager do
         {:EXIT, updater_pid, {:shutdown, {:fwup_error, reason}}},
         %State{updater_pid: updater_pid} = state
       ) do
-    Logger.info("Update failed with reason : #{inspect(reason)}")
+    Logger.info("Update encountered a FWUP error with reason : #{inspect(reason)}")
+    Alarms.clear_alarm(NervesHubLink.UpdateInProgress)
     {:noreply, %State{state | status: :idle, updater_pid: nil, update_info: nil}}
   end
 
