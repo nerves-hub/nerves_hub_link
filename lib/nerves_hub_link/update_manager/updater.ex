@@ -82,7 +82,6 @@ defmodule NervesHubLink.UpdateManager.Updater do
       @impl GenServer
       def handle_info(:start, state) do
         {:ok, state} = start(state)
-        Alarms.set_alarm({NervesHubLink.UpdateInProgress, []})
         {:noreply, state}
       end
 
@@ -121,13 +120,16 @@ defmodule NervesHubLink.UpdateManager.Updater do
           {:ok, 0, _message} ->
             Logger.info("[#{log_prefix()}] Update Finished")
             Alarms.clear_alarm(NervesHubLink.UpdateInProgress)
+            NervesHubLink.Client.initiate_reboot()
             {:stop, {:shutdown, :update_complete}, state}
 
           {:progress, percent} ->
+            NervesHubLink.send_update_progress(percent)
             {:ok, Map.put(state, :status, {:updating, percent})}
 
           {:error, _, message} ->
             Logger.warning("[#{log_prefix()}] Error applying update : #{inspect(message)}")
+            NervesHubLink.send_update_status("fwup error #{message}")
             Alarms.clear_alarm(NervesHubLink.UpdateInProgress)
             {:stop, {:shutdown, {:fwup_error, message}}, state}
 

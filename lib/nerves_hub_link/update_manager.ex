@@ -211,6 +211,7 @@ defmodule NervesHubLink.UpdateManager do
         %State{state | status: :updating, updater_pid: updater_pid, update_info: update_info}
 
       :ignore ->
+        Logger.info("[NervesHubLink] Ignoring firmware update")
         state
 
       {:reschedule, ms} ->

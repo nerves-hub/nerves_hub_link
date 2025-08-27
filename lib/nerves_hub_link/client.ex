@@ -217,21 +217,7 @@ defmodule NervesHubLink.Client do
   @spec handle_fwup_message(fwup_message()) :: :ok
   def handle_fwup_message(data) do
     _ = apply_wrap(mod(), :handle_fwup_message, [data])
-
-    # TODO: nasty side effects here. Consider moving somewhere else
-    case data do
-      {:progress, percent} ->
-        NervesHubLink.send_update_progress(percent)
-
-      {:error, _, message} ->
-        NervesHubLink.send_update_status("fwup error #{message}")
-
-      {:ok, 0, _message} ->
-        initiate_reboot()
-
-      _ ->
-        :ok
-    end
+    :ok
   end
 
   @doc """

@@ -6,6 +6,8 @@
 #
 defmodule NervesHubLink.UpdateManagerTest do
   use ExUnit.Case
+  use Mimic
+
   alias NervesHubLink.{FwupConfig, UpdateManager}
   alias NervesHubLink.Message.{FirmwareMetadata, UpdateInfo}
   alias NervesHubLink.Support.{FWUPStreamPlug, Utils}
@@ -35,8 +37,14 @@ defmodule NervesHubLink.UpdateManagerTest do
        ]}
     end
 
+    setup :set_mimic_global
+    setup :verify_on_exit!
+
     test "apply", %{update_payload: update_payload, devpath: devpath, updater: updater} do
       fwup_config = %{default_config() | fwup_devpath: devpath}
+
+      NervesHubLink.Client
+      |> expect(:initiate_reboot, fn -> :ok end)
 
       {:ok, manager} = UpdateManager.start_link({fwup_config, updater})
       assert UpdateManager.apply_update(manager, update_payload, []) == :updating
@@ -91,9 +99,13 @@ defmodule NervesHubLink.UpdateManagerTest do
           ]
       }
 
+      NervesHubLink.Client
+      |> expect(:initiate_reboot, fn -> :ok end)
+
       # If setting SUPER_SECRET in the environment doesn't happen, then test fails
       # due to fwup getting a bad aes key.
       {:ok, manager} = UpdateManager.start_link({fwup_config, updater})
+
       assert UpdateManager.apply_update(manager, update_payload, []) == :updating
 
       assert_receive {:fwup, {:progress, 0}}
