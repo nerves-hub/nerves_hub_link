@@ -16,6 +16,9 @@ defmodule NervesHubLink.UpdateManager.Updater do
              timeout() | :hibernate | {:continue, continue_arg :: term()}}
           | {:stop, reason :: term(), new_state :: term()}
 
+  @doc """
+  Setup and prepare for the firmware update.
+  """
   @callback start(state :: term()) :: {:ok, new_state :: term()}
   @callback handle_downloader_message(message :: term(), state :: term()) ::
               {:ok, new_state :: term()} | {:stop, reason :: term(), new_state :: term()}
