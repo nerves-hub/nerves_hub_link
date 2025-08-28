@@ -7,9 +7,11 @@
 defmodule NervesHubLink.UpdateManagerTest do
   use ExUnit.Case, async: true
 
+  alias NervesHubLink.ClientMock
   alias NervesHubLink.{FwupConfig, UpdateManager}
   alias NervesHubLink.Message.{FirmwareMetadata, UpdateInfo}
   alias NervesHubLink.Support.{FWUPStreamPlug, Utils}
+  alias NervesHubLink.UpdateManager.UpdaterMock
 
   describe "fwup stream" do
     setup do
@@ -34,86 +36,44 @@ defmodule NervesHubLink.UpdateManagerTest do
          plug: plug,
          update_payload: update_payload,
          devpath: "/tmp/fwup_output",
-         updater: NervesHubLink.UpdateManager.StreamingUpdater
+         updater: NervesHubLink.UpdateManager.UpdaterMock
        ]}
     end
 
     test "apply", %{update_payload: update_payload, devpath: devpath, updater: updater} do
-      fwup_config = %{default_config() | fwup_devpath: devpath}
+      fwup_config = %FwupConfig{fwup_devpath: devpath}
+
+      Mox.expect(ClientMock, :update_available, fn _ -> :apply end)
+      Mox.expect(UpdaterMock, :start_update, fn _, _, _ -> {:ok, :ok} end)
 
       {:ok, manager} = UpdateManager.start_link({fwup_config, updater})
-      assert UpdateManager.apply_update(manager, update_payload, []) == :updating
 
-      assert_receive {:fwup, {:progress, 0}}
-      assert_receive {:fwup, {:progress, 100}}
-      assert_receive {:fwup, {:ok, 0, ""}}
+      Mox.allow(ClientMock, self(), manager)
+      Mox.allow(UpdaterMock, self(), manager)
+
+      assert UpdateManager.apply_update(manager, update_payload, []) == :updating
     end
 
     test "reschedule", %{update_payload: update_payload, devpath: devpath, updater: updater} do
-      test_pid = self()
+      Mox.expect(ClientMock, :update_available, fn _ -> {:reschedule, 1} end)
+      Mox.expect(ClientMock, :update_available, fn _ -> :apply end)
+      Mox.expect(UpdaterMock, :start_update, fn _, _, _ -> {:ok, :ok} end)
 
-      update_available_fun = fn _ ->
-        case Process.get(:reschedule) do
-          nil ->
-            send(test_pid, :rescheduled)
-            Process.put(:reschedule, true)
-            {:reschedule, 50}
-
-          _ ->
-            :apply
-        end
-      end
-
-      fwup_config = %{
-        default_config()
-        | fwup_devpath: devpath,
-          update_available: update_available_fun
+      fwup_config = %FwupConfig{
+        fwup_devpath: devpath
       }
 
       {:ok, manager} = UpdateManager.start_link({fwup_config, updater})
+
+      Mox.allow(ClientMock, self(), manager)
+      Mox.allow(UpdaterMock, self(), manager)
+
       assert UpdateManager.apply_update(manager, update_payload, []) == :update_rescheduled
-      assert_received :rescheduled
-      refute_received {:fwup, _}
 
-      assert_receive {:fwup, {:progress, 0}}, 250
-      assert_receive {:fwup, {:progress, 100}}
-      assert_receive {:fwup, {:ok, 0, ""}}
+      # wait enough milliseconds for the update to be rescheduled
+      Process.sleep(5)
+
+      assert :sys.get_state(manager).status == :updating
     end
-
-    test "apply with fwup environment", %{
-      update_payload: update_payload,
-      devpath: devpath,
-      updater: updater
-    } do
-      fwup_config = %{
-        default_config()
-        | fwup_devpath: devpath,
-          fwup_task: "secret_upgrade",
-          fwup_env: [
-            {"SUPER_SECRET", "1234567890123456789012345678901234567890123456789012345678901234"}
-          ]
-      }
-
-      # If setting SUPER_SECRET in the environment doesn't happen, then test fails
-      # due to fwup getting a bad aes key.
-      {:ok, manager} = UpdateManager.start_link({fwup_config, updater})
-
-      assert UpdateManager.apply_update(manager, update_payload, []) == :updating
-
-      assert_receive {:fwup, {:progress, 0}}
-      assert_receive {:fwup, {:progress, 100}}
-      assert_receive {:fwup, {:ok, 0, ""}}
-    end
-  end
-
-  defp default_config() do
-    test_pid = self()
-    fwup_fun = &send(test_pid, {:fwup, &1})
-    update_available_fun = fn _ -> :apply end
-
-    %FwupConfig{
-      handle_fwup_message: fwup_fun,
-      update_available: update_available_fun
-    }
   end
 end

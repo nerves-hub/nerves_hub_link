@@ -17,6 +17,16 @@ defmodule NervesHubLink.UpdateManager.Updater do
           | {:stop, reason :: term(), new_state :: term()}
 
   @doc """
+  Start an updater GenServer
+  """
+  @callback start_update(
+              NervesHubLink.Message.UpdateInfo.t(),
+              NervesHubLink.FwupConfig.t(),
+              fwup_public_keys :: []
+            ) ::
+              GenServer.on_start()
+
+  @doc """
   Setup and prepare for the firmware update.
   """
   @callback start(state :: term()) :: {:ok, new_state :: term()}
@@ -50,17 +60,13 @@ defmodule NervesHubLink.UpdateManager.Updater do
       @behaviour NervesHubLink.UpdateManager.Updater
 
       alias NervesHubLink.Alarms
+      alias NervesHubLink.Client
       alias NervesHubLink.FwupConfig
       alias NervesHubLink.Message.UpdateInfo
 
       require Logger
 
-      @spec start_update(
-              UpdateInfo.t(),
-              FwupConfig.t(),
-              fwup_public_keys :: []
-            ) ::
-              GenServer.on_start()
+      @impl NervesHubLink.UpdateManager.Updater
       def start_update(update_info, fwup_config, fwup_public_keys) do
         start_link(update_info, fwup_config, fwup_public_keys)
       end
@@ -150,7 +156,7 @@ defmodule NervesHubLink.UpdateManager.Updater do
 
       @impl NervesHubLink.UpdateManager.Updater
       def handle_fwup_message(fwup_message, state) do
-        _ = state.fwup_config.handle_fwup_message.(fwup_message)
+        Client.handle_fwup_message(fwup_message)
 
         case fwup_message do
           {:ok, 0, _message} ->
