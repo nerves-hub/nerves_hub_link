@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 defmodule NervesHubLink.Downloader.TimeoutCalculationTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
   alias NervesHubLink.Downloader.TimeoutCalculation
 
   test "calculate_worst_case_timeout" do

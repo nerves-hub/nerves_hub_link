@@ -7,7 +7,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 defmodule NervesHubLink.Client.DefaultTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias Nerves.Runtime.KV
   alias NervesHubLink.Client.Default
