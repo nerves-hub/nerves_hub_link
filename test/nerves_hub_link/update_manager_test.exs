@@ -75,6 +75,9 @@ defmodule NervesHubLink.UpdateManagerTest do
           update_available: update_available_fun
       }
 
+      NervesHubLink.Client
+      |> expect(:initiate_reboot, fn -> :ok end)
+
       {:ok, manager} = UpdateManager.start_link({fwup_config, updater})
       assert UpdateManager.apply_update(manager, update_payload, []) == :update_rescheduled
       assert_received :rescheduled
