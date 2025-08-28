@@ -5,7 +5,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 defmodule NervesHubLink.Configurator.NervesKeyTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias NervesHubLink.Configurator.Config
   alias NervesHubLink.Configurator.NervesKey
