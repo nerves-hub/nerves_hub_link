@@ -89,9 +89,9 @@ defmodule NervesHubLink.UpdateManager.CachingUpdater do
   end
 
   def handle_downloader_message({:error, reason}, state) do
-    :ok = File.close(state.cached_download_pid)
+    cleanup(state)
     Logger.error("[#{log_prefix()}] Nonfatal HTTP download error: #{inspect(reason)}")
-    {:ok, state}
+    {:ok, %{state | cached_download_pid: nil}}
   end
 
   # Data from the downloader is sent to fwup

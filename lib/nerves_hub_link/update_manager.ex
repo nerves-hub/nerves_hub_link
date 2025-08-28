@@ -17,6 +17,7 @@ defmodule NervesHubLink.UpdateManager do
   use GenServer
 
   alias NervesHubLink.Alarms
+  alias NervesHubLink.Client
   alias NervesHubLink.FwupConfig
   alias NervesHubLink.Message.UpdateInfo
   alias NervesHubLink.UpdateManager
@@ -212,7 +213,7 @@ defmodule NervesHubLink.UpdateManager do
     # This will allow application developers
     # to control exactly when an update is applied.
     # note: update_available is a behaviour function
-    case state.fwup_config.update_available.(update_info) do
+    case Client.update_available(update_info) do
       :apply ->
         {:ok, updater_pid} =
           state.updater.start_update(update_info, state.fwup_config, fwup_public_keys)
