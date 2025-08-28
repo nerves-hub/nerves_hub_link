@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 defmodule NervesHubLink.ConfiguratorTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
 
   test "inserts socket_opts from ssl" do
     ssl = [

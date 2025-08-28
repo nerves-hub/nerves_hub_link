@@ -5,8 +5,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 defmodule NervesHubLink.UpdateManagerTest do
-  use ExUnit.Case, async: false
-  use Mimic
+  use ExUnit.Case, async: true
 
   alias NervesHubLink.{FwupConfig, UpdateManager}
   alias NervesHubLink.Message.{FirmwareMetadata, UpdateInfo}
@@ -37,14 +36,8 @@ defmodule NervesHubLink.UpdateManagerTest do
        ]}
     end
 
-    setup :set_mimic_global
-    setup :verify_on_exit!
-
     test "apply", %{update_payload: update_payload, devpath: devpath, updater: updater} do
       fwup_config = %{default_config() | fwup_devpath: devpath}
-
-      NervesHubLink.Client
-      |> expect(:initiate_reboot, fn -> :ok end)
 
       {:ok, manager} = UpdateManager.start_link({fwup_config, updater})
       assert UpdateManager.apply_update(manager, update_payload, []) == :updating
@@ -75,9 +68,6 @@ defmodule NervesHubLink.UpdateManagerTest do
           update_available: update_available_fun
       }
 
-      NervesHubLink.Client
-      |> expect(:initiate_reboot, fn -> :ok end)
-
       {:ok, manager} = UpdateManager.start_link({fwup_config, updater})
       assert UpdateManager.apply_update(manager, update_payload, []) == :update_rescheduled
       assert_received :rescheduled
@@ -101,9 +91,6 @@ defmodule NervesHubLink.UpdateManagerTest do
             {"SUPER_SECRET", "1234567890123456789012345678901234567890123456789012345678901234"}
           ]
       }
-
-      NervesHubLink.Client
-      |> expect(:initiate_reboot, fn -> :ok end)
 
       # If setting SUPER_SECRET in the environment doesn't happen, then test fails
       # due to fwup getting a bad aes key.
