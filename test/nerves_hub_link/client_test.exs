@@ -9,14 +9,18 @@ defmodule NervesHubLink.ClientTest do
   use ExUnit.Case, async: true
   alias NervesHubLink.{Client, ClientMock}
 
+  import Mox
+
   @compile {:no_warn_undefined, {Not, :real, 0}}
   @compile {:no_warn_undefined, {:something, :exception, 1}}
 
   doctest Client
 
-  setup context do
-    Mox.verify_on_exit!(context)
-  end
+  # setup context do
+  #   Mox.verify_on_exit!(context)
+  # end
+
+  setup :verify_on_exit!
 
   test "firmware_auto_revert_detected?/0" do
     assert Client.firmware_auto_revert_detected?() == false

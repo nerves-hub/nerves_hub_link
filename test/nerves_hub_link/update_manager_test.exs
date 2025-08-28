@@ -27,6 +27,8 @@ defmodule NervesHubLink.UpdateManagerTest do
         firmware_meta: %FirmwareMetadata{}
       }
 
+      Mox.stub_with(NervesHubLink.ClientMock, NervesHubLink.ClientStub)
+
       {:ok,
        [
          plug: plug,
