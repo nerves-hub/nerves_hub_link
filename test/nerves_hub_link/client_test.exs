@@ -6,7 +6,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 defmodule NervesHubLink.ClientTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
   alias NervesHubLink.{Client, ClientMock}
 
   @compile {:no_warn_undefined, {Not, :real, 0}}
