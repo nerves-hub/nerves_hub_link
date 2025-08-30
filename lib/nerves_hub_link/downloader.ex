@@ -38,6 +38,7 @@ defmodule NervesHubLink.Downloader do
   alias NervesHubLink.Downloader.TimeoutCalculation
 
   require Logger
+  require Mint.HTTP
 
   defstruct uri: nil,
             conn: nil,
@@ -186,7 +187,8 @@ defmodule NervesHubLink.Downloader do
     end
   end
 
-  def handle_info(message, %Downloader{handler_fun: handler} = state) do
+  def handle_info(message, %Downloader{conn: conn, handler_fun: handler} = state)
+      when Mint.HTTP.is_connection_message(conn, message) do
     case Mint.HTTP.stream(state.conn, message) do
       {:ok, conn, responses} ->
         handle_responses(responses, %{state | conn: conn})
@@ -196,8 +198,20 @@ defmodule NervesHubLink.Downloader do
         handle_responses(responses, reschedule_resume(%{state | conn: conn}))
 
       :unknown ->
-        {:stop, :unknown, state}
+        Logger.warning(
+          "[NervesHubLink.Downloader] Mint didn't recognize the message : #{inspect(message)}"
+        )
+
+        {:noreply, state}
     end
+  end
+
+  def handle_info(message, state) do
+    Logger.warning(
+      "[NervesHubLink.Downloader] Unhandled message in `handle_info` : #{inspect(message)}"
+    )
+
+    {:noreply, state}
   end
 
   # schedules a message to be delivered based on retry args
