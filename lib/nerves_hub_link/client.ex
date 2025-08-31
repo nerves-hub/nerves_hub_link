@@ -10,23 +10,46 @@
 #
 defmodule NervesHubLink.Client do
   @moduledoc """
-  A behaviour module for customizing if and when firmware updates get applied.
+  The primary integration point for customizing your applications connection with [NervesHub](https://github.com/nerves-hub/nerves_hub_web).
 
-  By default NervesHubLink applies updates as soon as it knows about them from the
-  NervesHubLink server and doesn't give warning before rebooting. This let's
-  devices hook into the decision making process and monitor the update's
-  progress.
+  The following callbacks are supported:
+
+  - `c:archive_available/1` - an archive is available to download from NervesHub
+  - `c:archive_ready/2` - an archive has been downloaded and is available for use
+  - `c:connected/0` - a connection to NervesHub has been established
+  - `c:handle_error/1` - a firmware update has failed
+  - `c:handle_fwup_message/1` - a message has been received by `NervesHubLink.UpdateManager`
+  - `c:identify/0` - a request received from NervesHub to identify the device (eg. blink leds)
+  - `c:reboot/0` - a request received from NervesHub to reboot the device
+  - `c:reconnect_backoff/0` - how NervesHubLink should handle reconnection backoffs
+  - `c:update_available/1` - should a firmware update be applied
+
+  A default Client is included (`NervesHubLink.Client.Default`) which `:apply`s firmware
+  updates, `:ignore`s archives, logs firmware update messages, and logs a message when
+  the `identify/0` callback is used.
+
+  The recommended way to implement your own `Client` is to create your own module and add
+  `use NervesHubLink.Client`, which will allow you to use the same defaults included in
+  `NervesHubLink.Client.Default`, while also being able to customize any of the current
+  callback implementations.
+
+  Otherwise you can add `@behaviour NervesHubLink.Client`, but you will need to implement
+  the following required functions:
+
+  - `c:archive_available/1`
+  - `c:archive_ready/2`
+  - `c:handle_error/1`
+  - `c:handle_fwup_message/1`
+  - `c:identify/0`
+  - `c:update_available/1`
 
   # Example
 
   ```elixir
   defmodule MyApp.NervesHubLinkClient do
-    @behaviour NervesHubLink.Client
+    use NervesHubLink.Client
 
-    # May return:
-    #  * `:apply` - apply the action immediately
-    #  * `:ignore` - don't apply the action, don't ask again.
-    #  * `{:reschedule, timeout_in_milliseconds}` - call this function again later.
+    # override only the functions you want to customize
 
     @impl NervesHubLink.Client
     def update_available(data) do
@@ -39,7 +62,7 @@ defmodule NervesHubLink.Client do
   end
   ```
 
-  To have NervesHubLink invoke it, add the following to your `config.exs`:
+  To have NervesHubLink use your client, add the following to your `config.exs`:
 
   ```elixir
   config :nerves_hub_link, client: MyApp.NervesHubLinkClient
@@ -173,7 +196,7 @@ defmodule NervesHubLink.Client do
 
       wrong ->
         Logger.error(
-          "[NervesHubLink] Client: #{inspect(mod())}.update_available/1 bad return value: #{inspect(wrong)} Applying update."
+          "[NervesHubLink.Client] #{inspect(mod())}.update_available/1 result not recognized (#{inspect(wrong)}), applying update."
         )
 
         :apply
@@ -274,9 +297,114 @@ defmodule NervesHubLink.Client do
   defp apply_wrap(mod, function, args) do
     apply(mod, function, args)
   catch
-    :error, reason -> {:error, reason}
-    :exit, reason -> {:exit, reason}
-    err -> err
+    :error, reason ->
+      Logger.error(
+        "[NervesHubLink.Client] an error occurred when calling `#{inspect(mod)}.#{inspect(function)} with args #{inspect(args)} : #{inspect(reason)}"
+      )
+
+      {:error, reason}
+
+    :exit, reason ->
+      Logger.error(
+        "[NervesHubLink.Client] an exit occurred when calling `#{inspect(mod)}.#{inspect(function)} with args #{inspect(args)} : #{inspect(reason)}"
+      )
+
+      {:exit, reason}
+
+    err ->
+      Logger.error(
+        "[NervesHubLink.Client] an unrecognized error occurred when calling `#{inspect(mod)}.#{inspect(function)} with args #{inspect(args)} : #{inspect(err)}"
+      )
+
+      err
+  end
+
+  defmacro __using__(_opts) do
+    quote do
+      @behaviour NervesHubLink.Client
+
+      alias Nerves.Runtime.KV
+
+      require Logger
+
+      @impl NervesHubLink.Client
+      def update_available(update_info) do
+        if update_info.firmware_meta.uuid == KV.get_active("nerves_fw_uuid") do
+          Logger.info("""
+          [NervesHubLink.Client] Ignoring request to update to the same firmware
+
+          #{inspect(update_info)}
+          """)
+
+          :ignore
+        else
+          :apply
+        end
+      end
+
+      @impl NervesHubLink.Client
+      def archive_available(archive_info) do
+        Logger.info(
+          "[NervesHubLink.Client] Archive is available for downloading #{inspect(archive_info)}"
+        )
+
+        :ignore
+      end
+
+      @impl NervesHubLink.Client
+      def archive_ready(archive_info, file_path) do
+        Logger.info(
+          "[NervesHubLink.Client] Archive is ready for processing #{inspect(archive_info)} at #{inspect(file_path)}"
+        )
+
+        :ok
+      end
+
+      @impl NervesHubLink.Client
+      def handle_fwup_message({:progress, percent}) do
+        Logger.debug("[NervesHubLink.Client] FWUP PROG: #{percent}%")
+      end
+
+      def handle_fwup_message({:error, _, message}) do
+        Logger.error("[NervesHubLink.Client] FWUP ERROR: #{message}")
+      end
+
+      def handle_fwup_message({:warning, _, message}) do
+        Logger.warning("[NervesHubLink.Client] FWUP WARN: #{message}")
+      end
+
+      def handle_fwup_message({:ok, status, message}) do
+        Logger.info("[NervesHubLink.Client] FWUP SUCCESS: #{status} #{message}")
+      end
+
+      def handle_fwup_message(fwup_message) do
+        Logger.warning("[NervesHubLink.Client] Unknown FWUP message: #{inspect(fwup_message)}")
+      end
+
+      @impl NervesHubLink.Client
+      def handle_error(error) do
+        Logger.warning("[NervesHubLink.Client] error: #{inspect(error)}")
+      end
+
+      @impl NervesHubLink.Client
+      def reconnect_backoff() do
+        socket_config = Application.get_env(:nerves_hub_link, :socket, [])
+        socket_config[:reconnect_after_msec]
+      end
+
+      @impl NervesHubLink.Client
+      def identify() do
+        Logger.info("[NervesHubLink.Client] identifying device")
+      end
+
+      defoverridable archive_available: 1,
+                     archive_ready: 2,
+                     handle_error: 1,
+                     handle_fwup_message: 1,
+                     identify: 0,
+                     reconnect_backoff: 0,
+                     update_available: 1
+    end
   end
 
   defp mod() do
