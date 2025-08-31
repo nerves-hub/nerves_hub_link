@@ -116,15 +116,10 @@ defmodule NervesHubLink.Socket do
 
     alarm_if_firmware_auto_reverted()
 
-    params =
-      Map.put(config.params, "meta", %{
-        "firmware_auto_revert_detected" => Client.firmware_auto_revert_detected?()
-      })
-
     socket =
       new_socket()
       |> assign(config: config)
-      |> assign(params: params)
+      |> assign(params: config.params)
       |> assign(remote_iex: config.remote_iex)
       |> assign(iex_pid: nil)
       |> assign(iex_timer: nil)
@@ -175,6 +170,9 @@ defmodule NervesHubLink.Socket do
     device_join_params =
       socket.assigns.params
       |> Map.put("currently_downloading_uuid", currently_downloading_uuid)
+      |> Map.put("meta", %{
+        "firmware_auto_revert_detected" => Client.firmware_auto_revert_detected?()
+      })
 
     socket =
       socket
