@@ -167,10 +167,10 @@ defmodule NervesHubLink.Downloader do
   # milliseconds have occurred. It indicates that many milliseconds have elapsed since
   # the last "chunk" from the HTTP server
   def handle_info(:timeout, %Downloader{handler_fun: handler} = state) do
-    {:ok, _} = Mint.HTTP.close(state.conn)
+    close_conn(state.conn)
     _ = handler.({:error, :idle_timeout})
     state = reschedule_resume(state)
-    {:noreply, state}
+    {:noreply, %{state | conn: nil}}
   end
 
   # message is scheduled when a resumable event happens.
@@ -202,10 +202,10 @@ defmodule NervesHubLink.Downloader do
       {:ok, conn, responses} ->
         handle_responses(responses, %{state | conn: conn})
 
-      {:error, conn, error, responses} ->
-        {:ok, _} = Mint.HTTP.close(state.conn)
+      {:error, _conn, error, responses} ->
+        close_conn(state)
         _ = handler.({:error, error})
-        handle_responses(responses, reschedule_resume(%{state | conn: conn}))
+        handle_responses(responses, reschedule_resume(%{state | conn: nil}))
 
       :unknown ->
         Logger.warning(
@@ -267,13 +267,18 @@ defmodule NervesHubLink.Downloader do
       %Downloader{status: status} = state when status != nil and status >= 400 ->
         {:stop, {:http_error, status}, state}
 
+      {:error, reason, state} ->
+        close_conn(state)
+        _ = state.handler_fun.({:error, reason})
+        {:noreply, reschedule_resume(%{state | conn: nil})}
+
       state ->
         handle_responses(rest, state)
     end
   end
 
   defp handle_responses([], %Downloader{completed: true} = state) do
-    {:ok, _} = Mint.HTTP.close(state.conn)
+    close_conn(state)
     _ = state.handler_fun.(:complete)
     {:stop, :normal, state}
   end
@@ -287,7 +292,7 @@ defmodule NervesHubLink.Downloader do
           {:status, reference(), non_neg_integer()} | {:headers, reference(), keyword()},
           Downloader.t()
         ) ::
-          Downloader.t()
+          Downloader.t() | {:error, reason :: term(), Downloader.t()}
   def handle_response(
         {:status, request_ref, status},
         %Downloader{request_ref: request_ref} = state
@@ -303,9 +308,9 @@ defmodule NervesHubLink.Downloader do
       )
       when status >= 400 do
     # kind of a hack to make the error type uniform
-    {:ok, _} = Mint.HTTP.close(state.conn)
+    close_conn(state)
     state.handler_fun.({:error, %Mint.HTTPError{reason: {:http_error, status}}})
-    %Downloader{state | status: status}
+    %Downloader{state | status: status, conn: nil}
   end
 
   def handle_response(
@@ -382,9 +387,10 @@ defmodule NervesHubLink.Downloader do
     resume_from_bytes = resume_from_bytes || 0
     percent = (downloaded + resume_from_bytes) / (content_length + resume_from_bytes) * 100
 
-    _ = state.handler_fun.({:data, data, Float.round(percent, 2)})
-
-    %Downloader{state | downloaded_length: downloaded_length}
+    case state.handler_fun.({:data, data, Float.round(percent, 2)}) do
+      :ok -> %Downloader{state | downloaded_length: downloaded_length}
+      {:error, reason} -> {:error, reason, state}
+    end
   end
 
   def handle_response({:done, request_ref}, %Downloader{request_ref: request_ref} = state) do
@@ -428,10 +434,7 @@ defmodule NervesHubLink.Downloader do
       Logger.info("[NervesHubLink] Resuming download attempt number #{state.retry_number} #{uri}")
     end
 
-    _ =
-      if not is_nil(state.conn) and state.conn.state != :closed do
-        Mint.HTTP.close(state.conn)
-      end
+    close_conn(state)
 
     with {:ok, conn} <- Mint.HTTP.connect(String.to_existing_atom(scheme), host, port),
          {:ok, conn, request_ref} <- Mint.HTTP.request(conn, "GET", path, request_headers, nil) do
@@ -485,4 +488,11 @@ defmodule NervesHubLink.Downloader do
 
   defp add_user_agent_header(headers, _),
     do: [{"User-Agent", "NHL/#{Application.spec(:nerves_hub_link)[:vsn]}"} | headers]
+
+  defp close_conn(%Downloader{conn: conn}) when not is_nil(conn) do
+    {:ok, _} = Mint.HTTP.close(conn)
+    :ok
+  end
+
+  defp close_conn(_), do: :ok
 end

@@ -101,17 +101,28 @@ defmodule NervesHubLink.UpdateManager.CachingUpdater do
     NervesHubLink.send_update_progress(round(percent))
 
     {:ok, state}
+  rescue
+    error ->
+      Logger.error(
+        "[#{log_prefix()}] Failed to write to cached download file: #{inspect(error)} - #{inspect(state)}"
+      )
+
+      {:error, error, state}
   end
 
   @impl NervesHubLink.UpdateManager.Updater
-  def cleanup(state) do
-    _ =
-      if state.cached_download_pid do
-        File.close(state.cached_download_pid)
-      end
+  def cleanup(%{cached_download_pid: cached_download_pid}) do
+    case File.close(cached_download_pid) do
+      :ok ->
+        :ok
 
-    :ok
+      {:error, reason} ->
+        Logger.error("[#{log_prefix()}] Failed to close cached download file: #{inspect(reason)}")
+        :ok
+    end
   end
+
+  def cleanup(_state), do: :ok
 
   defp clean_caching_directory(caching_dir, file_name) do
     case File.ls(caching_dir) do

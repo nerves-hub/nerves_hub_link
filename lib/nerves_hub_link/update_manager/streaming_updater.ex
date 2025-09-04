@@ -50,8 +50,12 @@ defmodule NervesHubLink.UpdateManager.StreamingUpdater do
 
   # Data from the downloader is sent to fwup
   def handle_downloader_message({:data, data, _percent}, state) do
-    _ = Fwup.Stream.send_chunk(state.fwup, data)
+    Fwup.Stream.send_chunk(state.fwup, data)
     {:ok, state}
+  rescue
+    error ->
+      Logger.error("[#{log_prefix()}] Error sending chunk to fwup: #{inspect(error)}")
+      {:error, error, state}
   end
 
   @spec fwup_args(FwupConfig.t(), list(String.t())) :: [String.t()]
