@@ -35,7 +35,9 @@ defmodule NervesHubLink.UpdateManager.Updater do
   Process messages from the `Downloader`
   """
   @callback handle_downloader_message(message :: term(), state :: term()) ::
-              {:ok, new_state :: term()} | {:stop, reason :: term(), new_state :: term()}
+              {:ok, new_state :: term()}
+              | {:error, reason :: term(), new_state :: term()}
+              | {:stop, reason :: term(), new_state :: term()}
 
   @doc """
   Process messages received from the `Fwup` library
@@ -139,8 +141,13 @@ defmodule NervesHubLink.UpdateManager.Updater do
 
       @impl GenServer
       def handle_call({:downloader, message}, _from, state) do
-        {:ok, state} = handle_downloader_message(message, state)
-        {:reply, :ok, state}
+        case handle_downloader_message(message, state) do
+          {:ok, state} ->
+            {:reply, :ok, state}
+
+          {:error, reason, state} ->
+            {:reply, {:error, reason}, state}
+        end
       end
 
       @impl GenServer

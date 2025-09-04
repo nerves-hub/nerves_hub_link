@@ -72,7 +72,11 @@ defmodule NervesHubLink.DownloaderTest do
 
     test "idle_timeout causes retry", %{url: url} do
       test_pid = self()
-      handler_fun = &send(test_pid, &1)
+
+      handler_fun = fn msg ->
+        send(test_pid, msg)
+        :ok
+      end
 
       retry_args =
         RetryConfig.validate(
@@ -99,7 +103,12 @@ defmodule NervesHubLink.DownloaderTest do
 
     test "exits when an HTTP error occurs", %{url: url} do
       test_pid = self()
-      handler_fun = &send(test_pid, &1)
+
+      handler_fun = fn msg ->
+        send(test_pid, msg)
+        :ok
+      end
+
       Process.flag(:trap_exit, true)
 
       {:ok, download} =
@@ -122,7 +131,12 @@ defmodule NervesHubLink.DownloaderTest do
 
     test "calculates range request header", %{url: url} do
       test_pid = self()
-      handler_fun = &send(test_pid, &1)
+
+      handler_fun = fn msg ->
+        send(test_pid, msg)
+        :ok
+      end
+
       {:ok, _} = Downloader.start_download(url, handler_fun, retry_config: @short_retry_args)
 
       assert_receive {:data, "h", _}, 1000
@@ -146,7 +160,12 @@ defmodule NervesHubLink.DownloaderTest do
 
     test "follows redirects", %{url: url} do
       test_pid = self()
-      handler_fun = &send(test_pid, &1)
+
+      handler_fun = fn msg ->
+        send(test_pid, msg)
+        :ok
+      end
+
       {:ok, _download} = Downloader.start_download(url, handler_fun)
       refute_receive {:error, _}
       assert_receive {:data, "redirected", _}
@@ -165,7 +184,12 @@ defmodule NervesHubLink.DownloaderTest do
 
     test "simple download resume", %{url: url} do
       test_pid = self()
-      handler_fun = &send(test_pid, &1)
+
+      handler_fun = fn msg ->
+        send(test_pid, msg)
+        :ok
+      end
+
       expected_data_part_1 = :binary.copy(<<0>>, 2048)
       expected_data_part_2 = :binary.copy(<<1>>, 2048)
 
