@@ -13,6 +13,8 @@ defmodule NervesHubLink.Socket do
 
   use Slipstream
 
+  alias Nerves.Runtime.KV
+
   alias NervesHubLink.Alarms
   alias NervesHubLink.ArchiveManager
   alias NervesHubLink.Client
@@ -109,6 +111,8 @@ defmodule NervesHubLink.Socket do
   @impl Slipstream
   def init(config) do
     Alarms.set_alarm({NervesHubLink.Disconnected, []})
+
+    check_for_firmware_auto_revert()
 
     socket =
       new_socket()
@@ -577,6 +581,24 @@ defmodule NervesHubLink.Socket do
   @impl Slipstream
   def terminate(_reason, socket) do
     disconnect(socket)
+  end
+
+  # It's highly probable that the previous firmware version was reverted if the previous slots
+  # firmware wasn't validated.
+  defp check_for_firmware_auto_revert() do
+    active_slot = KV.get("nerves_fw_active")
+
+    previous_slot_validated =
+      KV.get_all()
+      |> Enum.map(fn {k, v} -> {k, v} end)
+      |> Enum.reject(fn {k, _v} -> String.starts_with?(k, "#{active_slot}.") end)
+      |> Enum.map(fn {k, v} -> {String.replace(k, ~r/\A.{1}\./, ""), v} end)
+      |> Enum.into(%{})
+      |> Map.get("nerves_fw_validated", "1")
+
+    if previous_slot_validated == "0" do
+      Alarms.set_alarm({NervesHubLink.FirmwareReverted, []})
+    end
   end
 
   defp mint_opts(config) do
