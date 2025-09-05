@@ -334,8 +334,9 @@ defmodule NervesHubLink.Client do
 
     previous_slot =
       KV.get_all()
-      |> Enum.reject(fn {k, _v} -> !String.match?(k, ~r/.\./) end)
-      |> Enum.reject(fn {k, _v} -> String.starts_with?(k, "#{active_slot}.") end)
+      |> Enum.filter(fn {k, _v} ->
+        String.match?(k, ~r/.\./) and not String.starts_with?(k, "#{active_slot}.")
+      end)
       |> Enum.map(fn {k, v} -> {String.replace(k, ~r/\A.{1}\./, ""), v} end)
       |> Enum.into(%{})
 
