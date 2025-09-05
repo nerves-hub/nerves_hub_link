@@ -194,6 +194,7 @@ defmodule NervesHubLink.Socket do
   end
 
   def handle_join(@extensions_topic, extensions, socket) do
+    Logger.debug("[#{inspect(__MODULE__)}] Joined Extensions channel")
     NervesHubLink.Extensions.attach(extensions)
     {:ok, socket}
   end
