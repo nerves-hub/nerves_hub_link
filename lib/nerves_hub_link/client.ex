@@ -46,6 +46,7 @@ defmodule NervesHubLink.Client do
   ```
   """
 
+  alias Nerves.Runtime.KV
   alias NervesHubLink.Backoff
 
   require Logger
@@ -145,7 +146,25 @@ defmodule NervesHubLink.Client do
   """
   @callback reboot() :: no_return()
 
-  @optional_callbacks [connected: 0, reconnect_backoff: 0, reboot: 0]
+  @doc """
+  Optional callback to check if an auto firmware revert just occurred.
+
+  The default behavior is to check if the previous firmware slots:
+  - `nerves_fw_validated` value is `0`
+  - and `nerves_fw_platform` is not empty
+  - and `nerves_fw_architecture` is not empty
+
+  If there is custom logic built into `fwup-ops.conf` around `prevent-revert`, this should be
+  reflected here.
+  """
+  @callback firmware_auto_revert_detected?() :: boolean()
+
+  @optional_callbacks [
+    connected: 0,
+    firmware_auto_revert_detected?: 0,
+    reboot: 0,
+    reconnect_backoff: 0
+  ]
 
   @spec connected() :: any
   def connected() do
@@ -268,6 +287,62 @@ defmodule NervesHubLink.Client do
     else
       Backoff.delay_list(1000, 60000, 0.50)
     end
+  end
+
+  @doc """
+  The common logic to determine if an auto revert occurred is to check if the previous
+  firmware is not validated. This is because, for example, if a device boots into
+  firmware slot A and isn't able to validate the slot within the initialization
+  callback time, the device will reboot into the previous firmware slot, B, and now
+  firmware slot A will be shown as not validated.
+
+  We also need to account for the logic used by `prevent-revert` in `fwup-ops.conf`,
+  which can be different/custom per Nerves system. The common pattern is to unset
+  `nerves_fw_platform` and `nerves_fw_architecture`.
+
+  The default implementation checks if the previous firmware slot is not validated,
+  and that `nerves_fw_platform` and `nerves_fw_architecture` are not empty.
+
+  Clears platform and architecture uboot env vars
+  - https://github.com/nerves-project/nerves_system_rpi4/blob/main/fwup-ops.conf#L51-L52
+  - https://github.com/nerves-project/nerves_system_rpi5/blob/main/fwup-ops.conf#L51-L52
+
+  Clears platform, architecture, and validated uboot env vars
+  - https://github.com/nerves-project/nerves_system_rpi4/blob/tryboot-compatible/fwup-ops.conf#L50-L55
+  """
+  @spec firmware_auto_revert_detected?() :: boolean()
+  def firmware_auto_revert_detected?() do
+    if function_exported?(mod(), :firmware_auto_revert_detected?, 0) do
+      case apply_wrap(mod(), :firmware_auto_revert_detected?, []) do
+        is_reverted when is_boolean(is_reverted) ->
+          is_reverted
+
+        other ->
+          Logger.warning(
+            "[NervesHubLink.Client] Invalid response from `#{inspect(mod())}.firmware_auto_revert_detected?/0`, returning false : #{inspect(other)}"
+          )
+
+          false
+      end
+    else
+      default_firmware_auto_revert_check()
+    end
+  end
+
+  defp default_firmware_auto_revert_check() do
+    active_slot = KV.get("nerves_fw_active")
+
+    previous_slot =
+      KV.get_all()
+      |> Enum.filter(fn {k, _v} ->
+        String.match?(k, ~r/.\./) and not String.starts_with?(k, "#{active_slot}.")
+      end)
+      |> Enum.map(fn {k, v} -> {String.replace(k, ~r/\A.{1}\./, ""), v} end)
+      |> Enum.into(%{})
+
+    Map.get(previous_slot, "nerves_fw_validated", "1") == "0" &&
+      Map.get(previous_slot, "nerves_fw_platform", "") != "" &&
+      Map.get(previous_slot, "nerves_fw_architecture", "") != ""
   end
 
   # Catches exceptions and exits

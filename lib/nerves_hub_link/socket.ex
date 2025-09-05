@@ -32,6 +32,8 @@ defmodule NervesHubLink.Socket do
   @device_topic "device"
   @extensions_topic "extensions"
 
+  @firmware_validation_check_interval :timer.seconds(10)
+
   @spec start_link(Configurator.Config.t()) :: GenServer.on_start()
   def start_link(config) do
     GenServer.start_link(__MODULE__, config, name: __MODULE__)
@@ -112,7 +114,7 @@ defmodule NervesHubLink.Socket do
   def init(config) do
     Alarms.set_alarm({NervesHubLink.Disconnected, []})
 
-    check_for_firmware_auto_revert()
+    alarm_if_firmware_auto_reverted()
 
     socket =
       new_socket()
@@ -126,6 +128,7 @@ defmodule NervesHubLink.Socket do
       |> assign(started_at: System.monotonic_time(:millisecond))
       |> assign(connected_at: nil)
       |> assign(joined_at: nil)
+      |> assign(firmware_validation_timer_pid: nil)
 
     if config.connect_wait_for_network do
       schedule_network_availability_check()
@@ -167,6 +170,9 @@ defmodule NervesHubLink.Socket do
     device_join_params =
       socket.assigns.params
       |> Map.put("currently_downloading_uuid", currently_downloading_uuid)
+      |> Map.put("meta", %{
+        "firmware_auto_revert_detected" => Client.firmware_auto_revert_detected?()
+      })
 
     socket =
       socket
@@ -177,6 +183,8 @@ defmodule NervesHubLink.Socket do
     Alarms.clear_alarm(NervesHubLink.Disconnected)
 
     Client.connected()
+
+    socket = schedule_firmware_validation_status_check(socket)
 
     {:ok, socket}
   end
@@ -473,6 +481,20 @@ defmodule NervesHubLink.Socket do
     end
   end
 
+  def handle_info(:firmware_validation_status_check, socket) do
+    if KV.get("nerves_fw_validated") == "1" do
+      Logger.info("[NervesHubLink] Firmware is validated, notifying NervesHub")
+      _ = push(socket, @device_topic, "firmware_validated", %{})
+      {:noreply, assign(socket, :firmware_validation_timer_pid, nil)}
+    else
+      Logger.debug(
+        "[NervesHubLink] Firmware is not marked as validated, checking again in #{@firmware_validation_check_interval / 1000} seconds"
+      )
+
+      {:noreply, schedule_firmware_validation_status_check(socket)}
+    end
+  end
+
   def handle_info({"scripts/run", ref, output, return}, socket) do
     _ =
       push(socket, @device_topic, "scripts/run", %{
@@ -583,21 +605,11 @@ defmodule NervesHubLink.Socket do
     disconnect(socket)
   end
 
-  # It's highly probable that the previous firmware version was reverted if the previous slots
-  # firmware wasn't validated.
-  defp check_for_firmware_auto_revert() do
-    active_slot = KV.get("nerves_fw_active")
-
-    previous_slot_validated =
-      KV.get_all()
-      |> Enum.map(fn {k, v} -> {k, v} end)
-      |> Enum.reject(fn {k, _v} -> String.starts_with?(k, "#{active_slot}.") end)
-      |> Enum.map(fn {k, v} -> {String.replace(k, ~r/\A.{1}\./, ""), v} end)
-      |> Enum.into(%{})
-      |> Map.get("nerves_fw_validated", "1")
-
-    if previous_slot_validated == "0" do
+  defp alarm_if_firmware_auto_reverted() do
+    if Client.firmware_auto_revert_detected?() do
       Alarms.set_alarm({NervesHubLink.FirmwareReverted, []})
+    else
+      :ok
     end
   end
 
@@ -620,6 +632,27 @@ defmodule NervesHubLink.Socket do
   defp schedule_network_availability_check(delay \\ 100) do
     Process.send_after(self(), :connect_check_network_availability, delay)
   end
+
+  defp schedule_firmware_validation_status_check(socket) do
+    if socket.assigns.params["nerves_fw_validated"] == "1" do
+      Logger.debug("[NervesHubLink] Firmware validated and information sent during connection")
+      socket
+    else
+      _ = maybe_cancel_timer(socket.assigns[:firmware_validation_timer_pid])
+
+      pid =
+        Process.send_after(
+          self(),
+          :firmware_validation_status_check,
+          @firmware_validation_check_interval
+        )
+
+      assign(socket, :firmware_validation_timer_pid, pid)
+    end
+  end
+
+  defp maybe_cancel_timer(nil), do: :ok
+  defp maybe_cancel_timer(pid), do: Process.cancel_timer(pid)
 
   defp handle_join_reply(%{"firmware_url" => url} = update, socket) when is_binary(url) do
     case UpdateInfo.parse(update) do

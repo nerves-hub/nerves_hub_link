@@ -27,7 +27,7 @@ defmodule NervesHubLink.Configurator do
 
   require Logger
 
-  @device_api_version "2.2.0"
+  @device_api_version "2.3.0"
   @console_version "2.0.0"
 
   defmodule Config do

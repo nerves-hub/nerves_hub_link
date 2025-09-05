@@ -18,6 +18,12 @@ defmodule NervesHubLink.ClientTest do
     Mox.verify_on_exit!(context)
   end
 
+  test "firmware_auto_revert_detected?/0" do
+    assert Client.firmware_auto_revert_detected?() == false
+    Mox.expect(ClientMock, :firmware_auto_revert_detected?, fn -> true end)
+    assert Client.firmware_auto_revert_detected?() == true
+  end
+
   test "connected/0" do
     Mox.expect(ClientMock, :connected, fn -> :ok end)
     assert Client.connected() == :ok
