@@ -13,8 +13,6 @@ defmodule NervesHubLink.Socket do
 
   use Slipstream
 
-  alias Nerves.Runtime.KV
-
   alias NervesHubLink.Alarms
   alias NervesHubLink.ArchiveManager
   alias NervesHubLink.Client
@@ -171,7 +169,8 @@ defmodule NervesHubLink.Socket do
       socket.assigns.params
       |> Map.put("currently_downloading_uuid", currently_downloading_uuid)
       |> Map.put("meta", %{
-        "firmware_auto_revert_detected" => Client.firmware_auto_revert_detected?()
+        "firmware_auto_revert_detected" => Client.firmware_auto_revert_detected?(),
+        "firmware_validated" => Client.firmware_validated?()
       })
 
     socket =
@@ -482,7 +481,7 @@ defmodule NervesHubLink.Socket do
   end
 
   def handle_info(:firmware_validation_status_check, socket) do
-    if KV.get("nerves_fw_validated") == "1" do
+    if Client.firmware_validated?() do
       Logger.info("[NervesHubLink] Firmware is validated, notifying NervesHub")
       _ = push(socket, @device_topic, "firmware_validated", %{})
       {:noreply, assign(socket, :firmware_validation_timer_pid, nil)}
@@ -634,7 +633,7 @@ defmodule NervesHubLink.Socket do
   end
 
   defp schedule_firmware_validation_status_check(socket) do
-    if socket.assigns.params["nerves_fw_validated"] == "1" do
+    if socket.assigns.params["meta"]["firmware_validated"] == true do
       Logger.debug("[NervesHubLink] Firmware validated and information sent during connection")
       socket
     else
