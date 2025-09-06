@@ -46,6 +46,7 @@ defmodule NervesHubLink.Client do
   ```
   """
 
+  alias Nerves.Runtime
   alias Nerves.Runtime.KV
   alias NervesHubLink.Backoff
 
@@ -147,6 +148,16 @@ defmodule NervesHubLink.Client do
   @callback reboot() :: no_return()
 
   @doc """
+  Optional callback to check if the current firmware has been validated.
+
+  The default behavior is to delegate to `Nerves.Runtime.firmware_valid?/0`.
+
+  If there is custom logic built into your `fwup.conf` and `fwup-ops.conf`
+  files, you should implement this callback in your `Client`.
+  """
+  @callback firmware_validated?() :: boolean()
+
+  @doc """
   Optional callback to check if an auto firmware revert just occurred.
 
   The default behavior is to check if the previous firmware slots:
@@ -162,6 +173,7 @@ defmodule NervesHubLink.Client do
   @optional_callbacks [
     connected: 0,
     firmware_auto_revert_detected?: 0,
+    firmware_validated?: 0,
     reboot: 0,
     reconnect_backoff: 0
   ]
@@ -286,6 +298,31 @@ defmodule NervesHubLink.Client do
       backoff
     else
       Backoff.delay_list(1000, 60000, 0.50)
+    end
+  end
+
+  @doc """
+  A wrapper function which calls `firmware_validated?/0` on the configured `Client`.
+
+  If the function isn't implemented, the default logic of delegating to
+  `Nerves.Runtime.firmware_valid?/0 is used.
+  """
+  @spec firmware_validated?() :: boolean()
+  def firmware_validated?() do
+    if function_exported?(mod(), :firmware_validated?, 0) do
+      case apply_wrap(mod(), :firmware_validated?, []) do
+        is_reverted when is_boolean(is_reverted) ->
+          is_reverted
+
+        other ->
+          Logger.warning(
+            "[NervesHubLink.Client] Invalid response from `#{inspect(mod())}.firmware_validated?/0`, returning true : #{inspect(other)}"
+          )
+
+          true
+      end
+    else
+      Runtime.firmware_valid?()
     end
   end
 
