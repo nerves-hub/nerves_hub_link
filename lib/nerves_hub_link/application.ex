@@ -14,6 +14,7 @@ defmodule NervesHubLink.Application do
   alias NervesHubLink.ExtensionsSupervisor
   alias NervesHubLink.FwupConfig
   alias NervesHubLink.Socket
+  alias NervesHubLink.SupportScriptsManager
   alias NervesHubLink.UpdateManager
 
   @impl Application
@@ -35,7 +36,9 @@ defmodule NervesHubLink.Application do
           Extensions,
           {UpdateManager, {fwup_config, config.updater}},
           {ArchiveManager, config},
-          {Socket, config}
+          {Socket, config},
+          {Task.Supervisor, name: SupportScriptsTaskSupervisor},
+          SupportScriptsManager
         ]
       else
         []

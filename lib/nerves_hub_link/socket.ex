@@ -20,7 +20,7 @@ defmodule NervesHubLink.Socket do
   alias NervesHubLink.Configurator.SharedSecret
   alias NervesHubLink.Message.ArchiveInfo
   alias NervesHubLink.Message.UpdateInfo
-  alias NervesHubLink.Script
+  alias NervesHubLink.SupportScriptsManager
   alias NervesHubLink.UpdateManager
   alias NervesHubLink.UploadFile
 
@@ -383,7 +383,7 @@ defmodule NervesHubLink.Socket do
 
   def handle_message(@device_topic, "scripts/run", params, socket) do
     # See related handle_info for pushing back the script result
-    :ok = Script.capture(params["text"], params["ref"])
+    :ok = SupportScriptsManager.start_task(params["ref"], params["text"])
     {:ok, socket}
   end
 
@@ -520,13 +520,33 @@ defmodule NervesHubLink.Socket do
     end
   end
 
-  def handle_info({"scripts/run", ref, output, return}, socket) do
-    _ =
-      push(socket, @device_topic, "scripts/run", %{
-        ref: ref,
-        output: output,
-        return: inspect(return, pretty: true)
-      })
+  def handle_info({"scripts/result", identifier, result}, socket) do
+    payload =
+      case result do
+        {:ok, result, output} ->
+          %{
+            identifier: identifier,
+            result: "completed",
+            output: output,
+            return: inspect(result, pretty: true)
+          }
+
+        {:error, :timeout} ->
+          %{
+            identifier: identifier,
+            result: "error",
+            reason: "timeout"
+          }
+
+        {:error, reason} ->
+          %{
+            identifier: identifier,
+            result: "error",
+            reason: inspect(reason, pretty: true)
+          }
+      end
+
+    _ = push(socket, @device_topic, "scripts/run", payload)
 
     {:noreply, socket}
   end
