@@ -328,7 +328,7 @@ defmodule NervesHubLink.Client do
   A wrapper function which calls `firmware_validated?/0` on the configured `Client`.
 
   If the function isn't implemented, the default logic of delegating to
-  `Nerves.Runtime.firmware_valid?/0 is used.
+  `Nerves.Runtime.firmware_valid?/0` is used.
   """
   @spec firmware_validated?() :: boolean()
   def firmware_validated?() do
