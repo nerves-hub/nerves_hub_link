@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [2.8.1] - 2025-09-11
 
 * Added
   * Send the firmwares validation status to NervesHub when the connection is established via an optional `Client.firmware_validated?/0` callback. A default implementation is provided, while supporting overriding with custom logic.
