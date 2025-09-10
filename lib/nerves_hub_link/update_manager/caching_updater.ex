@@ -109,20 +109,6 @@ defmodule NervesHubLink.UpdateManager.CachingUpdater do
       {:error, error, state}
   end
 
-  @impl NervesHubLink.UpdateManager.Updater
-  def cleanup(%{cached_download_pid: cached_download_pid}) do
-    case File.close(cached_download_pid) do
-      :ok ->
-        :ok
-
-      {:error, reason} ->
-        Logger.error("[#{log_prefix()}] Failed to close cached download file: #{inspect(reason)}")
-        :ok
-    end
-  end
-
-  def cleanup(_state), do: :ok
-
   defp clean_caching_directory(caching_dir, file_name) do
     case File.ls(caching_dir) do
       {:ok, file_list} ->
