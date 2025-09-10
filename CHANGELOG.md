@@ -3,9 +3,9 @@
 ## Unreleased
 
 * Added
-  * Communicate a firmwares validation status when the connection is established via an optional `Client.firmware_validated?/0` callback. A default implementation is provided, while supporting overriding with custom logic.
-  * Poll for firmware validation changes and send an update to Hub when the firmware is validated.
-  * Detect if a firmware revert has occurred and send this information to Hub when the connection is established. This is supported via an optional `Client.firmware_auto_revert_detected?/0` callback. A default implementation is provided, while supporting overriding with custom logic.
+  * Send the firmwares validation status to NervesHub when the connection is established via an optional `Client.firmware_validated?/0` callback. A default implementation is provided, while supporting overriding with custom logic.
+  * Poll for firmware validation changes and send an update to NervesHub when the firmware is validated.
+  * Detect if a firmware revert has occurred and send this information to NervesHub when the connection is established. This is supported via an optional `Client.firmware_auto_revert_detected?/0` callback. A default implementation is provided, while supporting overriding with custom logic.
   * Custom `Client`s can now be implemented using `use NervesHubLink.Client`, eliminating the need to implement all `Client` behavior callbacks.
 
 * Updated
