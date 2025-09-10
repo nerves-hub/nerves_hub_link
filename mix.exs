@@ -92,6 +92,9 @@ defmodule NervesHubLink.MixProject do
         "Downloads and Updates": [
           NervesHubLink.UpdateManager,
           NervesHubLink.UpdateManager.State,
+          NervesHubLink.UpdateManager.Updater,
+          NervesHubLink.UpdateManager.CachingUpdater,
+          NervesHubLink.UpdateManager.StreamingUpdater,
           NervesHubLink.ArchiveManager,
           NervesHubLink.Downloader,
           NervesHubLink.Downloader.RetryConfig,

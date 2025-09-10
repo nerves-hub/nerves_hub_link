@@ -4,8 +4,62 @@
 #
 defmodule NervesHubLink.UpdateManager.Updater do
   @moduledoc """
-  `Updater`s orchestrate the complete workflow of downloading and installing/applying
+  A behaviour to help orchestrate the complete workflow of downloading and installing/applying
   firmware updates.
+
+  This module provides a set of callbacks that must be implemented by any
+  updater module. The callbacks are used to start the update process, handle
+  messages from the `NervesHubLink.Downloader`, decide when to start the installation via
+  the `Fwup` library, and perform any necessary cleanup.
+
+  Creating a new updater module involves implementing the following callbacks:
+
+  - `c:start_update/3`: Called by `NervesHubLink.UpdateManager` to start the update process.
+  - `c:start/1`: Callback to setup, prepare, and trigger the download.
+  - `c:handle_downloader_message/2`: Process messages from the `NervesHubLink.Downloader`.
+  - `c:handle_fwup_message/2`: Process messages received from the `Fwup` library
+  - `c:cleanup/1`: Perform any necessary cleanup.
+
+  To simplify the implementation of these callbacks, you can use the provided
+  `NervesHubLink.UpdateManager.Updater` module as a base. This module provides
+  default implementations for the callbacks, which you can override as needed.
+
+  ### Example Usage
+
+  Here's an example of how to create a new updater module using the provided
+  `NervesHubLink.UpdateManager.Updater` module as a base:
+
+  ```elixir
+  defmodule MyApp.Updater do
+    use NervesHubLink.UpdateManager.Updater
+
+    def start_update(update_info, fwup_config, fwup_public_keys) do
+      # Implement the start_update callback
+    end
+
+    def start(state) do
+      # eg. Setup a temporary directory for storing downloaded files
+    end
+
+    def handle_downloader_message(message, state) do
+      # eg. Forward packets to the Fwup module
+    end
+
+    # Use the default implementation provided by the base module
+    #
+    # def handle_fwup_message(message, state) do
+    # end
+
+    def cleanup(state) do
+      # eg. Remove any temporary files or resources created during the update process
+    end
+
+    def log_prefix do
+      "[MyApp.Updater]"
+    end
+  end
+  ```
+
   """
 
   @type t :: __MODULE__

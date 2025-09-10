@@ -176,7 +176,7 @@ defmodule NervesHubLink.Client do
   The default behavior is to delegate to `Nerves.Runtime.firmware_valid?/0`.
 
   If there is custom logic built into your `fwup.conf` and `fwup-ops.conf`
-  files, you should implement this callback in your `Client`.
+  files, you should implement this callback in your `NervesHubLink.Client`.
   """
   @callback firmware_validated?() :: boolean()
 
@@ -311,10 +311,10 @@ defmodule NervesHubLink.Client do
   end
 
   @doc """
-  A wrapper function which calls `firmware_validated?/0` on the configured `Client`.
+  A wrapper function which calls `firmware_validated?/0` on the configured `NervesHubLink.Client`.
 
   If the function isn't implemented, the default logic of delegating to
-  `Nerves.Runtime.firmware_valid?/0 is used.
+  `Nerves.Runtime.firmware_valid?/0` is used.
   """
   @spec firmware_validated?() :: boolean()
   def firmware_validated?() do

@@ -3,7 +3,13 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 defmodule NervesHubLink.UpdateManager.StreamingUpdater do
-  @moduledoc false
+  @moduledoc """
+  This module is responsible for updating firmware using a streaming approach.
+  It uses the `NervesHubLink.Downloader` module to download the firmware and then sends the chunks to the
+  `Fwup` module to update the firmware.
+
+  This is the default `NervesHubLink.UpdateManager.Updater` used by the `NervesHubLink.UpdateManager` module.
+  """
   use NervesHubLink.UpdateManager.Updater
 
   alias NervesHubLink.Downloader

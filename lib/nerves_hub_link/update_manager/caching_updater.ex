@@ -3,7 +3,28 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 defmodule NervesHubLink.UpdateManager.CachingUpdater do
-  @moduledoc false
+  @moduledoc """
+  This module orchestrates firmware updates by downloading the firmware
+  from the specified URL and storing it in a cache directory before applying it.
+  If a partial download exists, it resumes from where it left off.
+
+  This is useful for resuming firmware updates from a previous attempt, allowing for
+  efficient updates even if the connection is lost or the device is rebooted. It also
+  ensures that the firmware is stored locally, reducing the need for repeated downloads.
+
+  To use this strategy, you need to configure NervesHubLink with:
+
+      config :nerves_hub_link,
+        updater: NervesHubLink.UpdateManager.CachingUpdater,
+
+  The default directory used for storing the caches is `/data/nerves_hub_link/firmware`.
+  You can configure the path by using the `cache_dir` option in your
+  application's configuration. For example:
+
+      config :nerves_hub_link, NervesHubLink.UpdateManager.CachingUpdater,
+        cache_dir: "/path/to/cache/directory"
+
+  """
   use NervesHubLink.UpdateManager.Updater
 
   alias NervesHubLink.Downloader
