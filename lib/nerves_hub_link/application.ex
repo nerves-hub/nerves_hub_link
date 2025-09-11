@@ -9,7 +9,6 @@ defmodule NervesHubLink.Application do
   use Application
 
   alias NervesHubLink.ArchiveManager
-  alias NervesHubLink.Client
   alias NervesHubLink.Configurator
   alias NervesHubLink.Extensions
   alias NervesHubLink.ExtensionsSupervisor
@@ -28,15 +27,13 @@ defmodule NervesHubLink.Application do
         fwup_config = %FwupConfig{
           fwup_devpath: config.fwup_devpath,
           fwup_task: config.fwup_task,
-          fwup_env: config.fwup_env,
-          handle_fwup_message: &Client.handle_fwup_message/1,
-          update_available: &Client.update_available/1
+          fwup_env: config.fwup_env
         }
 
         [
           {DynamicSupervisor, name: ExtensionsSupervisor},
           Extensions,
-          {UpdateManager, fwup_config},
+          {UpdateManager, {fwup_config, config.updater}},
           {ArchiveManager, config},
           {Socket, config}
         ]

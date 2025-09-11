@@ -1,7 +1,7 @@
 defmodule NervesHubLink.MixProject do
   use Mix.Project
 
-  @version "2.8.1"
+  @version "2.9.0-rc.1"
   @description "Manage your Nerves fleet by connecting it to NervesHub"
   @source_url "https://github.com/nerves-hub/nerves_hub_link"
 
@@ -92,6 +92,9 @@ defmodule NervesHubLink.MixProject do
         "Downloads and Updates": [
           NervesHubLink.UpdateManager,
           NervesHubLink.UpdateManager.State,
+          NervesHubLink.UpdateManager.Updater,
+          NervesHubLink.UpdateManager.CachingUpdater,
+          NervesHubLink.UpdateManager.StreamingUpdater,
           NervesHubLink.ArchiveManager,
           NervesHubLink.Downloader,
           NervesHubLink.Downloader.RetryConfig,
