@@ -131,7 +131,7 @@ defmodule NervesHubLink.UpdateManager.CachingUpdater do
   end
 
   @impl NervesHubLink.UpdateManager.Updater
-  def cleanup(%{cached_download_pid: cached_download_pid}) do
+  def cleanup(%{cached_download_pid: cached_download_pid}) when is_pid(cached_download_pid) do
     case File.close(cached_download_pid) do
       :ok ->
         :ok
