@@ -175,6 +175,7 @@ defmodule NervesHubLink.Socket do
 
     socket =
       socket
+      |> assign(params: device_join_params)
       |> join(@device_topic, device_join_params)
       |> maybe_join_console()
       |> assign(connected_at: System.monotonic_time(:millisecond))
