@@ -383,7 +383,7 @@ defmodule NervesHubLink.Socket do
 
   def handle_message(@device_topic, "scripts/run", params, socket) do
     # See related handle_info for pushing back the script result
-    :ok = SupportScriptsManager.start_task(params["ref"], params["text"])
+    :ok = SupportScriptsManager.start_task(params["ref"], params["text"], params["timeout"])
     {:ok, socket}
   end
 
@@ -525,7 +525,7 @@ defmodule NervesHubLink.Socket do
       case result do
         {:ok, result, output} ->
           %{
-            identifier: identifier,
+            ref: identifier,
             result: "completed",
             output: output,
             return: inspect(result, pretty: true)
@@ -533,16 +533,20 @@ defmodule NervesHubLink.Socket do
 
         {:error, :timeout} ->
           %{
-            identifier: identifier,
+            ref: identifier,
             result: "error",
-            reason: "timeout"
+            reason: "timeout",
+            output: "Error running script: timeout exceeded",
+            return: ""
           }
 
         {:error, reason} ->
           %{
-            identifier: identifier,
+            ref: identifier,
             result: "error",
-            reason: inspect(reason, pretty: true)
+            reason: inspect(reason, pretty: true),
+            output: "Error running script: #{inspect(reason, pretty: true)}",
+            return: ""
           }
       end
 

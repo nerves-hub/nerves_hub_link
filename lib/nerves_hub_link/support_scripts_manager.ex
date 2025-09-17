@@ -22,7 +22,8 @@ defmodule NervesHubLink.SupportScriptsManager do
           timeout :: non_neg_integer(),
           handler :: any()
         ) :: :ok
-  def start_task(identifier, script, timeout \\ @default_timeout, handler \\ Socket) do
+  def start_task(identifier, script, timeout, handler \\ Socket) do
+    timeout = timeout || @default_timeout
     GenServer.cast(__MODULE__, {:start_task, script, identifier, timeout, handler})
   end
 
