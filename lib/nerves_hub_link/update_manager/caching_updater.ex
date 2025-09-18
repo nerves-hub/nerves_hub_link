@@ -74,6 +74,7 @@ defmodule NervesHubLink.UpdateManager.CachingUpdater do
        state,
        %{
          status: {:downloading, 0},
+         last_progress_message: nil,
          download: download,
          cached_download_pid: file_pid,
          cached_download_path: full_path
@@ -83,6 +84,8 @@ defmodule NervesHubLink.UpdateManager.CachingUpdater do
 
   @impl NervesHubLink.UpdateManager.Updater
   def handle_downloader_message(:complete, state) do
+    NervesHubLink.send_update_progress(100)
+
     :ok = File.close(state.cached_download_pid)
 
     firmware_file_path = String.trim_trailing(state.cached_download_path, ".partial")
@@ -105,7 +108,8 @@ defmodule NervesHubLink.UpdateManager.CachingUpdater do
        cached_download_pid: nil,
        cached_download_path: firmware_file_path,
        fwup: fwup,
-       status: {:updating, 0}
+       status: {:updating, 0},
+       last_progress_message: nil
      })}
   end
 
@@ -118,9 +122,16 @@ defmodule NervesHubLink.UpdateManager.CachingUpdater do
   def handle_downloader_message({:data, data, percent}, state) do
     IO.binwrite(state.cached_download_pid, data)
 
-    NervesHubLink.send_update_progress(round(percent))
+    if send_update?(state, percent) do
+      NervesHubLink.send_update_progress(round(percent))
 
-    {:ok, state}
+      state
+      |> Map.put(:status, {:downloading, round(percent)})
+      |> Map.put(:last_progress_message, System.monotonic_time(:second))
+      |> then(&{:ok, &1})
+    else
+      {:ok, state}
+    end
   rescue
     error ->
       Logger.error(

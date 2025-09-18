@@ -110,6 +110,7 @@ defmodule NervesHubLink.UpdateManager.Updater do
   @callback log_prefix() :: String.t()
 
   defmacro __using__(_opts) do
+    # credo:disable-for-next-line Credo.Check.Refactor.LongQuoteBlocks
     quote do
       use GenServer
 
@@ -221,14 +222,23 @@ defmodule NervesHubLink.UpdateManager.Updater do
 
         case fwup_message do
           {:ok, 0, _message} ->
+            NervesHubLink.send_update_progress(100)
             Logger.info("[#{log_prefix()}] Update Finished")
             Alarms.clear_alarm(NervesHubLink.UpdateInProgress)
             NervesHubLink.Client.initiate_reboot()
             {:stop, {:shutdown, :update_complete}, state}
 
           {:progress, percent} ->
-            NervesHubLink.send_update_progress(percent)
-            {:ok, Map.put(state, :status, {:updating, percent})}
+            if send_update?(state, percent) do
+              NervesHubLink.send_update_progress(round(percent))
+
+              state
+              |> Map.put(:status, {:updating, round(percent)})
+              |> Map.put(:last_progress_message, System.monotonic_time(:second))
+              |> then(&{:ok, &1})
+            else
+              {:ok, state}
+            end
 
           {:error, _, message} ->
             Logger.warning("[#{log_prefix()}] Error applying update : #{inspect(message)}")
@@ -243,6 +253,14 @@ defmodule NervesHubLink.UpdateManager.Updater do
 
       @impl NervesHubLink.UpdateManager.Updater
       def log_prefix(), do: "NervesHubLink:Updater"
+
+      def send_update?(%{last_progress_message: lpm}, _percent) when is_nil(lpm), do: true
+
+      def send_update?(%{last_progress_message: lpm, status: {_, previous_progress}}, percent) do
+        time_diff = System.monotonic_time(:second) - lpm
+
+        previous_progress < round(percent) and time_diff >= 1
+      end
 
       defp report_download(updater, message) do
         # 60 seconds is arbitrary, but currently matches the `fwup` library's
