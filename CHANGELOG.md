@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.9.0-rc.2] - 2025-09-16
+## [2.9.0-rc.3] - 2025-09-18
 
 * Added
   * The way firmware updates are downloaded and installed has been improved to support recovery of downloads in the event of application crashes and device reboots. The default update strategy has been encapsulated in a new module called `NervesHubLink.UpdateManager.StreamingUpdater`, while the new optional caching updater strategy is implemented in `NervesHubLink.UpdateManager.CachingUpdater`. New update strategies can be added by implementing the `NervesHubLink.UpdateManager.Updater` behaviour. Please read the module documentation for more information.
