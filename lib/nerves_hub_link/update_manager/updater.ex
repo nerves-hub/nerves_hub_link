@@ -158,7 +158,8 @@ defmodule NervesHubLink.UpdateManager.Updater do
            fwup_config: fwup_config,
            fwup_public_keys: fwup_public_keys,
            update_info: update_info,
-           reporting_download_fun: &report_download(pid, &1)
+           reporting_download_fun: &report_download(pid, &1),
+           last_progress_message: nil
          }}
       end
 

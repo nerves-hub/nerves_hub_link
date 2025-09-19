@@ -74,7 +74,6 @@ defmodule NervesHubLink.UpdateManager.CachingUpdater do
        state,
        %{
          status: {:downloading, 0},
-         last_progress_message: nil,
          download: download,
          cached_download_pid: file_pid,
          cached_download_path: full_path
