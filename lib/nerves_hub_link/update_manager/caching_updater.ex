@@ -121,11 +121,13 @@ defmodule NervesHubLink.UpdateManager.CachingUpdater do
   def handle_downloader_message({:data, data, percent}, state) do
     IO.binwrite(state.cached_download_pid, data)
 
+    percent = round(percent)
+
     if send_update?(state, percent) do
-      NervesHubLink.send_update_progress(round(percent))
+      NervesHubLink.send_update_progress(percent)
 
       state
-      |> Map.put(:status, {:downloading, round(percent)})
+      |> Map.put(:status, {:downloading, percent})
       |> Map.put(:last_progress_message, System.monotonic_time(:millisecond))
       |> then(&{:ok, &1})
     else
