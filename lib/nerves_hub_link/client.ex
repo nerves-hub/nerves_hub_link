@@ -82,7 +82,12 @@ defmodule NervesHubLink.Client do
   @type archive_data :: NervesHubLink.Message.ArchiveInfo.t()
 
   @typedoc "Supported responses from `update_available/1`"
-  @type update_response :: :apply | :ignore | {:reschedule, pos_integer()}
+  @type update_response ::
+          :apply
+          | :ignore
+          | {:ignore, String.t()}
+          | {:reschedule, pos_integer()}
+          | {:reschedule, pos_integer(), String.t()}
 
   @typedoc "Supported responses from `archive_available/1`"
   @type archive_response :: :download | :ignore | {:reschedule, pos_integer()}
@@ -222,8 +227,14 @@ defmodule NervesHubLink.Client do
       :ignore ->
         :ignore
 
+      {:ignore, reason} ->
+        {:ignore, reason}
+
       {:reschedule, timeout} when timeout > 0 ->
         {:reschedule, timeout}
+
+      {:reschedule, timeout_mins, reason} when timeout_mins > 0 ->
+        {:reschedule, timeout_mins, reason}
 
       wrong ->
         Logger.error(

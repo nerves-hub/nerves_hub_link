@@ -83,17 +83,17 @@ defmodule NervesHubLink.UpdateManager.CachingUpdater do
 
   @impl NervesHubLink.UpdateManager.Updater
   def handle_downloader_message(:complete, state) do
-    NervesHubLink.send_update_progress(100)
+    NervesHubLink.send_update_status({:downloading, 100})
 
-    :ok = File.close(state.cached_download_pid)
+    cleanup(state)
 
     firmware_file_path = String.trim_trailing(state.cached_download_path, ".partial")
     :ok = File.rename(state.cached_download_path, firmware_file_path)
 
     {:ok, stat} = File.stat(firmware_file_path)
 
-    Logger.info("[NervesHubLink] Firmware download complete (#{stat.size} bytes)")
-    Logger.info("[NervesHubLink] Requesting FWUP apply the firmware update")
+    Logger.info("[#{log_prefix()}] Firmware download complete (#{stat.size} bytes)")
+    Logger.info("[#{log_prefix()}] Requesting FWUP apply the firmware update")
 
     {:ok, fwup} =
       Fwup.stream(
@@ -124,7 +124,7 @@ defmodule NervesHubLink.UpdateManager.CachingUpdater do
     percent = round(percent)
 
     if send_update?(state, percent) do
-      NervesHubLink.send_update_progress(percent)
+      NervesHubLink.send_update_status({:downloading, percent})
 
       state
       |> Map.put(:status, {:downloading, percent})

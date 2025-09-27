@@ -32,6 +32,16 @@ defmodule NervesHubLink.Socket do
 
   @firmware_validation_check_interval :timer.seconds(10)
 
+  @type update_status ::
+          :received
+          | {:downloading, non_neg_integer()}
+          | {:updating, non_neg_integer()}
+          | :completed
+          | {:ignored, reason :: String.t()}
+          | {:reschedule, delay_for :: pos_integer()}
+          | {:reschedule, delay_for :: pos_integer(), reason :: String.t()}
+          | {:failed, reason :: String.t()}
+
   @spec start_link(Configurator.Config.t()) :: GenServer.on_start()
   def start_link(config) do
     GenServer.start_link(__MODULE__, config, name: __MODULE__)
@@ -42,12 +52,7 @@ defmodule NervesHubLink.Socket do
     GenServer.cast(__MODULE__, :reconnect)
   end
 
-  @spec send_update_progress(non_neg_integer()) :: :ok
-  def send_update_progress(progress) do
-    GenServer.cast(__MODULE__, {:send_update_progress, progress})
-  end
-
-  @spec send_update_status(String.t()) :: :ok
+  @spec send_update_status(update_status()) :: :ok
   def send_update_status(status) do
     GenServer.cast(__MODULE__, {:send_update_status, status})
   end
@@ -294,13 +299,35 @@ defmodule NervesHubLink.Socket do
     {:noreply, disconnect(socket)}
   end
 
-  def handle_cast({:send_update_progress, progress}, socket) do
-    _ = push(socket, @device_topic, "fwup_progress", %{value: progress})
+  def handle_cast({:send_update_status, {stage, progress}}, socket)
+      when stage in [:downloading, :updating] do
+    _ = push(socket, @device_topic, "fwup_progress", %{stage: stage, value: progress})
     {:noreply, socket}
   end
 
   def handle_cast({:send_update_status, status}, socket) do
-    _ = push(socket, @device_topic, "status_update", %{status: status})
+    payload =
+      case status do
+        :received ->
+          %{status: :received}
+
+        :completed ->
+          %{status: :completed}
+
+        {:ignored, reason} ->
+          %{status: :ignored, reason: reason}
+
+        {:reschedule, delay_for} ->
+          %{status: :rescheduled, delay_for: delay_for}
+
+        {:reschedule, delay_for, reason} ->
+          %{status: :rescheduled, delay_for: delay_for, reason: reason}
+
+        {:failed, reason} ->
+          %{status: :failed, reason: reason}
+      end
+
+    _ = push(socket, @device_topic, "status_update", payload)
     {:noreply, socket}
   end
 

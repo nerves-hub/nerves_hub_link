@@ -55,9 +55,7 @@ defmodule NervesHubLink.UpdateManagerTest do
     end
 
     test "reschedule", %{update_payload: update_payload, devpath: devpath, updater: updater} do
-      Mox.expect(ClientMock, :update_available, fn _ -> {:reschedule, 1} end)
-      Mox.expect(ClientMock, :update_available, fn _ -> :apply end)
-      Mox.expect(UpdaterMock, :start_update, fn _, _, _ -> {:ok, :ok} end)
+      Mox.expect(ClientMock, :update_available, fn _ -> {:reschedule, 5, "Busy"} end)
 
       fwup_config = %FwupConfig{
         fwup_devpath: devpath
@@ -66,14 +64,8 @@ defmodule NervesHubLink.UpdateManagerTest do
       {:ok, manager} = UpdateManager.start_link({fwup_config, updater})
 
       Mox.allow(ClientMock, self(), manager)
-      Mox.allow(UpdaterMock, self(), manager)
 
-      assert UpdateManager.apply_update(manager, update_payload, []) == :update_rescheduled
-
-      # wait enough milliseconds for the update to be rescheduled
-      Process.sleep(5)
-
-      assert :sys.get_state(manager).status == :updating
+      assert UpdateManager.apply_update(manager, update_payload, []) == :idle
     end
   end
 end
