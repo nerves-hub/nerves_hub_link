@@ -255,7 +255,7 @@ defmodule NervesHubLink.UpdateManager.Updater do
       @impl NervesHubLink.UpdateManager.Updater
       def log_prefix(), do: "NervesHubLink:Updater"
 
-      def send_update?(%{last_progress_message: lpm}, _percent) when is_nil(lpm), do: true
+      def send_update?(%{last_progress_message: nil}, _percent), do: true
 
       def send_update?(%{last_progress_message: lpm, status: {_, previous_progress}}, percent) do
         time_diff = System.monotonic_time(:second) - lpm

@@ -489,10 +489,10 @@ defmodule NervesHubLink.Downloader do
   defp add_user_agent_header(headers, _),
     do: [{"User-Agent", "NHL/#{Application.spec(:nerves_hub_link)[:vsn]}"} | headers]
 
-  defp close_conn(%Downloader{conn: conn}) when not is_nil(conn) do
+  defp close_conn(%Downloader{conn: nil}), do: :ok
+
+  defp close_conn(%Downloader{conn: conn}) do
     {:ok, _} = Mint.HTTP.close(conn)
     :ok
   end
-
-  defp close_conn(_), do: :ok
 end
