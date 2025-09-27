@@ -126,7 +126,7 @@ defmodule NervesHubLink.UpdateManager.CachingUpdater do
 
       state
       |> Map.put(:status, {:downloading, round(percent)})
-      |> Map.put(:last_progress_message, System.monotonic_time(:second))
+      |> Map.put(:last_progress_message, System.monotonic_time(:millisecond))
       |> then(&{:ok, &1})
     else
       {:ok, state}

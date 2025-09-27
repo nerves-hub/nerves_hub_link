@@ -235,7 +235,7 @@ defmodule NervesHubLink.UpdateManager.Updater do
 
               state
               |> Map.put(:status, {:updating, round(percent)})
-              |> Map.put(:last_progress_message, System.monotonic_time(:second))
+              |> Map.put(:last_progress_message, System.monotonic_time(:millisecond))
               |> then(&{:ok, &1})
             else
               {:ok, state}
@@ -258,9 +258,9 @@ defmodule NervesHubLink.UpdateManager.Updater do
       def send_update?(%{last_progress_message: nil}, _percent), do: true
 
       def send_update?(%{last_progress_message: lpm, status: {_, previous_progress}}, percent) do
-        time_diff = System.monotonic_time(:second) - lpm
+        time_diff = System.monotonic_time(:millisecond) - lpm
 
-        previous_progress < round(percent) and time_diff >= 1
+        previous_progress < round(percent) and time_diff >= 500
       end
 
       defp report_download(updater, message) do
