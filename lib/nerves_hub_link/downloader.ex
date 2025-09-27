@@ -167,7 +167,7 @@ defmodule NervesHubLink.Downloader do
   # milliseconds have occurred. It indicates that many milliseconds have elapsed since
   # the last "chunk" from the HTTP server
   def handle_info(:timeout, %Downloader{handler_fun: handler} = state) do
-    close_conn(state.conn)
+    close_conn(state)
     _ = handler.({:error, :idle_timeout})
     state = reschedule_resume(state)
     {:noreply, %{state | conn: nil}}
