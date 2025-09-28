@@ -312,6 +312,8 @@ defmodule NervesHubLink.Socket do
           %{status: :received}
 
         :completed ->
+          # Make sure older versions of Hub get the final 100% message
+          _ = push(socket, @device_topic, "fwup_progress", %{stage: :updating, value: 100})
           %{status: :completed}
 
         {:ignored, reason} ->
@@ -328,6 +330,7 @@ defmodule NervesHubLink.Socket do
       end
 
     _ = push(socket, @device_topic, "status_update", payload)
+
     {:noreply, socket}
   end
 
