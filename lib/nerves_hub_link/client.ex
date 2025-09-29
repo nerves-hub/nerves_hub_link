@@ -17,6 +17,8 @@ defmodule NervesHubLink.Client do
   - `c:archive_available/1` - an archive is available to download from NervesHub
   - `c:archive_ready/2` - an archive has been downloaded and is available for use
   - `c:connected/0` - a connection to NervesHub has been established
+  - `c:firmware_auto_revert_detected?/0` - checks if a firmware revert occurred
+  - `c:firmware_validated?/0` - checks if the current firmware has been validated
   - `c:handle_error/1` - a firmware update has failed
   - `c:handle_fwup_message/1` - a message has been received by `NervesHubLink.UpdateManager`
   - `c:identify/0` - a request received from NervesHub to identify the device (eg. blink leds)
