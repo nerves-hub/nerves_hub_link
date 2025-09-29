@@ -77,6 +77,7 @@ defmodule NervesHubLink.MixProject do
           NervesHubLink.Configurator.LocalCertKey,
           NervesHubLink.Configurator.NervesKey,
           NervesHubLink.Configurator.SharedSecret,
+          NervesHubLink.Configurator.TPM,
           NervesHubLink.FwupConfig
         ],
         Extensions: [
