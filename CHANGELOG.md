@@ -4,6 +4,7 @@
 
 * Added
   * The way firmware updates are downloaded and installed has been improved to support recovery of downloads in the event of application crashes and device reboots. The default update strategy has been encapsulated in a new module called `NervesHubLink.UpdateManager.StreamingUpdater`, while the new optional caching updater strategy is implemented in `NervesHubLink.UpdateManager.CachingUpdater`. New update strategies can be added by implementing the `NervesHubLink.UpdateManager.Updater` behaviour. Please read the module documentation for more information.
+  * The firmware update progress messages sent from Link to Hub have been improved to include more detailed information about the update process, including if the update was ignored, requesting it be rescheduled, or if an error occurred. These messages are backwards compatible with older versions of NervesHub.
 
 ## [2.8.1] - 2025-09-11
 
