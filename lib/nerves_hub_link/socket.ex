@@ -468,15 +468,16 @@ defmodule NervesHubLink.Socket do
 
   @impl Slipstream
   def handle_info(:connect_check_network_availability, socket) do
-    hostname = URI.parse(socket.assigns.config.socket[:url]).host
+    uri = URI.parse(socket.assigns.config.socket[:url])
 
-    case :inet.gethostbyname(to_charlist(hostname)) do
-      {:ok, _} ->
+    case :gen_tcp.connect(to_charlist(uri.host), uri.port, [active: false, packet: 0], 2_000) do
+      {:ok, tcp_socket} ->
+        :gen_tcp.close(tcp_socket)
         {:noreply, socket, {:continue, :connect}}
 
-      _ ->
+      {:error, _reason} ->
         Logger.info("[NervesHubLink] waiting for network to become available")
-        schedule_network_availability_check(2_000)
+        schedule_network_availability_check(3_000)
         {:noreply, socket}
     end
   end
