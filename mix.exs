@@ -150,6 +150,7 @@ defmodule NervesHubLink.MixProject do
       {:plug_crypto, "~> 2.0"},
       {:plug_cowboy, "~> 2.0", only: :test},
       {:slipstream, "~> 1.0 or ~> 0.8"},
+      {:tpm, "~> 0.2.0", optional: true},
       {:whenwhere, "~> 0.1.2"},
       {:x509, "~> 0.5"}
     ]

@@ -59,6 +59,7 @@ defmodule NervesHubLink.Configurator do
               sni: nil,
               socket: [],
               ssl: [],
+              tpm: [],
               updater: StreamingUpdater
 
     @type t() :: %__MODULE__{
@@ -85,6 +86,7 @@ defmodule NervesHubLink.Configurator do
             sni: String.t(),
             socket: any(),
             ssl: [:ssl.tls_client_option()],
+            tpm: any(),
             updater: NervesHubLink.UpdateManager.Updater.t()
           }
   end
@@ -112,6 +114,9 @@ defmodule NervesHubLink.Configurator do
 
       Code.ensure_loaded?(NervesKey) ->
         NervesHubLink.Configurator.NervesKey
+
+      Code.ensure_loaded?(TPM) ->
+        NervesHubLink.Configurator.TPM
 
       true ->
         NervesHubLink.Configurator.SharedSecret
