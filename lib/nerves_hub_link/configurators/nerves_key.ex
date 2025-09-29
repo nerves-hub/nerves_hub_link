@@ -40,7 +40,6 @@ if Code.ensure_loaded?(NervesKey) do
         |> maybe_add_cert(bus_num, certificate_pair)
         |> maybe_add_signer_cert(bus_num, certificate_pair)
         |> maybe_add_key(bus_num)
-        |> maybe_add_sni(config)
 
       %{config | ssl: ssl}
     end
@@ -71,10 +70,6 @@ if Code.ensure_loaded?(NervesKey) do
 
         [signer_cert | Certificate.ca_certs()]
       end)
-    end
-
-    defp maybe_add_sni(ssl, %{sni: sni}) do
-      Keyword.put_new(ssl, :server_name_indication, to_charlist(sni))
     end
   end
 end

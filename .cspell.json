@@ -32,6 +32,8 @@
     "kbps",
     "maint",
     "nerveshub",
+    "nvread",
+    "privkey",
     "reconnections",
     "subkey",
     "vcgencmd",
