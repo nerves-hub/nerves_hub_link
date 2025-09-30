@@ -136,10 +136,10 @@ The TPM integration will default to initializing the modprobe `tpm_tis_spi`, rea
 You can customize these options to use a different bus and certificate pair:
 
 ```elixir
-config :nerves_hub_link, :nerves_key,
+config :nerves_hub_link, :tpm,
   probe_name: "tpm_tis_i2c",
   key_path: "/data/.ssh/nerves_hub_link/key",
-  certificate_path: "0x1000002"
+  certificate_address: "0x1000002"
 ```
 
 #### Certificate device authentication

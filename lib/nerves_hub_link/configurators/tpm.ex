@@ -6,6 +6,33 @@ if Code.ensure_loaded?(TPM) do
   defmodule NervesHubLink.Configurator.TPM do
     @moduledoc """
     Configurator enabling authentication via TPM.
+
+    If your project is using a [TPM](https://en.wikipedia.org/wiki/Trusted_Platform_Module), and
+    the [TPM](https://hex.pm/packages/tpm) Hex library, you can tell `NervesHubLink` to read the key
+    and certificate from the module and assign the SSL options for you by adding it as a dependency:
+
+        def deps() do
+          [
+            {:tpm, "~> 0.2.0"}
+          ]
+        end
+
+    This allows your config to be simplified to:
+
+        config :nerves_hub_link,
+          host: "your.nerveshub.host"
+
+    The TPM integration defaults include:
+    - initializing the modprobe `tpm_tis_spi`
+    - reading the private key using the path `/data/.ssh/nerves_hub_link_key`
+    - and reading the certificate from the memory address `"0x1000001"`
+
+    You can customize these options to use a different bus and certificate pair:
+
+        config :nerves_hub_link, :tpm,
+          probe_name: "tpm_tis_i2c",
+          key_path: "/data/.ssh/nerves_hub_link/key",
+          certificate_address: "0x1000002"
     """
 
     @behaviour NervesHubLink.Configurator
@@ -14,6 +41,9 @@ if Code.ensure_loaded?(TPM) do
     alias NervesHubLink.Configurator.Config
 
     require Logger
+
+    @initialization_max_checks 5
+    @initialization_check_delay 300
 
     @impl NervesHubLink.Configurator
     def build(%Config{} = config) do
@@ -31,20 +61,43 @@ if Code.ensure_loaded?(TPM) do
 
       probe_name = tpm_opts[:probe_name] || "tpm_tis_spi"
       key_path = tpm_opts[:key_path] || "/data/.ssh/nerves_hub_link_key"
-      certificate_path = tpm_opts[:certificate_path] || "0x1000001"
+      certificate_address = tpm_opts[:certificate_address] || "0x1000001"
 
-      # initialize_tpm()
-      _ = System.cmd("modprobe", [probe_name])
-      # Give a few seconds for the TPM to initialize
-      Process.sleep(2_000)
+      # if the TPM isn't available (modprobe failed), explode
+      {_, 0} = MuonTrap.cmd("modprobe", [probe_name])
+
+      check_tpm_initialized()
 
       ssl =
         config.ssl
         |> maybe_add_key(key_path)
-        |> maybe_add_cert(certificate_path)
+        |> maybe_add_cert(certificate_address)
         |> maybe_add_signer_cert()
 
       %{config | ssl: ssl}
+    end
+
+    defp check_tpm_initialized(check_count \\ 1) do
+      case TPM.getcap(:handles_nv_index) do
+        {:ok, _} ->
+          :ok
+
+        {:error, _, _} when check_count <= @initialization_max_checks ->
+          Process.sleep(@initialization_check_delay)
+          check_tpm_initialized(check_count + 1)
+
+        _ ->
+          raise "[NervesHubLink:TPM] TPM Unavailable"
+      end
+    end
+
+    defp maybe_add_key(ssl, key_path) do
+      Keyword.put_new_lazy(ssl, :key, fn ->
+        case TPM.Crypto.privkey(key_path) do
+          {:ok, privkey} -> privkey
+          {:error, _} -> raise "[NervesHubLink:TPM] TPM Unavailable"
+        end
+      end)
     end
 
     defp maybe_add_cert(ssl, certificate_address) do
@@ -54,15 +107,6 @@ if Code.ensure_loaded?(TPM) do
           X509.Certificate.to_der(cert)
         else
           _ -> raise "[NervesHubLink:TPM] TPM Unavailable"
-        end
-      end)
-    end
-
-    defp maybe_add_key(ssl, key_path) do
-      Keyword.put_new_lazy(ssl, :key, fn ->
-        case TPM.Crypto.privkey(key_path) do
-          {:ok, privkey} -> privkey
-          {:error, _} -> raise "[NervesHubLink:TPM] TPM Unavailable"
         end
       end)
     end

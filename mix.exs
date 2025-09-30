@@ -77,6 +77,7 @@ defmodule NervesHubLink.MixProject do
           NervesHubLink.Configurator.LocalCertKey,
           NervesHubLink.Configurator.NervesKey,
           NervesHubLink.Configurator.SharedSecret,
+          NervesHubLink.Configurator.TPM,
           NervesHubLink.FwupConfig
         ],
         Extensions: [
@@ -87,6 +88,11 @@ defmodule NervesHubLink.MixProject do
           NervesHubLink.Extensions.Health,
           NervesHubLink.Extensions.Health.DefaultReport,
           NervesHubLink.Extensions.Health.DeviceStatus,
+          NervesHubLink.Extensions.Health.MetricSet,
+          NervesHubLink.Extensions.Health.MetricSet.CPU,
+          NervesHubLink.Extensions.Health.MetricSet.Disk,
+          NervesHubLink.Extensions.Health.MetricSet.Memory,
+          NervesHubLink.Extensions.Health.MetricSet.NetworkTraffic,
           NervesHubLink.Extensions.Health.Report
         ],
         "Downloads and Updates": [
@@ -104,6 +110,11 @@ defmodule NervesHubLink.MixProject do
           NervesHubLink.Message.ArchiveInfo,
           NervesHubLink.Message.FirmwareMetadata,
           NervesHubLink.Message.UpdateInfo
+        ],
+        Utilities: [
+          NervesHubLink.Alarms,
+          NervesHubLink.Backoff,
+          NervesHubLink.Certificate
         ]
       ]
     ]
