@@ -29,6 +29,7 @@
     "fwupdate",
     "Geolocation",
     "geoip",
+    "getcap",
     "kbps",
     "maint",
     "nerveshub",
