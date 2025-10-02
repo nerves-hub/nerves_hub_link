@@ -223,7 +223,6 @@ defmodule NervesHubLink.UpdateManager.Updater do
 
         case fwup_message do
           {:ok, 0, _message} ->
-            NervesHubLink.Client.initiate_reboot()
             {:stop, {:shutdown, :update_complete}, state}
 
           {:progress, percent} ->

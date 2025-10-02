@@ -141,6 +141,7 @@ defmodule NervesHubLink.UpdateManager do
     Alarms.clear_alarm(NervesHubLink.UpdateInProgress)
     Logger.info("[NervesHubLink:UpdateManager] Update completed successfully")
     NervesHubLink.send_update_status(:completed)
+    Client.initiate_reboot()
     {:noreply, %State{state | status: :idle, updater_pid: nil, update_info: nil}}
   end
 
