@@ -4,7 +4,6 @@ import Config
 config :nerves_hub_link,
   archive_public_keys: ["a key?"],
   connect: false,
-  client: NervesHubLink.ClientMock,
   host: "0.0.0.0:4001",
   fwup_public_keys: ["a key"],
   # SSL values are used in a test.

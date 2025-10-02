@@ -24,6 +24,7 @@ defmodule NervesHubLink.Configurator do
   alias __MODULE__.Config
   alias Nerves.Runtime.KV
   alias NervesHubLink.Backoff
+  alias NervesHubLink.UpdateManager.StreamingUpdater
 
   require Logger
 
@@ -58,6 +59,7 @@ defmodule NervesHubLink.Configurator do
               sni: nil,
               socket: [],
               ssl: [],
+              updater: StreamingUpdater,
               tpm: []
 
     @type t() :: %__MODULE__{
@@ -84,6 +86,7 @@ defmodule NervesHubLink.Configurator do
             sni: String.t(),
             socket: any(),
             ssl: [:ssl.tls_client_option()],
+            updater: NervesHubLink.UpdateManager.Updater.t(),
             tpm: any()
           }
   end
