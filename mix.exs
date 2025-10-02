@@ -77,6 +77,7 @@ defmodule NervesHubLink.MixProject do
           NervesHubLink.Configurator.LocalCertKey,
           NervesHubLink.Configurator.NervesKey,
           NervesHubLink.Configurator.SharedSecret,
+          NervesHubLink.Configurator.TPM,
           NervesHubLink.FwupConfig
         ],
         Extensions: [
@@ -87,6 +88,11 @@ defmodule NervesHubLink.MixProject do
           NervesHubLink.Extensions.Health,
           NervesHubLink.Extensions.Health.DefaultReport,
           NervesHubLink.Extensions.Health.DeviceStatus,
+          NervesHubLink.Extensions.Health.MetricSet,
+          NervesHubLink.Extensions.Health.MetricSet.CPU,
+          NervesHubLink.Extensions.Health.MetricSet.Disk,
+          NervesHubLink.Extensions.Health.MetricSet.Memory,
+          NervesHubLink.Extensions.Health.MetricSet.NetworkTraffic,
           NervesHubLink.Extensions.Health.Report
         ],
         "Downloads and Updates": [
@@ -104,6 +110,11 @@ defmodule NervesHubLink.MixProject do
           NervesHubLink.Message.ArchiveInfo,
           NervesHubLink.Message.FirmwareMetadata,
           NervesHubLink.Message.UpdateInfo
+        ],
+        Utilities: [
+          NervesHubLink.Alarms,
+          NervesHubLink.Backoff,
+          NervesHubLink.Certificate
         ]
       ]
     ]
@@ -150,6 +161,7 @@ defmodule NervesHubLink.MixProject do
       {:plug_crypto, "~> 2.0"},
       {:plug_cowboy, "~> 2.0", only: :test},
       {:slipstream, "~> 1.0 or ~> 0.8"},
+      {:tpm, "~> 0.2.0", optional: true},
       {:whenwhere, "~> 0.1.2"},
       {:x509, "~> 0.5"}
     ]

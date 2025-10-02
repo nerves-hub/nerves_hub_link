@@ -110,6 +110,38 @@ config :nerves_hub_link, :nerves_key,
   i2c_bus: 0
 ```
 
+#### TPM (with cert based auth)
+
+_Important: This is recommended for production device fleets._
+
+If your project is using a [TPM](https://en.wikipedia.org/wiki/Trusted_Platform_Module), and the [TPM](https://hex.pm/packages/tpm) Hex library, you can tell `NervesHubLink` to read the key and certificate from the module and assign the SSL options for you by adding it as a dependency:
+
+```elixir
+def deps() do
+  [
+    {:tpm, "~> 0.2.0"}
+  ]
+end
+```
+
+This allows your config to be simplified to:
+
+```elixir
+config :nerves_hub_link,
+  host: "your.nerveshub.host"
+```
+
+The TPM integration will default to initializing the modprobe `tpm_tis_spi`, reading the private key using the path `/data/.ssh/nerves_hub_link_key`, and reading the certificate from the memory address `"0x1000001"`.
+
+You can customize these options to use a different bus and certificate pair:
+
+```elixir
+config :nerves_hub_link, :tpm,
+  probe_name: "tpm_tis_i2c",
+  key_path: "/data/.ssh/nerves_hub_link/key",
+  certificate_address: "0x1000002"
+```
+
 #### Certificate device authentication
 
 If you would like to use certificate device authentication, but you are not using `NervesKey`, you can tell `NervesHubLink` to read the certificate and key from the file system by using:

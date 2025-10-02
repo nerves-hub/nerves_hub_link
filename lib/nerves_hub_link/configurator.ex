@@ -59,7 +59,8 @@ defmodule NervesHubLink.Configurator do
               sni: nil,
               socket: [],
               ssl: [],
-              updater: StreamingUpdater
+              updater: StreamingUpdater,
+              tpm: []
 
     @type t() :: %__MODULE__{
             archive_public_keys: [binary()],
@@ -85,7 +86,8 @@ defmodule NervesHubLink.Configurator do
             sni: String.t(),
             socket: any(),
             ssl: [:ssl.tls_client_option()],
-            updater: NervesHubLink.UpdateManager.Updater.t()
+            updater: NervesHubLink.UpdateManager.Updater.t(),
+            tpm: any()
           }
   end
 
@@ -112,6 +114,9 @@ defmodule NervesHubLink.Configurator do
 
       Code.ensure_loaded?(NervesKey) ->
         NervesHubLink.Configurator.NervesKey
+
+      Code.ensure_loaded?(TPM) ->
+        NervesHubLink.Configurator.TPM
 
       true ->
         NervesHubLink.Configurator.SharedSecret
