@@ -62,11 +62,7 @@ defmodule NervesHubLink.DownloaderTest do
 
   describe "idle timeout" do
     setup do
-      {:ok, plug, port} =
-        Utils.supervise_with_port(fn port ->
-          {Plug.Cowboy, scheme: :http, plug: IdleTimeoutPlug, options: [port: port]}
-        end)
-
+      {:ok, plug, port} = Utils.supervise_plug(IdleTimeoutPlug)
       {:ok, [plug: plug, url: "http://localhost:#{port}/test"]}
     end
 
@@ -93,11 +89,7 @@ defmodule NervesHubLink.DownloaderTest do
 
   describe "http error" do
     setup do
-      {:ok, plug, port} =
-        Utils.supervise_with_port(fn port ->
-          {Plug.Cowboy, scheme: :http, plug: HTTPErrorPlug, options: [port: port]}
-        end)
-
+      {:ok, plug, port} = Utils.supervise_plug(HTTPErrorPlug)
       {:ok, [plug: plug, url: "http://localhost:#{port}/test"]}
     end
 
@@ -121,12 +113,8 @@ defmodule NervesHubLink.DownloaderTest do
 
   describe "range" do
     setup do
-      {:ok, plug, port} =
-        Utils.supervise_with_port(fn port ->
-          {Plug.Cowboy, scheme: :http, plug: RangeRequestPlug, options: [port: port]}
-        end)
-
-      {:ok, [plug: plug, url: "http://localhost:#{port}/test"]}
+      {:ok, plug, port} = Utils.supervise_plug(RangeRequestPlug)
+      {:ok, [plug: plug, url: "http://localhost:#{port}/range"]}
     end
 
     test "calculates range request header", %{url: url} do
@@ -137,7 +125,8 @@ defmodule NervesHubLink.DownloaderTest do
         :ok
       end
 
-      {:ok, _} = Downloader.start_download(url, handler_fun, retry_config: @short_retry_args)
+      {:ok, download} =
+        Downloader.start_download(url, handler_fun, retry_config: @short_retry_args)
 
       assert_receive {:data, "h", _}, 1000
       assert_receive {:error, _}
@@ -145,6 +134,10 @@ defmodule NervesHubLink.DownloaderTest do
       refute_receive {:error, _}
       # cspell:disable-next-line
       assert_receive {:data, "ello, world", _}
+
+      assert_receive :complete
+
+      refute Process.alive?(download)
     end
   end
 
@@ -166,19 +159,20 @@ defmodule NervesHubLink.DownloaderTest do
         :ok
       end
 
-      {:ok, _download} = Downloader.start_download(url, handler_fun)
+      {:ok, download} = Downloader.start_download(url, handler_fun)
+
       refute_receive {:error, _}
       assert_receive {:data, "redirected", _}
+
+      assert_receive :complete
+
+      refute Process.alive?(download)
     end
   end
 
   describe "x retry" do
     setup do
-      {:ok, plug, port} =
-        Utils.supervise_with_port(fn port ->
-          {Plug.Cowboy, scheme: :http, plug: XRetryNumberPlug, options: [port: port]}
-        end)
-
+      {:ok, plug, port} = Utils.supervise_plug(XRetryNumberPlug)
       {:ok, [plug: plug, url: "http://localhost:#{port}/test"]}
     end
 

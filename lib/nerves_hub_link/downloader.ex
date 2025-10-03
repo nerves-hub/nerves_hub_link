@@ -202,10 +202,10 @@ defmodule NervesHubLink.Downloader do
       {:ok, conn, responses} ->
         handle_responses(responses, %{state | conn: conn})
 
-      {:error, _conn, error, responses} ->
+      {:error, _conn, error, _responses} ->
         close_conn(state)
         _ = handler.({:error, error})
-        handle_responses(responses, reschedule_resume(%{state | conn: nil}))
+        {:noreply, reschedule_resume(%{state | conn: nil})}
 
       :unknown ->
         Logger.warning(

@@ -25,10 +25,7 @@ defmodule NervesHubLink.UpdateManager do
 
   require Logger
 
-  @type status ::
-          :idle
-          | :update_rescheduled
-          | :updating
+  @type status :: :idle | :updating
 
   defmodule State do
     @moduledoc false
@@ -37,7 +34,6 @@ defmodule NervesHubLink.UpdateManager do
             fwup_config: FwupConfig.t(),
             status: UpdateManager.status(),
             update_info: nil | UpdateInfo.t(),
-            update_reschedule_timer: nil | :timer.tref(),
             updater: nil | Updater.t(),
             updater_pid: nil | pid()
           }
@@ -45,7 +41,6 @@ defmodule NervesHubLink.UpdateManager do
     defstruct fwup_config: nil,
               status: :idle,
               update_info: nil,
-              update_reschedule_timer: nil,
               updater: nil,
               updater_pid: nil
   end
@@ -139,19 +134,14 @@ defmodule NervesHubLink.UpdateManager do
   end
 
   @impl GenServer
-  def handle_info({:update_reschedule, response, fwup_public_keys}, state) do
-    {:noreply,
-     maybe_update_firmware(response, fwup_public_keys, %State{
-       state
-       | update_reschedule_timer: nil
-     })}
-  end
-
   def handle_info(
         {:EXIT, updater_pid, {:shutdown, :update_complete}},
         %State{updater_pid: updater_pid} = state
       ) do
-    Logger.info("Update completed successfully")
+    Alarms.clear_alarm(NervesHubLink.UpdateInProgress)
+    Logger.info("[NervesHubLink:UpdateManager] Update completed successfully")
+    NervesHubLink.send_update_status(:completed)
+    Client.initiate_reboot()
     {:noreply, %State{state | status: :idle, updater_pid: nil, update_info: nil}}
   end
 
@@ -159,8 +149,9 @@ defmodule NervesHubLink.UpdateManager do
         {:EXIT, updater_pid, {:shutdown, {:error, reason}}},
         %State{updater_pid: updater_pid} = state
       ) do
-    Logger.info("Update failed with reason : #{inspect(reason)}")
     Alarms.clear_alarm(NervesHubLink.UpdateInProgress)
+    Logger.error("[NervesHubLink:UpdateManager] Update failed with reason : #{inspect(reason)}")
+    NervesHubLink.send_update_status({:failed, "Update failed : #{inspect(reason)}"})
     {:noreply, %State{state | status: :idle, updater_pid: nil, update_info: nil}}
   end
 
@@ -168,8 +159,9 @@ defmodule NervesHubLink.UpdateManager do
         {:EXIT, updater_pid, {:shutdown, {:download_error, reason}}},
         %State{updater_pid: updater_pid} = state
       ) do
-    Logger.info("Update download failed with reason : #{inspect(reason)}")
     Alarms.clear_alarm(NervesHubLink.UpdateInProgress)
+    Logger.error("[NervesHubLink:UpdateManager] Download failed with reason : #{inspect(reason)}")
+    NervesHubLink.send_update_status({:failed, "Download failed : #{inspect(reason)}"})
     {:noreply, %State{state | status: :idle, updater_pid: nil, update_info: nil}}
   end
 
@@ -177,14 +169,20 @@ defmodule NervesHubLink.UpdateManager do
         {:EXIT, updater_pid, {:shutdown, {:fwup_error, reason}}},
         %State{updater_pid: updater_pid} = state
       ) do
-    Logger.info("Update encountered a FWUP error with reason : #{inspect(reason)}")
     Alarms.clear_alarm(NervesHubLink.UpdateInProgress)
+    Logger.error("[NervesHubLink:UpdateManager] FWUP failed with reason : #{inspect(reason)}")
+    NervesHubLink.send_update_status({:failed, "FWUP error : #{inspect(reason)}"})
     {:noreply, %State{state | status: :idle, updater_pid: nil, update_info: nil}}
   end
 
   def handle_info({:EXIT, _, _} = msg, state) do
-    Logger.info("Unexpected :EXIT : pid #{inspect(msg)}, state #{inspect(state)}")
+    Alarms.clear_alarm(NervesHubLink.UpdateInProgress)
 
+    Logger.error(
+      "[NervesHubLink:UpdateManager] Unexpected :EXIT : pid #{inspect(msg)}, state #{inspect(state)}"
+    )
+
+    NervesHubLink.send_update_status({:failed, "Unexpected error : #{inspect(msg)}"})
     {:noreply, %State{state | status: :idle, updater_pid: nil, update_info: nil}}
   end
 
@@ -204,17 +202,12 @@ defmodule NervesHubLink.UpdateManager do
   end
 
   defp maybe_update_firmware(%UpdateInfo{} = update_info, fwup_public_keys, %State{} = state) do
-    # Cancel an existing timer if it exists.
-    # This prevents rescheduled updates`
-    # from compounding.
-    state = maybe_cancel_timer(state)
+    NervesHubLink.send_update_status(:received)
 
-    # possibly offload update decision to an external module.
-    # This will allow application developers
-    # to control exactly when an update is applied.
-    # note: update_available is a behaviour function
     case Client.update_available(update_info) do
       :apply ->
+        Logger.info("[NervesHubLink:UpdateManager] Starting firmware update")
+
         {:ok, updater_pid} =
           state.updater.start_update(update_info, state.fwup_config, fwup_public_keys)
 
@@ -223,25 +216,35 @@ defmodule NervesHubLink.UpdateManager do
         %State{state | status: :updating, updater_pid: updater_pid, update_info: update_info}
 
       :ignore ->
-        Logger.info("[NervesHubLink] Ignoring firmware update")
+        NervesHubLink.send_update_status({:ignored, ""})
+        Logger.info("[NervesHubLink:UpdateManager] Ignoring firmware update")
+        state
+
+      {:ignore, reason} ->
+        NervesHubLink.send_update_status({:ignored, reason})
+        Logger.info("[NervesHubLink:UpdateManager] Ignoring firmware update : #{reason}")
         state
 
       {:reschedule, ms} ->
-        timer =
-          Process.send_after(self(), {:update_reschedule, update_info, fwup_public_keys}, ms)
+        mins = round(ms / 60_000)
+        delay_for = if(mins < 5, do: 5, else: mins)
+        NervesHubLink.send_update_status({:reschedule, delay_for})
 
-        Logger.info("[NervesHubLink] rescheduling firmware update in #{ms} milliseconds")
-        %{state | status: :update_rescheduled, update_reschedule_timer: timer}
+        Logger.info(
+          "[NervesHubLink:UpdateManager] Requesting Hub reschedule firmware update for #{delay_for} minutes"
+        )
+
+        state
+
+      {:reschedule, mins, reason} ->
+        delay_for = if(mins < 5, do: 5, else: mins) |> round()
+        NervesHubLink.send_update_status({:reschedule, delay_for, reason})
+
+        Logger.info(
+          "[NervesHubLink:UpdateManager] Requesting Hub reschedule firmware update for #{delay_for} minutes"
+        )
+
+        state
     end
-  end
-
-  defp maybe_update_firmware(_, _, state), do: state
-
-  defp maybe_cancel_timer(%{update_reschedule_timer: nil} = state), do: state
-
-  defp maybe_cancel_timer(%{update_reschedule_timer: timer} = state) do
-    _ = Process.cancel_timer(timer)
-
-    %{state | update_reschedule_timer: nil}
   end
 end

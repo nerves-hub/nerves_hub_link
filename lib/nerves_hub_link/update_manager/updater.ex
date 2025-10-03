@@ -223,15 +223,11 @@ defmodule NervesHubLink.UpdateManager.Updater do
 
         case fwup_message do
           {:ok, 0, _message} ->
-            NervesHubLink.send_update_progress(100)
-            Logger.info("[#{log_prefix()}] Update Finished")
-            Alarms.clear_alarm(NervesHubLink.UpdateInProgress)
-            NervesHubLink.Client.initiate_reboot()
             {:stop, {:shutdown, :update_complete}, state}
 
           {:progress, percent} ->
             if send_update?(state, percent) do
-              NervesHubLink.send_update_progress(round(percent))
+              NervesHubLink.send_update_status({:updating, round(percent)})
 
               state
               |> Map.put(:status, {:updating, round(percent)})
@@ -242,9 +238,6 @@ defmodule NervesHubLink.UpdateManager.Updater do
             end
 
           {:error, _, message} ->
-            Logger.warning("[#{log_prefix()}] Error applying update : #{inspect(message)}")
-            NervesHubLink.send_update_status("fwup error #{message}")
-            Alarms.clear_alarm(NervesHubLink.UpdateInProgress)
             {:stop, {:shutdown, {:fwup_error, message}}, state}
 
           _ ->

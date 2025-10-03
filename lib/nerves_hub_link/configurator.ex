@@ -59,8 +59,8 @@ defmodule NervesHubLink.Configurator do
               sni: nil,
               socket: [],
               ssl: [],
-              updater: StreamingUpdater,
-              tpm: []
+              tpm: [],
+              updater: StreamingUpdater
 
     @type t() :: %__MODULE__{
             archive_public_keys: [binary()],
@@ -86,8 +86,8 @@ defmodule NervesHubLink.Configurator do
             sni: String.t(),
             socket: any(),
             ssl: [:ssl.tls_client_option()],
-            updater: NervesHubLink.UpdateManager.Updater.t(),
-            tpm: any()
+            tpm: any(),
+            updater: NervesHubLink.UpdateManager.Updater.t()
           }
   end
 
