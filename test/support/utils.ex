@@ -11,7 +11,7 @@ defmodule NervesHubLink.Support.Utils do
     System.unique_integer([:positive, :monotonic]) + 6000
   end
 
-  @spec supervise_with_port(plug :: module()) :: {:ok, pid, integer()}
+  @spec supervise_plug(plug :: module()) :: {:ok, pid, integer()}
   def supervise_plug(plug) do
     supervise_with_port(fn port ->
       {Plug.Cowboy, scheme: :http, plug: plug, options: [port: port]}
