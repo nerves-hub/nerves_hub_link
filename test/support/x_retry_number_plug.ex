@@ -41,6 +41,7 @@ defmodule NervesHubLink.Support.XRetryNumberPlug do
       started_from + 2048 == @content_length ->
         {:ok, conn} = chunk(conn, :binary.copy(<<retry_number::8>>, 2048))
         chunk(conn, "")
+        conn
 
       true ->
         raise("we shouldn't be here")

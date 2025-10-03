@@ -17,10 +17,7 @@ defmodule NervesHubLink.UpdateManagerTest do
     setup do
       devpath = "/tmp/fwup_output"
 
-      {:ok, plug, port} =
-        Utils.supervise_with_port(fn port ->
-          {Plug.Cowboy, scheme: :http, plug: FWUPStreamPlug, options: [port: port]}
-        end)
+      {:ok, plug, port} = Utils.supervise_plug(FWUPStreamPlug)
 
       File.rm(devpath)
 
@@ -52,6 +49,8 @@ defmodule NervesHubLink.UpdateManagerTest do
       Mox.allow(UpdaterMock, self(), manager)
 
       assert UpdateManager.apply_update(manager, update_payload, []) == :updating
+
+      assert GenServer.stop(manager) == :ok
     end
 
     test "reschedule", %{update_payload: update_payload, devpath: devpath, updater: updater} do
@@ -66,6 +65,8 @@ defmodule NervesHubLink.UpdateManagerTest do
       Mox.allow(ClientMock, self(), manager)
 
       assert UpdateManager.apply_update(manager, update_payload, []) == :idle
+
+      assert GenServer.stop(manager) == :ok
     end
   end
 end
