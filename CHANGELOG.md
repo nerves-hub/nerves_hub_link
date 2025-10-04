@@ -1,10 +1,15 @@
 # Changelog
 
-## [2.9.0-rc.3] - 2025-09-18
+## [2.9.0] - 2025-10-04
 
 * Added
   * The way firmware updates are downloaded and installed has been improved to support recovery of downloads in the event of application crashes and device reboots. The default update strategy has been encapsulated in a new module called `NervesHubLink.UpdateManager.StreamingUpdater`, while the new optional caching updater strategy is implemented in `NervesHubLink.UpdateManager.CachingUpdater`. New update strategies can be added by implementing the `NervesHubLink.UpdateManager.Updater` behaviour. Please read the module documentation for more information.
   * The firmware update progress messages sent from Link to Hub have been improved to include more detailed information about the update process, including if the update was ignored, requesting it be rescheduled, or if an error occurred. These messages are backwards compatible with older versions of NervesHub.
+  * You can now connect to NervesHub using your TPM module for key and cert storage. If your project uses the TPM Hex library we will automatically configure the websocket to use the TPM module for reading the key and cert. Please refer to the readme for more information on how to configure this feature.
+
+* Updated
+  * Alarms relating to disk mounts being almost (or completely) full can be ignored. Previously only `/` `:disk_almost_full` Alarms were ingored, but this can now be configured to include other mounts. Please refer to the Extensions guide for more information.
+  * How NervesHubLinks checks for network availability has been improved to reduce blocking of GenServer messages. Previously `:inet.gethostbyname/1` was used, but under certain circumstances calls would take over 5 seconds, which would block calls to check on the status of the connection. Using `:gen_tcp.connect/4` allows for specifying a timeout, reducing the potential for the blocking of message processing.
 
 ## [2.8.1] - 2025-09-11
 
