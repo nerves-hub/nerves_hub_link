@@ -4,10 +4,26 @@ Extensions are pieces of non-critical functionality going over the NervesHub Web
 
 There are two extensions currently:
 
-- **Health** reports device metrics, alarms, metadata and similar.
-- **Geo** provides GeoIP information and allows slotting in a better source.
+- [**Geo**](#geo) provides hooks to send a device's GeoIP information.
+- [**Health**](#health) reports device metrics, alarms, metadata and similar.
+- [**Local Shell**](#local-shell) gives NervesHub the ability to expose an interactive shell in the UI.
 
 Your NervesHub server controls enabling and disabling extensions to allow you to switch them off if they impact operations.
+
+## Geo
+
+The Geo `NervesHubLink.Extensions.Geo.DefaultResolver` uses the https://whenwhere.nerves-project.org/ service to resolve the device's location using the publicly available IP address.
+
+You can create your own resolver by implementing a module that implements the `NervesHubLink.Extensions.Geo.Resolver` behaviour. For example, if you have a GPS module, or your device can resolve a reasonably precise location via LTE, you could implement your own resolver called `MyApp.GPSGeoResolver` and update the config to:
+
+```
+config :nerves_hub_link,
+  geo: [
+    resolver: MyApp.GPSGeoResolver
+  ]
+```
+
+Please see `NervesHubLink.Extensions.Geo.Resolver` for more information.
 
 ## Health
 
@@ -105,22 +121,15 @@ config :nerves_hub_link,
 
 Specifying a list of mounts to ignore will override the default `/`, so make sure to include that in the list if you want to continue ignoring `/` while also adding other mounts.
 
-
-## Geolocation
-
-It is intended to be easy to replace the default Geo Resolver with your own. Maybe you have a GPS module or can resolve a reasonably precise location via LTE. Just change config:
-
-```
-config :nerves_hub_link,
-  geo: [
-    resolver: CatCounter.MyResolver
-  ]
-```
-
-Your module only needs to implement a single function, see `NervesHubLink.Extensions.Geo.Resolver` for details.
-
-
-## Alarms
+### Alarms
 
 The [default health report](`NervesHubLink.Extensions.Health.DefaultReport`) uses `:alarm_handler`, but we
 recommend the [`alarmist`](https://hex.pm/packages/alarmist) library for improved alarms handling.
+
+## Local Shell
+
+Provides an interactive local shell for NervesHub to connect to. This is useful for debugging and troubleshooting issues with the device.
+
+This extension is enabled by default, but must also be enabled in your Device and Product settings on your NervesHub platform.
+
+To use this extension, you need to include the [`ExPTY`](https://hex.pm/packages/expty) library in your project's dependencies.

@@ -27,7 +27,8 @@ defmodule NervesHubLink.Extensions do
 
   @default_extension_modules [
     NervesHubLink.Extensions.Health,
-    NervesHubLink.Extensions.Geo
+    NervesHubLink.Extensions.Geo,
+    NervesHubLink.Extensions.LocalShell
   ]
 
   @doc """
@@ -250,10 +251,24 @@ defmodule NervesHubLink.Extensions do
       def __name__(), do: unquote(name)
       def __version__(), do: unquote(version)
 
+      # Re-implemented the included `child_spec/1` function from `use GenServer` so
+      # that `@doc false` can be used to hide `child_spec/1` from the generated docs.
+      @doc false
+      def child_spec(init_arg) do
+        default = %{
+          id: __MODULE__,
+          start: {__MODULE__, :start_link, [init_arg]}
+        }
+
+        Supervisor.child_spec(default, [])
+      end
+
+      @doc false
       def start_link(opts) do
         GenServer.start_link(__MODULE__, opts, name: __MODULE__)
       end
 
+      @doc false
       @spec push(String.t(), map()) ::
               {:ok, Slipstream.push_reference()} | {:error, reason :: :detached | term()}
       def push(event, payload) do
