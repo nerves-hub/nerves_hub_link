@@ -23,11 +23,7 @@ if Code.ensure_loaded?(ExPTY) do
 
     @impl GenServer
     def init(_opts) do
-      {:ok,
-       %{
-         pty_pid: nil,
-         pty_opts: nil
-       }}
+      {:ok, %{pty_pid: nil}}
     end
 
     @impl NervesHubLink.Extensions
@@ -38,7 +34,9 @@ if Code.ensure_loaded?(ExPTY) do
     end
 
     def handle_event("request_shell", _msg, state) do
-      case exec_command(get_shell_command(), state) do
+      get_shell_command()
+      |> exec_command()
+      |> case do
         {:ok, pty_pid, _} ->
           {:ok, _} = push("request_status", %{"status" => "started"})
           {:noreply, %{state | pty_pid: pty_pid}}
@@ -82,13 +80,13 @@ if Code.ensure_loaded?(ExPTY) do
       {:noreply, %{state | pty_pid: nil}}
     end
 
-    defp exec_command(cmd, %{pty_opts: pty_opts}) do
+    defp exec_command(cmd) do
       [file | args] = cmd
       parent = self()
 
       env =
         System.get_env()
-        |> Map.put_new("TERM", get_term(pty_opts))
+        |> Map.put_new("TERM", get_term())
 
       opts = [
         env: env,
@@ -97,15 +95,6 @@ if Code.ensure_loaded?(ExPTY) do
           send(parent, {:pty_exit, pty_pid, exit_code})
         end
       ]
-
-      opts =
-        case pty_opts do
-          nil ->
-            opts
-
-          {_term, cols, rows, _, _, _} ->
-            opts ++ [cols: cols, rows: rows]
-        end
 
       case ExPTY.spawn(file, args, opts) do
         {:ok, pty_pid} ->
@@ -129,18 +118,13 @@ if Code.ensure_loaded?(ExPTY) do
       end
     end
 
-    defp get_term(nil) do
+    defp get_term() do
       if term = System.get_env("TERM") do
         term
       else
         "xterm"
       end
     end
-
-    # erlang pty_ch_msg contains the value of TERM
-    # https://www.erlang.org/doc/man/ssh_connection.html#type-pty_ch_msg
-    defp get_term({term, _, _, _, _, _} = _pty_ch_msg) when is_list(term),
-      do: List.to_string(term)
   end
 else
   defmodule NervesHubLink.Extensions.LocalShell do
