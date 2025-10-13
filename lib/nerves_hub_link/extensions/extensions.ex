@@ -209,7 +209,16 @@ defmodule NervesHubLink.Extensions do
         [extension, event] ->
           case state.extensions[extension] do
             %{module: module} ->
-              send(module, {:__extension_event__, event, payload})
+              try do
+                send(module, {:__extension_event__, event, payload})
+              rescue
+                error ->
+                  Logger.error(
+                    "[NervesHubLink.Extensions] Error handling event `#{inspect(event)}` with payload `#{inspect(payload)}`: #{inspect(error)}"
+                  )
+
+                  nil
+              end
 
             _ ->
               nil
