@@ -26,6 +26,7 @@
     "configurator",
     "defmock",
     "disksup",
+    "expty",
     "fwupdate",
     "Geolocation",
     "geoip",
