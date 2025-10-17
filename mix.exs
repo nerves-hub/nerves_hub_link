@@ -93,7 +93,8 @@ defmodule NervesHubLink.MixProject do
           NervesHubLink.Extensions.Health.MetricSet.Disk,
           NervesHubLink.Extensions.Health.MetricSet.Memory,
           NervesHubLink.Extensions.Health.MetricSet.NetworkTraffic,
-          NervesHubLink.Extensions.Health.Report
+          NervesHubLink.Extensions.Health.Report,
+          NervesHubLink.Extensions.LocalShell
         ],
         "Downloads and Updates": [
           NervesHubLink.UpdateManager,
@@ -148,6 +149,7 @@ defmodule NervesHubLink.MixProject do
       {:dialyxir, "~> 1.1", only: [:dev, :test], runtime: false},
       {:excoveralls, "~> 0.10", only: :test},
       {:ex_doc, "~> 0.18", only: :docs, runtime: false},
+      {:expty, "~> 0.2.1", optional: true},
       {:extty, "~> 0.4.1"},
       {:fwup, "~> 1.0"},
       {:jason, "~> 1.0"},

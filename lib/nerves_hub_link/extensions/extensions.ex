@@ -26,9 +26,13 @@ defmodule NervesHubLink.Extensions do
   require Logger
 
   @default_extension_modules [
-    NervesHubLink.Extensions.Health,
-    NervesHubLink.Extensions.Geo
-  ]
+                               NervesHubLink.Extensions.Health,
+                               NervesHubLink.Extensions.Geo
+                             ] ++
+                               if(Code.ensure_loaded?(ExPTY),
+                                 do: [NervesHubLink.Extensions.LocalShell],
+                                 else: []
+                               )
 
   @doc """
   Invoked when routing an Extension event
@@ -208,7 +212,16 @@ defmodule NervesHubLink.Extensions do
         [extension, event] ->
           case state.extensions[extension] do
             %{module: module} ->
-              send(module, {:__extension_event__, event, payload})
+              try do
+                send(module, {:__extension_event__, event, payload})
+              rescue
+                error ->
+                  Logger.error(
+                    "[NervesHubLink.Extensions] Error handling event `#{inspect(event)}` with payload `#{inspect(payload)}`: #{inspect(error)}"
+                  )
+
+                  nil
+              end
 
             _ ->
               nil
@@ -250,10 +263,24 @@ defmodule NervesHubLink.Extensions do
       def __name__(), do: unquote(name)
       def __version__(), do: unquote(version)
 
+      # Re-implemented the included `child_spec/1` function from `use GenServer` so
+      # that `@doc false` can be used to hide `child_spec/1` from the generated docs.
+      @doc false
+      def child_spec(init_arg) do
+        default = %{
+          id: __MODULE__,
+          start: {__MODULE__, :start_link, [init_arg]}
+        }
+
+        Supervisor.child_spec(default, [])
+      end
+
+      @doc false
       def start_link(opts) do
         GenServer.start_link(__MODULE__, opts, name: __MODULE__)
       end
 
+      @doc false
       @spec push(String.t(), map()) ::
               {:ok, Slipstream.push_reference()} | {:error, reason :: :detached | term()}
       def push(event, payload) do
