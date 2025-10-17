@@ -26,10 +26,13 @@ defmodule NervesHubLink.Extensions do
   require Logger
 
   @default_extension_modules [
-    NervesHubLink.Extensions.Health,
-    NervesHubLink.Extensions.Geo,
-    NervesHubLink.Extensions.LocalShell
-  ]
+                               NervesHubLink.Extensions.Health,
+                               NervesHubLink.Extensions.Geo
+                             ] ++
+                               if(Code.ensure_loaded?(ExPTY),
+                                 do: [NervesHubLink.Extensions.LocalShell],
+                                 else: []
+                               )
 
   @doc """
   Invoked when routing an Extension event
