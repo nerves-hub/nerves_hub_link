@@ -20,6 +20,7 @@ defmodule NervesHubLink do
   a file to a connected console and more.
   """
 
+  alias NervesHubLink.Configurator
   alias NervesHubLink.Socket
 
   @doc """
@@ -67,10 +68,31 @@ defmodule NervesHubLink do
   defdelegate status(), to: NervesHubLink.UpdateManager
 
   @doc """
+  Refresh the config used by the socket connection
+  """
+  @spec refresh_config() :: :ok
+  def refresh_config() do
+    Configurator.build()
+    |> Socket.refresh_config()
+  end
+
+  @doc """
+  Establish a connection to the configured NervesHub platform
+  """
+  @spec establish_connection() :: :ok
+  defdelegate establish_connection(), to: Socket
+
+  @doc """
   Restart the socket and device channel
   """
   @spec reconnect() :: :ok
   defdelegate reconnect(), to: Socket
+
+  @doc """
+  Disconnect the socket, and don't reconnect
+  """
+  @spec disconnect!() :: :ok
+  defdelegate disconnect!(), to: Socket
 
   @doc """
   Send an update status to web
