@@ -18,28 +18,22 @@ defmodule NervesHubLink.Application do
 
   @impl Application
   def start(_type, _args) do
-    connect? = Application.get_env(:nerves_hub_link, :connect, true)
+    config = Configurator.build()
+
+    fwup_config = %FwupConfig{
+      fwup_devpath: config.fwup_devpath,
+      fwup_task: config.fwup_task,
+      fwup_env: config.fwup_env
+    }
 
     children =
-      if connect? do
-        config = Configurator.build()
-
-        fwup_config = %FwupConfig{
-          fwup_devpath: config.fwup_devpath,
-          fwup_task: config.fwup_task,
-          fwup_env: config.fwup_env
-        }
-
-        [
-          {DynamicSupervisor, name: ExtensionsSupervisor},
-          Extensions,
-          {UpdateManager, {fwup_config, config.updater}},
-          {ArchiveManager, config},
-          {Socket, config}
-        ]
-      else
-        []
-      end
+      [
+        {DynamicSupervisor, name: ExtensionsSupervisor},
+        Extensions,
+        {UpdateManager, {fwup_config, config.updater}},
+        {ArchiveManager, config},
+        {Socket, config}
+      ]
 
     Supervisor.start_link(children, strategy: :one_for_one, name: NervesHubLink.Supervisor)
   end
