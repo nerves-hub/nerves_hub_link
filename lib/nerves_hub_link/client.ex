@@ -110,7 +110,7 @@ defmodule NervesHubLink.Client do
 
   The default implementation returns `true`.
   """
-  @callback ready_to_connect?() :: bool()
+  @callback ready_to_connect?() :: boolean()
 
   @doc """
   Called when the connection to NervesHub has been established.
