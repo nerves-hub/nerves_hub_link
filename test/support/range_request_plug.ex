@@ -30,9 +30,9 @@ defmodule NervesHubLink.Support.RangeRequestPlug do
     {:ok, conn} = chunk(conn, resp)
 
     if byte_size(resp) + start == byte_size(payload) do
-      chunk(conn, "")
+      conn
     else
-      halt(conn)
+      resp(conn, 500, "Error")
     end
   end
 

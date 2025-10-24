@@ -13,28 +13,12 @@ defmodule NervesHubLink.Support.Utils do
 
   @spec supervise_plug(plug :: module()) :: {:ok, pid, integer()}
   def supervise_plug(plug) do
-    supervise_with_port(fn port ->
-      {Plug.Cowboy, scheme: :http, plug: plug, options: [port: port]}
-    end)
-  end
+    server =
+      {Bandit, scheme: :http, plug: plug, ip: :loopback, port: 0}
+      |> ExUnit.Callbacks.start_supervised!()
 
-  @spec supervise_with_port(function(), integer() | nil) :: {:ok, pid, integer()}
-  def supervise_with_port(child_spec_fn, port \\ nil) do
-    port =
-      if port do
-        port + 1
-      else
-        unique_port_number()
-      end
+    {:ok, {_address, port}} = ThousandIsland.listener_info(server)
 
-    child_spec = child_spec_fn.(port)
-
-    case ExUnit.Callbacks.start_supervised(child_spec) do
-      {:ok, plug} ->
-        {:ok, plug, port}
-
-      {:error, :eaddrinuse} ->
-        supervise_with_port(child_spec_fn, port)
-    end
+    {:ok, server, port}
   end
 end

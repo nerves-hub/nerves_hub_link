@@ -327,7 +327,7 @@ defmodule NervesHubLink.Downloader do
         %Downloader{request_ref: request_ref, status: status, handler_fun: handler} = state
       )
       when status >= 300 and status < 400 do
-    location = fetch_location(headers)
+    location = URI.merge(state.uri, fetch_location(headers))
     Logger.info("[NervesHubLink] Redirecting to #{location}")
 
     state = reset(state)

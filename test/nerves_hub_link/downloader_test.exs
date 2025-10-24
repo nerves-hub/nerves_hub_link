@@ -143,11 +143,7 @@ defmodule NervesHubLink.DownloaderTest do
 
   describe "redirect" do
     setup do
-      {:ok, plug, port} =
-        Utils.supervise_with_port(fn port ->
-          {Plug.Cowboy, scheme: :http, plug: {RedirectPlug, port: port}, options: [port: port]}
-        end)
-
+      {:ok, plug, port} = Utils.supervise_plug(RedirectPlug)
       {:ok, [plug: plug, url: "http://localhost:#{port}/redirect"]}
     end
 

@@ -14,8 +14,8 @@ defmodule NervesHubLink.Support.RedirectPlug do
   def init(options), do: options
 
   @impl Plug
-  def call(%Plug.Conn{request_path: "/redirect"} = conn, port: port) do
-    redirect = "http://localhost:#{port}/redirected"
+  def call(%Plug.Conn{request_path: "/redirect"} = conn, _opts) do
+    redirect = "/redirected"
 
     conn
     |> put_resp_header("accept-ranges", "bytes")
