@@ -24,6 +24,8 @@ defmodule NervesHubLink.Socket do
   alias NervesHubLink.UpdateManager
   alias NervesHubLink.UploadFile
 
+  alias Mint.WebSocket.UpgradeFailureError
+
   require Logger
 
   @console_topic "console"
@@ -31,6 +33,8 @@ defmodule NervesHubLink.Socket do
   @extensions_topic "extensions"
 
   @firmware_validation_check_interval :timer.seconds(10)
+
+  @max_redirects 2
 
   @type update_status ::
           :received
@@ -132,6 +136,7 @@ defmodule NervesHubLink.Socket do
       |> assign(connected_at: nil)
       |> assign(joined_at: nil)
       |> assign(firmware_validation_timer_pid: nil)
+      |> assign(redirect_count: 0)
 
     if config.connect_wait_for_network do
       schedule_network_availability_check()
@@ -184,6 +189,7 @@ defmodule NervesHubLink.Socket do
       |> join(@device_topic, device_join_params)
       |> maybe_join_console()
       |> assign(connected_at: System.monotonic_time(:millisecond))
+      |> assign(redirect_count: 0)
 
     Alarms.clear_alarm(NervesHubLink.Disconnected)
 
@@ -626,8 +632,36 @@ defmodule NervesHubLink.Socket do
           channel_config
       end
 
-    socket = %{socket | channel_config: channel_config}
+    %{socket | channel_config: channel_config}
+    |> handle_redirect(reason)
+  end
 
+  defp handle_redirect(
+         %{assigns: %{redirect_count: redirect_count}} = socket,
+         {:error,
+          {:upgrade_failure,
+           %{reason: %UpgradeFailureError{status_code: status, headers: headers}}}} = error
+       )
+       when status >= 300 and status < 400 do
+    if redirect_count < @max_redirects do
+      {_, location} = Enum.find(headers, fn {k, _v} -> k == "location" end)
+
+      uri = URI.merge(socket.channel_config.uri, URI.parse(location))
+
+      channel_config = %{socket.channel_config | uri: uri}
+
+      Logger.warning("[NervesHubLink] redirect received : #{URI.to_string(uri)}")
+
+      %{socket | channel_config: channel_config}
+      |> update(:redirect_count, &(&1 + 1))
+      |> reconnect()
+    else
+      Logger.error("[NervesHubLink] maximum redirect count reached : #{inspect(error)}")
+      {:ok, socket}
+    end
+  end
+
+  defp handle_redirect(socket, _reason) do
     reconnect(socket)
   end
 
