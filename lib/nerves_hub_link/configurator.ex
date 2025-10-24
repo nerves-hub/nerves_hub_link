@@ -165,10 +165,7 @@ defmodule NervesHubLink.Configurator do
       base.ssl
       |> Keyword.put_new(:verify, :verify_peer)
       |> Keyword.put_new(:versions, [:"tlsv1.2"])
-      |> Keyword.put_new(
-        :server_name_indication,
-        to_charlist(base.sni || base.device_api_sni || url.host)
-      )
+      |> update_server_name_indication(base)
 
     fwup_devpath = KV.get(@fwup_devpath)
 
@@ -179,6 +176,14 @@ defmodule NervesHubLink.Configurator do
       |> Map.put("console_version", @console_version)
 
     %{base | params: params, socket: socket, ssl: ssl, fwup_devpath: fwup_devpath}
+  end
+
+  defp update_server_name_indication(ssl, base) do
+    if base.sni || base.device_api_sni do
+      Keyword.put_new(ssl, :server_name_indication, to_charlist(base.sni || base.device_api_sni))
+    else
+      ssl
+    end
   end
 
   defp fwup_version() do
