@@ -648,7 +648,24 @@ defmodule NervesHubLink.Socket do
 
       uri = URI.merge(socket.channel_config.uri, URI.parse(location))
 
-      channel_config = %{socket.channel_config | uri: uri}
+      uri =
+        case uri.scheme do
+          "http" -> %{uri | scheme: "ws"}
+          "https" -> %{uri | scheme: "wss"}
+          _ -> uri
+        end
+
+      mint_opts =
+        if transport_opts = socket.channel_config.mint_opts[:transport_opts] do
+          transport_opts =
+            Keyword.put(transport_opts, :server_name_indication, to_charlist(uri.host))
+
+          Keyword.put(socket.channel_config.mint_opts, :transport_opts, transport_opts)
+        else
+          socket.channel_config.mint_opts
+        end
+
+      channel_config = %{socket.channel_config | uri: uri, mint_opts: mint_opts}
 
       Logger.warning("[NervesHubLink] redirect received : #{URI.to_string(uri)}")
 
