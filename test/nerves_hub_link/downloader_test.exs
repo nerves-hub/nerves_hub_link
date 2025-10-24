@@ -43,6 +43,8 @@ defmodule NervesHubLink.DownloaderTest do
     assert_receive {:error, %Mint.TransportError{reason: :econnrefused}}
     # then exit
     assert_receive {:EXIT, ^download, :max_disconnects_reached}
+
+    assert_shutdown(download)
   end
 
   test "max_timeout" do
@@ -58,6 +60,8 @@ defmodule NervesHubLink.DownloaderTest do
 
     assert_receive {:error, %Mint.TransportError{reason: :econnrefused}}, 1000
     assert_receive {:EXIT, ^download, :max_timeout_reached}
+
+    assert_shutdown(download)
   end
 
   describe "idle timeout" do
@@ -80,10 +84,12 @@ defmodule NervesHubLink.DownloaderTest do
           time_between_retries: 10
         )
 
-      {:ok, _download} = Downloader.start_download(url, handler_fun, retry_config: retry_args)
+      {:ok, download} = Downloader.start_download(url, handler_fun, retry_config: retry_args)
       assert_receive {:error, :idle_timeout}, 1000
       assert_receive {:data, "content", _}
       assert_receive :complete
+
+      assert_shutdown(download)
     end
   end
 
@@ -108,6 +114,8 @@ defmodule NervesHubLink.DownloaderTest do
 
       assert_receive {:error, %Mint.HTTPError{reason: {:http_error, 416}}}, 1000
       assert_receive {:EXIT, ^download, {:http_error, 416}}
+
+      assert_shutdown(download)
     end
   end
 
@@ -137,7 +145,7 @@ defmodule NervesHubLink.DownloaderTest do
 
       assert_receive :complete
 
-      refute Process.alive?(download)
+      assert_shutdown(download)
     end
   end
 
@@ -166,7 +174,7 @@ defmodule NervesHubLink.DownloaderTest do
 
       assert_receive :complete
 
-      refute Process.alive?(download)
+      assert_shutdown(download)
     end
   end
 
@@ -190,7 +198,7 @@ defmodule NervesHubLink.DownloaderTest do
       # download the first part of the data.
       # the plug will terminate the connection after 2048 bytes are sent.
       # the handler_fun will send the data to this test's mailbox.
-      {:ok, _download} =
+      {:ok, download} =
         Downloader.start_download(url, handler_fun, retry_config: @short_retry_args)
 
       assert_receive {:data, ^expected_data_part_1, _}, 1000
@@ -203,6 +211,20 @@ defmodule NervesHubLink.DownloaderTest do
 
       # the request should complete successfully this time
       assert_receive :complete
+
+      assert_shutdown(download)
     end
+  end
+
+  defp assert_shutdown(download) do
+    # make sure all messages are processed
+    try do
+      :sys.get_state(download)
+    catch
+      :exit, _reason ->
+        :ok
+    end
+
+    refute Process.alive?(download)
   end
 end
