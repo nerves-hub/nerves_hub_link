@@ -655,19 +655,9 @@ defmodule NervesHubLink.Socket do
           _ -> uri
         end
 
-      mint_opts =
-        if transport_opts = socket.channel_config.mint_opts[:transport_opts] do
-          transport_opts =
-            Keyword.put(transport_opts, :server_name_indication, to_charlist(uri.host))
+      channel_config = %{socket.channel_config | uri: uri}
 
-          Keyword.put(socket.channel_config.mint_opts, :transport_opts, transport_opts)
-        else
-          socket.channel_config.mint_opts
-        end
-
-      channel_config = %{socket.channel_config | uri: uri, mint_opts: mint_opts}
-
-      Logger.warning("[NervesHubLink] redirect received : #{URI.to_string(uri)}")
+      Logger.info("[NervesHubLink] redirect received : #{URI.to_string(uri)}")
 
       %{socket | channel_config: channel_config}
       |> update(:redirect_count, &(&1 + 1))
