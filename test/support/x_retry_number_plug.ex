@@ -36,11 +36,10 @@ defmodule NervesHubLink.Support.XRetryNumberPlug do
     cond do
       is_nil(started_from) ->
         {:ok, conn} = chunk(conn, :binary.copy(<<retry_number::8>>, 2048))
-        halt(conn)
+        send_resp(conn, 500, "Error")
 
       started_from + 2048 == @content_length ->
         {:ok, conn} = chunk(conn, :binary.copy(<<retry_number::8>>, 2048))
-        chunk(conn, "")
         conn
 
       true ->
