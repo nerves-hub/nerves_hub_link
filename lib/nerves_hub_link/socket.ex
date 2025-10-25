@@ -761,7 +761,6 @@ defmodule NervesHubLink.Socket do
   defp start_iex(socket) do
     shell_opts = [[dot_iex_path: dot_iex_path()]]
     {:ok, iex_pid} = ExTTY.start_link(handler: self(), type: :elixir, shell_opts: shell_opts)
-    # %{state | iex_pid: iex_pid}
     assign(socket, iex_pid: iex_pid)
   end
 
