@@ -189,9 +189,8 @@ defmodule NervesHubLink.Socket do
   end
 
   @impl Slipstream
-  def handle_join(@device_topic, reply, socket) do
+  def handle_join(@device_topic, _reply, socket) do
     Logger.debug("[#{inspect(__MODULE__)}] Joined Device channel")
-    _ = handle_join_reply(reply, socket)
     {:ok, assign(socket, joined_at: System.monotonic_time(:millisecond))}
   end
 
@@ -714,22 +713,6 @@ defmodule NervesHubLink.Socket do
 
   defp maybe_cancel_timer(nil), do: :ok
   defp maybe_cancel_timer(pid), do: Process.cancel_timer(pid)
-
-  defp handle_join_reply(%{"firmware_url" => url} = update, socket) when is_binary(url) do
-    case UpdateInfo.parse(update) do
-      {:ok, %UpdateInfo{} = info} ->
-        UpdateManager.apply_update(info, socket.assigns.config.fwup_public_keys)
-
-      error ->
-        Logger.error(
-          "[NervesHubLink] Error parsing update data: #{inspect(update)} error: #{inspect(error)}"
-        )
-
-        :noop
-    end
-  end
-
-  defp handle_join_reply(_, _), do: :noop
 
   defp maybe_join_console(socket) do
     if socket.assigns.remote_iex do
