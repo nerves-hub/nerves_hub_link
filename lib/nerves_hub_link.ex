@@ -22,6 +22,16 @@ defmodule NervesHubLink do
 
   alias NervesHubLink.Socket
 
+  @type update_status ::
+          :received
+          | {:downloading, non_neg_integer()}
+          | {:updating, non_neg_integer()}
+          | :completed
+          | {:ignored, reason :: String.t()}
+          | {:reschedule, delay_for :: pos_integer()}
+          | {:reschedule, delay_for :: pos_integer(), reason :: String.t()}
+          | {:failed, reason :: String.t()}
+
   @doc """
   Checks if the device is connected to the NervesHub device channel.
   """
@@ -75,7 +85,7 @@ defmodule NervesHubLink do
   @doc """
   Send an update status to web
   """
-  @spec send_update_status(Socket.update_status()) :: :ok
+  @spec send_update_status(update_status()) :: :ok
   defdelegate send_update_status(status), to: Socket
 
   @doc """

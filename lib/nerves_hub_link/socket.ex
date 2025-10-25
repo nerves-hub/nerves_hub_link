@@ -36,16 +36,6 @@ defmodule NervesHubLink.Socket do
 
   @max_redirects 2
 
-  @type update_status ::
-          :received
-          | {:downloading, non_neg_integer()}
-          | {:updating, non_neg_integer()}
-          | :completed
-          | {:ignored, reason :: String.t()}
-          | {:reschedule, delay_for :: pos_integer()}
-          | {:reschedule, delay_for :: pos_integer(), reason :: String.t()}
-          | {:failed, reason :: String.t()}
-
   @spec start_link(Configurator.Config.t()) :: GenServer.on_start()
   def start_link(config) do
     GenServer.start_link(__MODULE__, config, name: __MODULE__)
@@ -56,7 +46,7 @@ defmodule NervesHubLink.Socket do
     GenServer.cast(__MODULE__, :reconnect)
   end
 
-  @spec send_update_status(update_status()) :: :ok
+  @spec send_update_status(NervesHubLink.update_status()) :: :ok
   def send_update_status(status) do
     GenServer.cast(__MODULE__, {:send_update_status, status})
   end
@@ -150,14 +140,12 @@ defmodule NervesHubLink.Socket do
   def handle_continue(:connect, %{assigns: %{config: config}} = socket) do
     Logger.info("[NervesHubLink] connecting to #{config.socket[:url].host}")
 
-    rejoin_after = Application.get_env(:nerves_hub_link, :rejoin_after, 5_000)
-
     opts = [
       mint_opts: mint_opts(config),
       extensions: mint_extensions(config),
       headers: config.socket[:headers] || [],
       uri: config.socket[:url],
-      rejoin_after_msec: [rejoin_after],
+      rejoin_after_msec: List.flatten([config.rejoin_after]),
       reconnect_after_msec: config.socket[:reconnect_after_msec],
       heartbeat_interval_msec: config.heartbeat_interval_msec
     ]
@@ -201,9 +189,8 @@ defmodule NervesHubLink.Socket do
   end
 
   @impl Slipstream
-  def handle_join(@device_topic, reply, socket) do
+  def handle_join(@device_topic, _reply, socket) do
     Logger.debug("[#{inspect(__MODULE__)}] Joined Device channel")
-    _ = handle_join_reply(reply, socket)
     {:ok, assign(socket, joined_at: System.monotonic_time(:millisecond))}
   end
 
@@ -214,6 +201,7 @@ defmodule NervesHubLink.Socket do
 
   def handle_join(@extensions_topic, extensions, socket) do
     NervesHubLink.Extensions.attach(extensions)
+    Logger.debug("[#{inspect(__MODULE__)}] Joined Extensions channel")
     {:ok, socket}
   end
 
@@ -726,22 +714,6 @@ defmodule NervesHubLink.Socket do
   defp maybe_cancel_timer(nil), do: :ok
   defp maybe_cancel_timer(pid), do: Process.cancel_timer(pid)
 
-  defp handle_join_reply(%{"firmware_url" => url} = update, socket) when is_binary(url) do
-    case UpdateInfo.parse(update) do
-      {:ok, %UpdateInfo{} = info} ->
-        UpdateManager.apply_update(info, socket.assigns.config.fwup_public_keys)
-
-      error ->
-        Logger.error(
-          "[NervesHubLink] Error parsing update data: #{inspect(update)} error: #{inspect(error)}"
-        )
-
-        :noop
-    end
-  end
-
-  defp handle_join_reply(_, _), do: :noop
-
   defp maybe_join_console(socket) do
     if socket.assigns.remote_iex do
       join(socket, @console_topic, socket.assigns.params)
@@ -751,7 +723,7 @@ defmodule NervesHubLink.Socket do
   end
 
   defp set_iex_timer(socket) do
-    timeout = Application.get_env(:nerves_hub_link, :remote_iex_timeout, 300) * 1000
+    timeout = socket.assigns.config.remote_iex_timeout
     old_timer = socket.assigns[:iex_timer]
 
     _ = if old_timer, do: Process.cancel_timer(old_timer)
@@ -762,7 +734,6 @@ defmodule NervesHubLink.Socket do
   defp start_iex(socket) do
     shell_opts = [[dot_iex_path: dot_iex_path()]]
     {:ok, iex_pid} = ExTTY.start_link(handler: self(), type: :elixir, shell_opts: shell_opts)
-    # %{state | iex_pid: iex_pid}
     assign(socket, iex_pid: iex_pid)
   end
 
