@@ -36,16 +36,6 @@ defmodule NervesHubLink.Socket do
 
   @max_redirects 2
 
-  @type update_status ::
-          :received
-          | {:downloading, non_neg_integer()}
-          | {:updating, non_neg_integer()}
-          | :completed
-          | {:ignored, reason :: String.t()}
-          | {:reschedule, delay_for :: pos_integer()}
-          | {:reschedule, delay_for :: pos_integer(), reason :: String.t()}
-          | {:failed, reason :: String.t()}
-
   @spec start_link(Configurator.Config.t()) :: GenServer.on_start()
   def start_link(config) do
     GenServer.start_link(__MODULE__, config, name: __MODULE__)
@@ -56,7 +46,7 @@ defmodule NervesHubLink.Socket do
     GenServer.cast(__MODULE__, :reconnect)
   end
 
-  @spec send_update_status(update_status()) :: :ok
+  @spec send_update_status(NervesHubLink.update_status()) :: :ok
   def send_update_status(status) do
     GenServer.cast(__MODULE__, {:send_update_status, status})
   end
