@@ -22,6 +22,7 @@ defmodule NervesHubLink.Client do
   - `c:handle_error/1` - a firmware update has failed
   - `c:handle_fwup_message/1` - a message has been received by `NervesHubLink.UpdateManager`
   - `c:identify/0` - a request received from NervesHub to identify the device (eg. blink leds)
+  - `c:ready_to_connect?/0` - confirm if a connection to NervesHub should be established
   - `c:reboot/0` - a request received from NervesHub to reboot the device
   - `c:reconnect_backoff/0` - how NervesHubLink should handle reconnection backoffs
   - `c:update_available/1` - should a firmware update be applied
@@ -100,6 +101,16 @@ defmodule NervesHubLink.Client do
           | {:warning, non_neg_integer(), String.t()}
           | {:error, non_neg_integer(), String.t()}
           | {:progress, 0..100}
+
+  @doc """
+  Called by the NervesHubLink socket to confirm if a connection to NervesHub should be established.
+
+  For example, this can be used to delay the connection to the NervesHub platform while SSL keys and
+  certs are generated, or a device's TPM or NervesKey modules initialize.
+
+  The default implementation returns `true`.
+  """
+  @callback ready_to_connect?() :: boolean()
 
   @doc """
   Called when the connection to NervesHub has been established.
@@ -204,9 +215,29 @@ defmodule NervesHubLink.Client do
     connected: 0,
     firmware_auto_revert_detected?: 0,
     firmware_validated?: 0,
+    ready_to_connect?: 0,
     reboot: 0,
     reconnect_backoff: 0
   ]
+
+  @spec ready_to_connect?() :: bool()
+  def ready_to_connect?() do
+    if function_exported?(mod(), :ready_to_connect?, 0) do
+      case apply_wrap(mod(), :ready_to_connect?, []) do
+        result when is_boolean(result) ->
+          result
+
+        wrong ->
+          Logger.error(
+            "[NervesHubLink.Client] #{inspect(mod())}.ready_to_connect?/0 result not recognized (#{inspect(wrong)}), returning `true`."
+          )
+
+          true
+      end
+    else
+      true
+    end
+  end
 
   @spec connected() :: any
   def connected() do
