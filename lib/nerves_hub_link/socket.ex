@@ -150,14 +150,12 @@ defmodule NervesHubLink.Socket do
   def handle_continue(:connect, %{assigns: %{config: config}} = socket) do
     Logger.info("[NervesHubLink] connecting to #{config.socket[:url].host}")
 
-    rejoin_after = Application.get_env(:nerves_hub_link, :rejoin_after, 5_000)
-
     opts = [
       mint_opts: mint_opts(config),
       extensions: mint_extensions(config),
       headers: config.socket[:headers] || [],
       uri: config.socket[:url],
-      rejoin_after_msec: [rejoin_after],
+      rejoin_after_msec: List.flatten([config.rejoin_after]),
       reconnect_after_msec: config.socket[:reconnect_after_msec],
       heartbeat_interval_msec: config.heartbeat_interval_msec
     ]
@@ -751,7 +749,7 @@ defmodule NervesHubLink.Socket do
   end
 
   defp set_iex_timer(socket) do
-    timeout = Application.get_env(:nerves_hub_link, :remote_iex_timeout, 300) * 1000
+    timeout = socket.assigns.config.remote_iex_timeout
     old_timer = socket.assigns[:iex_timer]
 
     _ = if old_timer, do: Process.cancel_timer(old_timer)
