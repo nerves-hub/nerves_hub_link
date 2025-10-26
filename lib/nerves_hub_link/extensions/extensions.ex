@@ -131,7 +131,7 @@ defmodule NervesHubLink.Extensions do
             do: event,
             else: "#{extension}:#{event}"
 
-        Socket.push("extensions", scoped_event, payload)
+        Socket.push_extensions_message(scoped_event, payload)
       else
         {:error, :detached}
       end
@@ -150,7 +150,7 @@ defmodule NervesHubLink.Extensions do
         acc ->
           # Ignore since either :ok, or {:error, :not_found}
           _ = DynamicSupervisor.terminate_child(ExtensionsSupervisor, pid)
-          _ = Socket.push("extensions", "#{extension}:detached", %{})
+          _ = Socket.push_extensions_message("#{extension}:detached", %{})
           put_in(acc.extensions[extension][:attached?], false)
       end
 
@@ -165,12 +165,12 @@ defmodule NervesHubLink.Extensions do
         acc ->
           with mod when not is_nil(mod) <- state.extensions[extension][:module],
                :ok <- start_extension(mod),
-               {:ok, ref} <- Socket.push("extensions", "#{extension}:attached", %{}) do
+               {:ok, ref} <- Socket.push_extensions_message("#{extension}:attached", %{}) do
             update_in(acc.extensions[extension], &%{&1 | attached?: true, attach_ref: ref})
           else
             error ->
               reason = if error, do: "start_failure", else: "unknown_extension"
-              _ = Socket.push("extensions", "#{extension}:error", %{reason: reason})
+              _ = Socket.push_extensions_message("#{extension}:error", %{reason: reason})
 
               Logger.warning(
                 "[NervesHubLink.Extensions] failed to start #{extension}: #{inspect(error)}"
