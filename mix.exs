@@ -46,7 +46,9 @@ defmodule NervesHubLink.MixProject do
 
   defp dialyzer() do
     [
-      flags: [:missing_return, :extra_return, :error_handling, :underspecs, :unmatched_returns]
+      flags: [:missing_return, :extra_return, :error_handling, :underspecs, :unmatched_returns],
+      plt_file: {:no_warn, "priv/plts/project.plt"},
+      plt_add_apps: [:ex_unit]
     ]
   end
 
@@ -145,7 +147,7 @@ defmodule NervesHubLink.MixProject do
     [
       {:alarmist, "~> 0.3", optional: true},
       {:castore, "~> 0.1 or ~> 1.0", optional: true},
-      {:credo, "~> 1.2", only: :dev, runtime: false},
+      {:credo, "~> 1.2", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.1", only: [:dev, :test], runtime: false},
       {:excoveralls, "~> 0.10", only: :test},
       {:ex_doc, "~> 0.18", only: :docs, runtime: false},
