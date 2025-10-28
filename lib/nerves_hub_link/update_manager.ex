@@ -130,7 +130,7 @@ defmodule NervesHubLink.UpdateManager do
 
   @impl GenServer
   def handle_cast({:change_updater, updater}, state) do
-    {:noreply, %State{state | updater: updater}}
+    {:noreply, %{state | updater: updater}}
   end
 
   @impl GenServer
@@ -183,7 +183,7 @@ defmodule NervesHubLink.UpdateManager do
     )
 
     NervesHubLink.send_update_status({:failed, "Unexpected error : #{inspect(msg)}"})
-    {:noreply, %State{state | status: :idle, updater_pid: nil, update_info: nil}}
+    {:noreply, %{state | status: :idle, updater_pid: nil, update_info: nil}}
   end
 
   @spec maybe_update_firmware(UpdateInfo.t(), [binary()], State.t()) :: State.t()
