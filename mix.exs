@@ -15,14 +15,6 @@ defmodule NervesHubLink.MixProject do
       elixir: "~> 1.14",
       elixirc_paths: elixirc_paths(Mix.env()),
       package: package(),
-      preferred_cli_env: [
-        coveralls: :test,
-        "coveralls.detail": :test,
-        "coveralls.post": :test,
-        "coveralls.html": :test,
-        docs: :docs,
-        "hex.publish": :docs
-      ],
       start_permanent: Mix.env() == :prod,
       test_coverage: [tool: ExCoveralls],
       version: @version
@@ -37,6 +29,19 @@ defmodule NervesHubLink.MixProject do
       ],
       extra_applications: [:logger, :iex, :inets, :sasl, :os_mon],
       mod: {NervesHubLink.Application, []}
+    ]
+  end
+
+  def cli do
+    [
+      preferred_envs: [
+        coveralls: :test,
+        "coveralls.detail": :test,
+        "coveralls.post": :test,
+        "coveralls.html": :test,
+        docs: :docs,
+        "hex.publish": :docs
+      ]
     ]
   end
 

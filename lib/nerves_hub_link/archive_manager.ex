@@ -119,7 +119,7 @@ defmodule NervesHubLink.ArchiveManager do
   @impl GenServer
   def handle_info({:update_reschedule, response, verification_keys}, state) do
     {:noreply,
-     maybe_update_archive(response, verification_keys, %__MODULE__{
+     maybe_update_archive(response, verification_keys, %{
        state
        | update_reschedule_timer: nil
      })}
@@ -144,7 +144,7 @@ defmodule NervesHubLink.ArchiveManager do
     end
 
     {:noreply,
-     %__MODULE__{
+     %{
        state
        | archive_info: nil,
          file_path: nil,
@@ -192,7 +192,7 @@ defmodule NervesHubLink.ArchiveManager do
         _ = File.rm_rf(temp_file_path)
         _ = File.touch(temp_file_path)
 
-        %__MODULE__{
+        %{
           state
           | archive_info: info,
             file_path: file_path,
