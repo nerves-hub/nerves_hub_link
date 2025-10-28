@@ -19,6 +19,11 @@ erl_crash.dump
 # Also ignore archive artifacts (built via "mix archive.build").
 *.ez
 
+# Ignore the generated PLT file and its hash.
+# https://github.com/jeremyjh/dialyxir?tab=readme-ov-file#continuous-integration
+/priv/plts/*.plt
+/priv/plts/*.plt.hash
+
 # Ignore package tarball (built via "mix hex.build").
 nerves_hub-*.tar
 
