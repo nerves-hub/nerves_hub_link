@@ -41,6 +41,11 @@ defmodule NervesHubLink.Socket do
     GenServer.start_link(__MODULE__, config, name: __MODULE__)
   end
 
+  @spec disconnect!() :: :ok
+  def disconnect!() do
+    GenServer.cast(__MODULE__, :disconnect!)
+  end
+
   @spec reconnect() :: :ok
   def reconnect() do
     GenServer.cast(__MODULE__, :reconnect)
@@ -49,6 +54,16 @@ defmodule NervesHubLink.Socket do
   @spec send_update_status(NervesHubLink.update_status()) :: :ok
   def send_update_status(status) do
     GenServer.cast(__MODULE__, {:send_update_status, status})
+  end
+
+  @spec establish_connection() :: :ok
+  def establish_connection() do
+    GenServer.cast(__MODULE__, :establish_connection)
+  end
+
+  @spec refresh_config(Configurator.Config.t()) :: :ok
+  def refresh_config(config) do
+    GenServer.cast(__MODULE__, {:refresh_config, config})
   end
 
   @spec check_connection(atom()) :: boolean()
@@ -128,11 +143,20 @@ defmodule NervesHubLink.Socket do
       |> assign(firmware_validation_timer_pid: nil)
       |> assign(redirect_count: 0)
 
-    if config.connect_wait_for_network do
-      schedule_network_availability_check()
-      {:ok, socket}
-    else
-      {:ok, socket, {:continue, :connect}}
+    cond do
+      not config.connect ->
+        {:ok, socket}
+
+      not Client.ready_to_connect?() ->
+        schedule_establish_connection_check()
+        {:ok, socket}
+
+      config.connect_wait_for_network ->
+        schedule_network_availability_check()
+        {:ok, socket}
+
+      true ->
+        {:ok, socket, {:continue, :connect}}
     end
   end
 
@@ -150,7 +174,10 @@ defmodule NervesHubLink.Socket do
       heartbeat_interval_msec: config.heartbeat_interval_msec
     ]
 
-    socket = connect!(socket, opts)
+    socket =
+      socket
+      |> connect!(opts)
+      |> assign(auto_reconnect: true)
 
     Process.flag(:trap_exit, true)
 
@@ -287,6 +314,39 @@ defmodule NervesHubLink.Socket do
   end
 
   @impl Slipstream
+  def handle_cast({:refresh_config, config}, socket) do
+    socket = if(connected?(socket), do: disconnect(socket), else: socket)
+
+    socket =
+      socket
+      |> assign(config: config)
+      |> assign(params: config.params)
+      |> assign(remote_iex: config.remote_iex)
+      |> assign(data_path: config.data_path)
+      |> assign(started_at: System.monotonic_time(:millisecond))
+      |> assign(connected_at: nil)
+      |> assign(joined_at: nil)
+
+    {:noreply, socket}
+  end
+
+  def handle_cast(:disconnect!, socket) do
+    socket =
+      socket
+      |> disconnect()
+      |> assign(auto_reconnect: false)
+
+    {:noreply, socket}
+  end
+
+  def handle_cast(:establish_connection, socket) do
+    if connected?(socket) do
+      {:noreply, socket}
+    else
+      {:noreply, socket, {:continue, :connect}}
+    end
+  end
+
   def handle_cast(:reconnect, socket) do
     # See handle_disconnect/2 for the reconnect call once the connection is
     # closed.
@@ -506,6 +566,18 @@ defmodule NervesHubLink.Socket do
     end
   end
 
+  def handle_info(:check_should_establish_connection, socket) do
+    case Client.ready_to_connect?() do
+      true ->
+        {:noreply, socket, {:continue, :connect}}
+
+      false ->
+        Logger.info("[NervesHubLink] waiting for `Client.ready_to_connect?()` to return `true`")
+        schedule_establish_connection_check(5_000)
+        {:noreply, socket}
+    end
+  end
+
   def handle_info(:firmware_validation_status_check, socket) do
     if Client.firmware_validated?() do
       Logger.info("[NervesHubLink] Firmware is validated, notifying NervesHub")
@@ -602,6 +674,11 @@ defmodule NervesHubLink.Socket do
   end
 
   @impl Slipstream
+  def handle_disconnect(reason, %{assigns: %{auto_reconnect: false}} = socket) do
+    :alarm_handler.set_alarm({NervesHubLink.Disconnected, [reason: reason]})
+    {:ok, socket}
+  end
+
   def handle_disconnect(reason, socket) do
     _ = Client.handle_error(reason)
     :alarm_handler.set_alarm({NervesHubLink.Disconnected, [reason: reason]})
@@ -691,6 +768,10 @@ defmodule NervesHubLink.Socket do
 
   defp schedule_network_availability_check(delay \\ 100) do
     Process.send_after(self(), :connect_check_network_availability, delay)
+  end
+
+  defp schedule_establish_connection_check(delay \\ 100) do
+    Process.send_after(self(), :check_should_establish_connection, delay)
   end
 
   defp schedule_firmware_validation_status_check(socket) do
