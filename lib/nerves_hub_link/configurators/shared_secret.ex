@@ -46,7 +46,7 @@ defmodule NervesHubLink.Configurator.SharedSecret do
       |> Keyword.put(:signed_at, System.os_time(:second))
 
     datetime = DateTime.from_unix!(opts[:signed_at]) |> DateTime.to_iso8601()
-    Logger.info("Generating auth headers with time #{datetime}")
+    Logger.info("[NervesHubLink:SharedSecret] Generating auth headers with time #{datetime}")
 
     alg =
       "#{opts[:signature_version]}-HMAC-#{opts[:key_digest]}-#{opts[:key_iterations]}-#{opts[:key_length]}"
