@@ -9,9 +9,17 @@ defmodule NervesHubLink.SupportScriptsManager do
   """
   use GenServer
 
+  alias NervesHubLink.Socket
+
   require Logger
 
   @default_timeout 10_000
+
+  @spec start_link(GenServer.options()) :: GenServer.on_start()
+  def start_link(opts \\ []) do
+    opts = Keyword.put_new(opts, :name, __MODULE__)
+    GenServer.start_link(__MODULE__, [], opts)
+  end
 
   @doc """
   Starts a task to execute a support script on the device.
