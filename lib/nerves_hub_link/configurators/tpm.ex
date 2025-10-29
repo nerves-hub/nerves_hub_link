@@ -25,14 +25,18 @@ if Code.ensure_loaded?(TPM) do
     The TPM integration defaults include:
     - initializing the modprobe `tpm_tis_spi`
     - reading the private key using the path `/data/.ssh/nerves_hub_link_key`
+    - restoring the private key from the TPM, using the memory address `"0x1000000"`, if it isn't found on the filesystem
     - and reading the certificate from the memory address `"0x1000001"`
 
     You can customize these options to use a different bus and certificate pair:
 
         config :nerves_hub_link, :tpm,
-          probe_name: "tpm_tis_i2c",
-          key_path: "/data/.ssh/nerves_hub_link/key",
-          certificate_address: "0x1000002"
+          probe_name: "tpm_tis_spi",
+          key_path: "/data/.ssh"
+          key_name: "nerves_hub_link_key",
+          key_address: "0x1000000"
+          certificate_address: "0x1000001"
+          restore_key: true
     """
 
     @behaviour NervesHubLink.Configurator
@@ -60,7 +64,10 @@ if Code.ensure_loaded?(TPM) do
       tpm_opts = config.tpm || []
 
       probe_name = tpm_opts[:probe_name] || "tpm_tis_spi"
-      key_path = tpm_opts[:key_path] || "/data/.ssh/nerves_hub_link_key"
+      key_path = tpm_opts[:key_path] || "/data/.ssh"
+      key_name = tpm_opts[:key_name] || "nerves_hub_link_key"
+      key_address = tpm_opts[:key_address] || "0x1000000"
+      restore_key = tpm_opts[:restore_key] || true
       certificate_address = tpm_opts[:certificate_address] || "0x1000001"
 
       # if the TPM isn't available (modprobe failed), explode
@@ -70,7 +77,7 @@ if Code.ensure_loaded?(TPM) do
 
       ssl =
         config.ssl
-        |> maybe_add_key(key_path)
+        |> maybe_add_key(key_path, key_name, key_address, restore_key)
         |> maybe_add_cert(certificate_address)
         |> maybe_add_signer_cert()
 
@@ -91,11 +98,17 @@ if Code.ensure_loaded?(TPM) do
       end
     end
 
-    defp maybe_add_key(ssl, key_path) do
+    defp maybe_add_key(ssl, key_path, key_name, key_address, restore_key) do
       Keyword.put_new_lazy(ssl, :key, fn ->
-        case TPM.Crypto.privkey(key_path) do
-          {:ok, privkey} -> privkey
-          {:error, _} -> raise "[NervesHubLink:TPM] TPM Unavailable"
+        Path.join(key_path, key_name)
+        |> TPM.Crypto.privkey()
+        |> case do
+          {:ok, privkey} ->
+            restore_private_key(key_path, key_name, key_address, restore_key)
+            privkey
+
+          {:error, error} ->
+            raise "[NervesHubLink:TPM] retrieving private key failed: #{inspect(error)}"
         end
       end)
     end
@@ -106,7 +119,8 @@ if Code.ensure_loaded?(TPM) do
              {:ok, cert} <- X509.Certificate.from_pem(cert_pem) do
           X509.Certificate.to_der(cert)
         else
-          _ -> raise "[NervesHubLink:TPM] TPM Unavailable"
+          error ->
+            raise "[NervesHubLink:TPM] retrieving certificate failed: #{inspect(error)}"
         end
       end)
     end
@@ -116,6 +130,25 @@ if Code.ensure_loaded?(TPM) do
         ssl
       else
         Keyword.put(ssl, :cacerts, Certificate.ca_certs())
+      end
+    end
+
+    defp restore_private_key(_key_path, _key_name, _key_address, false), do: :ok
+
+    defp restore_private_key(path, name, address, true) do
+      full_key_path = Path.join(path, name)
+
+      with {:key_exists?, false} <- {:key_exists?, File.exists?(full_key_path)},
+           {:ok, slot_data} <- TPM.nvread(address) do
+        Logger.info(
+          "[NervesHubLink:TPM] `#{full_key_path}` not found in file system. Restoring from TPM."
+        )
+
+        :ok = File.mkdir_p(path)
+        pem = String.trim_trailing(slot_data, <<0>>)
+        File.write!(full_key_path, pem)
+      else
+        _ -> :ok
       end
     end
   end
