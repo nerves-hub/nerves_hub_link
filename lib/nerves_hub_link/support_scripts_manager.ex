@@ -3,10 +3,10 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 defmodule NervesHubLink.SupportScriptsManager do
-  @moduledoc """
-  Executes support scripts on the device, sends the results to Hub (via Socket),
-  and makes sure the scripts don't run forever.
-  """
+  @moduledoc false
+  # Executes support scripts on the device, sends the results to Hub (via Socket),
+  # and makes sure the scripts don't run forever.
+
   use GenServer
 
   alias NervesHubLink.Socket
