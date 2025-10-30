@@ -35,62 +35,64 @@ defmodule NervesHubLink do
   @doc """
   Checks if the device is connected to the NervesHub device channel.
   """
-  @spec connected?() :: boolean()
-  def connected?() do
-    Socket.check_connection(:device)
+  @spec connected?(GenServer.server()) :: boolean()
+  def connected?(server \\ Socket) do
+    Socket.check_connection(server, :device)
   end
 
   @doc """
   Checks if the device is connected to the NervesHub console channel.
   """
-  @spec console_connected?() :: boolean()
-  def console_connected?() do
-    Socket.check_connection(:console)
+  @spec console_connected?(GenServer.server()) :: boolean()
+  def console_connected?(server \\ Socket) do
+    Socket.check_connection(server, :console)
   end
 
   @doc """
   Checks if the device is connected to the NervesHub extensions channel.
   """
-  @spec extensions_connected?() :: boolean()
-  def extensions_connected?() do
-    Socket.check_connection(:extensions)
+  @spec extensions_connected?(GenServer.server()) :: boolean()
+  def extensions_connected?(server \\ Socket) do
+    Socket.check_connection(server, :extensions)
   end
 
   @doc """
   Checks if the device has a socket connection with NervesHub
   """
-  @spec socket_connected?() :: boolean()
-  def socket_connected?() do
-    Socket.check_connection(:socket)
+  @spec socket_connected?(GenServer.server()) :: boolean()
+  def socket_connected?(server \\ Socket) do
+    Socket.check_connection(server, :socket)
   end
 
   @doc """
   Return whether there's currently an active console session
   """
-  @spec console_active?() :: boolean()
-  defdelegate console_active?, to: Socket
+  @spec console_active?(GenServer.server()) :: boolean()
+  defdelegate console_active?(server \\ Socket), to: Socket
 
   @doc """
   Current status of the update manager
   """
-  @spec status :: NervesHubLink.UpdateManager.status()
-  defdelegate status(), to: NervesHubLink.UpdateManager
+  @spec status(GenServer.server()) :: NervesHubLink.UpdateManager.status()
+  defdelegate status(server \\ Socket), to: NervesHubLink.UpdateManager
 
   @doc """
   Restart the socket and device channel
   """
-  @spec reconnect() :: :ok
-  defdelegate reconnect(), to: Socket
+  @spec reconnect(GenServer.server()) :: :ok
+  def reconnect(server \\ Socket) do
+    Socket.reconnect!(server)
+  end
 
   @doc """
   Send an update status to web
   """
-  @spec send_update_status(update_status()) :: :ok
-  defdelegate send_update_status(status), to: Socket
+  @spec send_update_status(GenServer.server(), update_status()) :: :ok
+  defdelegate send_update_status(server \\ Socket, status), to: Socket
 
   @doc """
   Send a file to the connected console
   """
-  @spec send_file(Path.t()) :: :ok | {:error, :too_large | File.posix()}
-  defdelegate send_file(file_path), to: Socket
+  @spec send_file(GenServer.server(), Path.t()) :: :ok | {:error, :too_large | File.posix()}
+  defdelegate send_file(server \\ Socket, file_path), to: Socket
 end
