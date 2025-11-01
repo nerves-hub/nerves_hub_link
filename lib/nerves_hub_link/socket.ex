@@ -723,7 +723,7 @@ defmodule NervesHubLink.Socket do
       Logger.debug("[NervesHubLink] Firmware validated and information sent during connection")
       socket
     else
-      _ = maybe_cancel_timer(socket.assigns[:firmware_validation_timer_pid])
+      maybe_cancel_timer(socket.assigns[:firmware_validation_timer_pid])
 
       pid =
         Process.send_after(
@@ -736,9 +736,6 @@ defmodule NervesHubLink.Socket do
     end
   end
 
-  defp maybe_cancel_timer(nil), do: :ok
-  defp maybe_cancel_timer(pid), do: Process.cancel_timer(pid)
-
   defp maybe_join_console(socket) do
     if socket.assigns.remote_iex do
       join(socket, @console_topic, socket.assigns.params)
@@ -749,9 +746,8 @@ defmodule NervesHubLink.Socket do
 
   defp set_iex_timer(socket) do
     timeout = socket.assigns.config.remote_iex_timeout
-    old_timer = socket.assigns[:iex_timer]
 
-    _ = if old_timer, do: Process.cancel_timer(old_timer)
+    maybe_cancel_timer(socket.assigns[:iex_timer])
 
     assign(socket, iex_timer: Process.send_after(self(), :iex_timeout, timeout))
   end
@@ -774,5 +770,12 @@ defmodule NervesHubLink.Socket do
     _ = Process.unlink(iex)
     GenServer.stop(iex, :normal, 10_000)
     assign(socket, iex_pid: nil)
+  end
+
+  defp maybe_cancel_timer(nil), do: :ok
+
+  defp maybe_cancel_timer(pid) do
+    _ = Process.cancel_timer(pid)
+    :ok
   end
 end
