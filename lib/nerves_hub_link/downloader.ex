@@ -51,6 +51,7 @@ defmodule NervesHubLink.Downloader do
             retry_number: 0,
             handler_fun: nil,
             retry_args: nil,
+            transport_opts: [],
             max_timeout: nil,
             resume_from_bytes: nil,
             retry_timeout: nil,
@@ -78,6 +79,7 @@ defmodule NervesHubLink.Downloader do
           retry_number: non_neg_integer(),
           handler_fun: event_handler_fun,
           retry_args: retry_args(),
+          transport_opts: keyword(),
           max_timeout: timer(),
           retry_timeout: nil | timer(),
           worst_case_timeout: nil | timer(),
@@ -99,7 +101,7 @@ defmodule NervesHubLink.Downloader do
   # todo, this should be `t`, but with retry_timeout
   @type resume_rescheduled :: t()
 
-  @type option :: {:resume_from_bytes, integer()} | {:retry_config, RetryConfig.t()}
+  @type option :: {:resume_from_bytes, integer()} | {:retry_config, RetryConfig.t()} | {:downloader_ssl, keyword()}
   @type options :: [option()]
 
   @doc """
@@ -129,6 +131,12 @@ defmodule NervesHubLink.Downloader do
 
     opts = Keyword.put(opts, :retry_config, retry_config)
 
+    transport_opts =
+      opts[:downloader_ssl] ||
+        Application.get_env(:nerves_hub_link, :downloader_ssl, [])
+
+    opts = Keyword.put(opts, :transport_opts, transport_opts)
+
     GenServer.start_link(__MODULE__, [URI.parse(url), fun, opts])
   end
 
@@ -140,6 +148,7 @@ defmodule NervesHubLink.Downloader do
       reset(%Downloader{
         handler_fun: fun,
         retry_args: opts[:retry_config],
+        transport_opts: opts[:transport_opts],
         max_timeout: timer,
         uri: uri,
         resume_from_bytes: opts[:resume_from_bytes]
@@ -417,7 +426,7 @@ defmodule NervesHubLink.Downloader do
           | {:error, Mint.HTTP.t(), Mint.Types.error()}
   defp resume_download(
          %URI{scheme: scheme, host: host, port: port, path: path, query: query} = uri,
-         %Downloader{} = state
+         %Downloader{transport_opts: transport_opts} = state
        )
        when scheme in ["https", "http"] do
     request_headers =
@@ -436,7 +445,7 @@ defmodule NervesHubLink.Downloader do
 
     close_conn(state)
 
-    with {:ok, conn} <- Mint.HTTP.connect(String.to_existing_atom(scheme), host, port),
+    with {:ok, conn} <- Mint.HTTP.connect(String.to_existing_atom(scheme), host, port, transport_opts: transport_opts),
          {:ok, conn, request_ref} <- Mint.HTTP.request(conn, "GET", path, request_headers, nil) do
       {:ok,
        %Downloader{
