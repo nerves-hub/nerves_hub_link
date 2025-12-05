@@ -160,7 +160,7 @@ my_der_list = [<<213, 34, 234, 53, 83, 8, 2, ...>>]
 config :nerves_hub_link, ssl: [cacerts: my_der_list]
 ```
 
-Simillarly the downloader can be configured to use custom CA certificates to establish the HTTP connection to the firmware download location.
+Similarly, the downloader can be configured to use custom CA certificates to establish the HTTP connection to the firmware download location.
 
 ```elixir
 my_der_list = [<<213, 34, 234, 53, 83, 8, 2, ...>>]
