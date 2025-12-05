@@ -101,7 +101,10 @@ defmodule NervesHubLink.Downloader do
   # todo, this should be `t`, but with retry_timeout
   @type resume_rescheduled :: t()
 
-  @type option :: {:resume_from_bytes, integer()} | {:retry_config, RetryConfig.t()} | {:downloader_ssl, keyword()}
+  @type option ::
+          {:resume_from_bytes, integer()}
+          | {:retry_config, RetryConfig.t()}
+          | {:downloader_ssl, keyword()}
   @type options :: [option()]
 
   @doc """
@@ -445,7 +448,10 @@ defmodule NervesHubLink.Downloader do
 
     close_conn(state)
 
-    with {:ok, conn} <- Mint.HTTP.connect(String.to_existing_atom(scheme), host, port, transport_opts: transport_opts),
+    with {:ok, conn} <-
+           Mint.HTTP.connect(String.to_existing_atom(scheme), host, port,
+             transport_opts: transport_opts
+           ),
          {:ok, conn, request_ref} <- Mint.HTTP.request(conn, "GET", path, request_headers, nil) do
       {:ok,
        %Downloader{
