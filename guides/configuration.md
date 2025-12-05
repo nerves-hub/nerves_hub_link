@@ -160,6 +160,13 @@ my_der_list = [<<213, 34, 234, 53, 83, 8, 2, ...>>]
 config :nerves_hub_link, ssl: [cacerts: my_der_list]
 ```
 
+Similarly, the downloader can be configured to use custom CA certificates to establish the HTTP connection to the firmware download location.
+
+```elixir
+my_der_list = [<<213, 34, 234, 53, 83, 8, 2, ...>>]
+config :nerves_hub_link, downloader_ssl: [cacerts: my_der_list]
+```
+
 ## Verifying network availability
 
 `NervesHubLink` will attempt to verify that the network is available before initiating the first connection attempt. This is done by checking if the `NervesHub` host address (`config.host`) can be resolved. If the network isn't available then the check will be run again in 2 seconds.
