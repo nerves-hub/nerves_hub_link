@@ -47,6 +47,7 @@ defmodule NervesHubLink.Configurator do
               fwup_devpath: "/dev/mmcblk0",
               fwup_env: [],
               fwup_public_keys: [],
+              fwup_extra_options: [],
               fwup_task: "upgrade",
               heartbeat_interval_msec: 30_000,
               host: "localhost",

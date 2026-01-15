@@ -13,11 +13,13 @@ defmodule NervesHubLink.FwupConfig do
 
   defstruct fwup_devpath: "",
             fwup_env: [],
+            fwup_extra_options: [],
             fwup_task: ""
 
   @type t :: %__MODULE__{
           fwup_devpath: Path.t(),
           fwup_task: String.t(),
+          fwup_extra_options: [String.t()],
           fwup_env: [{String.t(), String.t()}]
         }
 

@@ -177,6 +177,14 @@ You can disable this behaviour with the following config:
 config :nerves_hub_link, connect_wait_for_network: false
 ```
 
+## Providing additional fwup arguments
+
+To pass additional arguments supported by the fwup CLI, you can pass a list of strings via the `:fwup_extra_options` key.
+
+```elixir
+config :nerves_hub_link, fwup_extra_options: ["--unsafe"],
+```
+
 ## Disable `NervesHubLink` during testing
 
 To disable `NervesHubLink` connecting to `NervesHub` when testing, you can add:
