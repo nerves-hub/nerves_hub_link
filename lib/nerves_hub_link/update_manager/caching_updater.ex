@@ -177,16 +177,17 @@ defmodule NervesHubLink.UpdateManager.CachingUpdater do
   end
 
   defp fwup_args(%FwupConfig{} = config, firmware_path, fwup_public_keys) do
-    args = [
-      "--apply",
-      "--no-unmount",
-      "-d",
-      config.fwup_devpath,
-      "--task",
-      config.fwup_task,
-      "-i",
-      firmware_path
-    ]
+    args =
+      [
+        "--apply",
+        "--no-unmount",
+        "-d",
+        config.fwup_devpath,
+        "--task",
+        config.fwup_task,
+        "-i",
+        firmware_path
+      ] ++ config.fwup_extra_options
 
     Enum.reduce(fwup_public_keys, args, fn public_key, args ->
       args ++ ["--public-key", public_key]

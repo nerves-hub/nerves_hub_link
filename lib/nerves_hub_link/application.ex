@@ -28,6 +28,7 @@ defmodule NervesHubLink.Application do
         fwup_config = %FwupConfig{
           fwup_devpath: config.fwup_devpath,
           fwup_task: config.fwup_task,
+          fwup_extra_options: config.fwup_extra_options,
           fwup_env: config.fwup_env
         }
 
