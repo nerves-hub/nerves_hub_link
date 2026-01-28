@@ -169,7 +169,7 @@ defmodule NervesHubLink.Extensions do
             update_in(acc.extensions[extension], &%{&1 | attached?: true, attach_ref: ref})
           else
             error ->
-              reason = if error, do: "start_failure", else: "unknown_extension"
+              reason = extension_message_from_error(error)
               _ = Socket.push_extensions_message("#{extension}:error", %{reason: reason})
 
               Logger.warning(
@@ -251,6 +251,9 @@ defmodule NervesHubLink.Extensions do
       error -> error
     end
   end
+
+  defp extension_message_from_error(error),
+    do: if(error, do: "start_failure", else: "unknown_extension")
 
   defmacro __using__(opts) do
     name = opts[:name] || raise "Missing required extension arg: name"
