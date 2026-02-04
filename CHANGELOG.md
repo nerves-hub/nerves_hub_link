@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.10.0] - 2026-01-08
+
+This release shouldn't affect your setup unless you are doing fairly unusual connection config. A bunch of dependencies were also updated of course.
+
+* Added
+  * Add a local shell extension for establishing an interactive shell separate from the iex console.
+  * Add logging that can help indicate clock issues for shared secret connections.
+  * Execute support scripts under a Task.Supervisor.
+  * Foundational support for multiple Sockets.
+
+* Updated
+  * Only set `:server_name_indication` if set in the config.
+  * Follow redirects returned during connection. This allows setting up custom domains to be able to switch NervesHub providers.
+
 ## [2.9.0] - 2025-10-04
 
 * Added
