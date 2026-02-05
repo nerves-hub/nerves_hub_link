@@ -172,6 +172,10 @@ defmodule NervesHubLink.Socket do
         "firmware_auto_revert_detected" => Client.firmware_auto_revert_detected?(),
         "firmware_validated" => Client.firmware_validated?()
       })
+      |> maybe_add_network_interface(socket.channel_pid)
+
+    if device_join_params["network_interface"],
+      do: UpdateManager.set_initial_network_interface(device_join_params["network_interface"])
 
     socket =
       socket
@@ -286,6 +290,19 @@ defmodule NervesHubLink.Socket do
     else
       {:reply, :error, socket}
     end
+  end
+
+  def handle_call(:get_network_interface, _from, socket) do
+    interface = current_network_interface(socket.channel_pid)
+
+    {:reply, interface, socket}
+  rescue
+    err ->
+      Logger.warning(
+        "[NervesHubLink] Error: could not determine network interface: #{inspect(err)}"
+      )
+
+      {:reply, nil, socket}
   end
 
   @impl Slipstream
@@ -777,5 +794,33 @@ defmodule NervesHubLink.Socket do
   defp maybe_cancel_timer(pid) do
     _ = Process.cancel_timer(pid)
     :ok
+  end
+
+  def current_network_interface(channel_pid) do
+    channel_state = :sys.get_state(channel_pid)
+    socket = get_in(channel_state.conn.socket)
+
+    {:ok, {ip, _}} = :ssl.sockname(socket)
+    {:ok, interfaces} = :inet.getifaddrs()
+
+    {interface, _attrs} = Enum.find(interfaces, fn {_name, attrs} -> attrs[:addr] == ip end)
+
+    # charlist -> string
+    List.to_string(interface)
+  end
+
+  defp maybe_add_network_interface(params, channel_pid) do
+    interface = current_network_interface(channel_pid)
+
+    Logger.info("[NervesHubLink] Reporting network interface #{inspect(interface)} to NervesHub")
+
+    Map.put(params, "network_interface", interface)
+  rescue
+    err ->
+      Logger.warning(
+        "[NervesHubLink] Error: could not determine network interface: #{inspect(err)}"
+      )
+
+      params
   end
 end

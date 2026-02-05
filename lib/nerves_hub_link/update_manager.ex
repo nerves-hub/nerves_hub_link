@@ -81,6 +81,10 @@ defmodule NervesHubLink.UpdateManager do
     GenServer.cast(manager, {:change_updater, updater})
   end
 
+  def set_initial_network_interface(manager \\ __MODULE__, interface) do
+    GenServer.cast(manager, {:set_initial_network_interface, interface})
+  end
+
   @doc false
   @spec child_spec({FwupConfig.t(), Updater.t()}) :: Supervisor.child_spec()
   def child_spec({%FwupConfig{} = fwup_config, updater}) do
@@ -131,6 +135,11 @@ defmodule NervesHubLink.UpdateManager do
   @impl GenServer
   def handle_cast({:change_updater, updater}, state) do
     {:noreply, %{state | updater: updater}}
+  end
+
+  @impl GenServer
+  def handle_cast({:set_initial_network_interface, interface}, state) do
+    {:noreply, %{state | initial_network_interface: interface}}
   end
 
   @impl GenServer
