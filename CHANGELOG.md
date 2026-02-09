@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.10.1] - 2026-02-09
+
+* Added
+  * Support restoring the private key when using TPM for authentication.
+  * Support separate SSL config for downloader.
+  * Allow additional fwup arguments to be passed from configuration. Allows using `--unsafe` for example.
+
 ## [2.10.0] - 2026-01-08
 
 This release shouldn't affect your setup unless you are doing fairly unusual connection config. A bunch of dependencies were also updated of course.
