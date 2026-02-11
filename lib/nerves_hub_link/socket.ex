@@ -814,9 +814,8 @@ defmodule NervesHubLink.Socket do
   @spec current_network_interface(Slipstream.Socket.t()) :: binary() | nil
   def current_network_interface(socket) do
     channel_state = :sys.get_state(socket.channel_pid)
-    ssl_socket = get_in(channel_state.conn.socket)
 
-    {:ok, {ip, _}} = :ssl.sockname(ssl_socket)
+    {:ok, {ip, _}} = :ssl.sockname(channel_state.conn.socket)
     {:ok, interfaces} = :inet.getifaddrs()
 
     {interface, _attrs} = Enum.find(interfaces, fn {_name, attrs} -> attrs[:addr] == ip end)
