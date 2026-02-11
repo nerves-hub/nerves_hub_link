@@ -831,7 +831,7 @@ defmodule NervesHubLink.Socket do
       nil
   end
 
-  def maybe_report_current_network_interface(socket) do
+  defp maybe_report_current_network_interface(socket) do
     interface = current_network_interface(socket)
 
     if interface do
