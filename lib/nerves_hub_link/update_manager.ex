@@ -20,6 +20,7 @@ defmodule NervesHubLink.UpdateManager do
   alias NervesHubLink.Client
   alias NervesHubLink.FwupConfig
   alias NervesHubLink.Message.UpdateInfo
+  alias NervesHubLink.Socket
   alias NervesHubLink.UpdateManager
   alias NervesHubLink.UpdateManager.Updater
 
@@ -35,19 +36,21 @@ defmodule NervesHubLink.UpdateManager do
             status: UpdateManager.status(),
             update_info: nil | UpdateInfo.t(),
             updater: nil | Updater.t(),
-            updater_pid: nil | pid()
+            updater_pid: nil | pid(),
+            initial_network_interface: nil | String.t()
           }
 
     defstruct fwup_config: nil,
               status: :idle,
               update_info: nil,
               updater: nil,
-              updater_pid: nil
+              updater_pid: nil,
+              initial_network_interface: nil
   end
 
   @doc """
   Must be called when an update payload is dispatched from
-  NervesHub. the map must contain a `"firmware_url"` key.
+  NervesHub. The map must contain a `"firmware_url"` key.
   """
   @spec apply_update(GenServer.server(), UpdateInfo.t(), list(String.t())) ::
           UpdateManager.status()
@@ -79,6 +82,11 @@ defmodule NervesHubLink.UpdateManager do
   @spec change_updater(GenServer.server(), Updater.t()) :: :ok
   def change_updater(manager \\ __MODULE__, updater) do
     GenServer.cast(manager, {:change_updater, updater})
+  end
+
+  @spec set_initial_network_interface(GenServer.server(), binary()) :: :ok
+  def set_initial_network_interface(manager \\ __MODULE__, interface) do
+    GenServer.cast(manager, {:set_initial_network_interface, interface})
   end
 
   @doc false
@@ -131,6 +139,11 @@ defmodule NervesHubLink.UpdateManager do
   @impl GenServer
   def handle_cast({:change_updater, updater}, state) do
     {:noreply, %{state | updater: updater}}
+  end
+
+  @impl GenServer
+  def handle_cast({:set_initial_network_interface, interface}, state) do
+    {:noreply, %{state | initial_network_interface: interface}}
   end
 
   @impl GenServer
@@ -208,6 +221,11 @@ defmodule NervesHubLink.UpdateManager do
       :apply ->
         Logger.info("[NervesHubLink:UpdateManager] Starting firmware update")
 
+        # Tell NervesHub if the network interface has changed since device boot.
+        # This is used as a metric to determine if network interface changes are
+        # a real issue we need to take into account.
+        :ok = report_if_network_interface_changed(state.initial_network_interface)
+
         {:ok, updater_pid} =
           state.updater.start_update(update_info, state.fwup_config, fwup_public_keys)
 
@@ -245,6 +263,18 @@ defmodule NervesHubLink.UpdateManager do
         )
 
         state
+    end
+  end
+
+  defp report_if_network_interface_changed(nil), do: :ok
+
+  defp report_if_network_interface_changed(initial_interface) do
+    current_network_interface = GenServer.call(Socket, :get_network_interface)
+
+    if current_network_interface == initial_interface do
+      :ok
+    else
+      Socket.send_network_interface_mismatch(initial_interface, current_network_interface)
     end
   end
 end
