@@ -100,6 +100,14 @@ defmodule NervesHubLink.Socket do
     GenServer.call(server, :console_active?)
   end
 
+  @doc """
+  Let NervesHub know the network interface has changed
+  """
+  @spec send_network_interface_mismatch(GenServer.server(), binary(), binary()) :: :ok
+  def send_network_interface_mismatch(server \\ __MODULE__, expected, current) do
+    GenServer.cast(server, {:send_network_interface_mismatch, expected, current})
+  end
+
   @spec push_extensions_message(
           GenServer.server(),
           event :: String.t(),
@@ -107,6 +115,11 @@ defmodule NervesHubLink.Socket do
         ) :: {:ok, Slipstream.push_reference()} | {:error, reason :: term()}
   def push_extensions_message(server \\ __MODULE__, event, message) do
     GenServer.call(server, {:push, @extensions_topic, event, message})
+  end
+
+  @spec get_network_interface(GenServer.server()) :: binary() | nil
+  def get_network_interface(server \\ __MODULE__) do
+    GenServer.call(server, :get_network_interface)
   end
 
   @impl Slipstream
@@ -193,6 +206,9 @@ defmodule NervesHubLink.Socket do
   @impl Slipstream
   def handle_join(@device_topic, _reply, socket) do
     Logger.debug("[#{inspect(__MODULE__)}] Joined Device channel")
+
+    _ = maybe_report_current_network_interface(socket)
+
     {:ok, assign(socket, joined_at: System.monotonic_time(:millisecond))}
   end
 
@@ -288,6 +304,12 @@ defmodule NervesHubLink.Socket do
     end
   end
 
+  def handle_call(:get_network_interface, _from, socket) do
+    interface = current_network_interface(socket)
+
+    {:reply, interface, socket}
+  end
+
   @impl Slipstream
   def handle_cast(:reconnect, socket) do
     # See handle_disconnect/2 for the reconnect call once the connection is closed.
@@ -325,6 +347,16 @@ defmodule NervesHubLink.Socket do
       end
 
     _ = push(socket, @device_topic, "status_update", payload)
+
+    {:noreply, socket}
+  end
+
+  def handle_cast({:send_network_interface_mismatch, expected, current}, socket) do
+    _ =
+      push(socket, @device_topic, "network_interface_mismatch", %{
+        expected: expected,
+        current: current
+      })
 
     {:noreply, socket}
   end
@@ -777,5 +809,45 @@ defmodule NervesHubLink.Socket do
   defp maybe_cancel_timer(pid) do
     _ = Process.cancel_timer(pid)
     :ok
+  end
+
+  @spec current_network_interface(Slipstream.Socket.t()) :: binary() | nil
+  def current_network_interface(socket) do
+    channel_state = :sys.get_state(socket.channel_pid)
+    ssl_socket = get_in(channel_state.conn.socket)
+
+    {:ok, {ip, _}} = :ssl.sockname(ssl_socket)
+    {:ok, interfaces} = :inet.getifaddrs()
+
+    {interface, _attrs} = Enum.find(interfaces, fn {_name, attrs} -> attrs[:addr] == ip end)
+
+    # charlist -> string
+    List.to_string(interface)
+  rescue
+    err ->
+      Logger.warning(
+        "[NervesHubLink] Error: could not determine network interface: #{inspect(err)}"
+      )
+
+      nil
+  end
+
+  def maybe_report_current_network_interface(socket) do
+    interface = current_network_interface(socket)
+
+    if interface do
+      Logger.info(
+        "[NervesHubLink] Reporting network interface #{inspect(interface)} to NervesHub"
+      )
+
+      _ =
+        push(socket, @device_topic, "network_interface_mismatch", %{network_interface: interface})
+
+      UpdateManager.set_initial_network_interface(interface)
+
+      :ok
+    else
+      :ok
+    end
   end
 end
