@@ -100,14 +100,6 @@ defmodule NervesHubLink.Socket do
     GenServer.call(server, :console_active?)
   end
 
-  @doc """
-  Let NervesHub know the network interface has changed
-  """
-  @spec send_network_interface_mismatch(GenServer.server(), binary(), binary()) :: :ok
-  def send_network_interface_mismatch(server \\ __MODULE__, expected, current) do
-    GenServer.cast(server, {:send_network_interface_mismatch, expected, current})
-  end
-
   @spec push_extensions_message(
           GenServer.server(),
           event :: String.t(),
@@ -117,6 +109,9 @@ defmodule NervesHubLink.Socket do
     GenServer.call(server, {:push, @extensions_topic, event, message})
   end
 
+  @doc """
+  Report to NervesHub if Downloader's network interface differs from Socket's network interface.
+  """
   @spec maybe_report_network_interface_mismatch(GenServer.server(), binary()) :: binary() | nil
   def maybe_report_network_interface_mismatch(server \\ __MODULE__, downloader_interface) do
     GenServer.call(server, {:maybe_report_network_interface_mismatch, downloader_interface})
@@ -816,6 +811,9 @@ defmodule NervesHubLink.Socket do
     :ok
   end
 
+  @doc """
+  Get the network interface name from an :inet Socket
+  """
   @spec interface_from_address(tuple()) :: nil | binary()
   def interface_from_address(address) do
     {:ok, interfaces} = :inet.getifaddrs()

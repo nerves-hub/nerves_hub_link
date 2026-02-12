@@ -35,16 +35,14 @@ defmodule NervesHubLink.UpdateManager do
             status: UpdateManager.status(),
             update_info: nil | UpdateInfo.t(),
             updater: nil | Updater.t(),
-            updater_pid: nil | pid(),
-            initial_network_interface: nil | String.t()
+            updater_pid: nil | pid()
           }
 
     defstruct fwup_config: nil,
               status: :idle,
               update_info: nil,
               updater: nil,
-              updater_pid: nil,
-              initial_network_interface: nil
+              updater_pid: nil
   end
 
   @doc """
@@ -209,10 +207,6 @@ defmodule NervesHubLink.UpdateManager do
     case Client.update_available(update_info) do
       :apply ->
         Logger.info("[NervesHubLink:UpdateManager] Starting firmware update")
-
-        # Tell NervesHub if UpdateManager is downloading via a different network
-        # interface than NervesHubLink.Socket. This is used as a metric to determine
-        # if network interface changes are a real issue we need to take into account.
 
         {:ok, updater_pid} =
           state.updater.start_update(update_info, state.fwup_config, fwup_public_keys)
