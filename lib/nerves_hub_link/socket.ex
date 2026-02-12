@@ -112,9 +112,9 @@ defmodule NervesHubLink.Socket do
   @doc """
   Report to NervesHub if Downloader's network interface differs from Socket's network interface.
   """
-  @spec maybe_report_network_interface_mismatch(GenServer.server(), binary()) :: binary() | nil
+  @spec maybe_report_network_interface_mismatch(GenServer.server(), binary()) :: :ok
   def maybe_report_network_interface_mismatch(server \\ __MODULE__, downloader_interface) do
-    GenServer.call(server, {:maybe_report_network_interface_mismatch, downloader_interface})
+    GenServer.cast(server, {:maybe_report_network_interface_mismatch, downloader_interface})
   end
 
   @impl Slipstream
