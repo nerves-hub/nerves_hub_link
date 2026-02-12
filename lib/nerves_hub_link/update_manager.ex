@@ -20,7 +20,6 @@ defmodule NervesHubLink.UpdateManager do
   alias NervesHubLink.Client
   alias NervesHubLink.FwupConfig
   alias NervesHubLink.Message.UpdateInfo
-  alias NervesHubLink.Socket
   alias NervesHubLink.UpdateManager
   alias NervesHubLink.UpdateManager.Updater
 
@@ -84,11 +83,6 @@ defmodule NervesHubLink.UpdateManager do
     GenServer.cast(manager, {:change_updater, updater})
   end
 
-  @spec set_initial_network_interface(GenServer.server(), binary()) :: :ok
-  def set_initial_network_interface(manager \\ __MODULE__, interface) do
-    GenServer.cast(manager, {:set_initial_network_interface, interface})
-  end
-
   @doc false
   @spec child_spec({FwupConfig.t(), Updater.t()}) :: Supervisor.child_spec()
   def child_spec({%FwupConfig{} = fwup_config, updater}) do
@@ -139,11 +133,6 @@ defmodule NervesHubLink.UpdateManager do
   @impl GenServer
   def handle_cast({:change_updater, updater}, state) do
     {:noreply, %{state | updater: updater}}
-  end
-
-  @impl GenServer
-  def handle_cast({:set_initial_network_interface, interface}, state) do
-    {:noreply, %{state | initial_network_interface: interface}}
   end
 
   @impl GenServer
@@ -221,10 +210,9 @@ defmodule NervesHubLink.UpdateManager do
       :apply ->
         Logger.info("[NervesHubLink:UpdateManager] Starting firmware update")
 
-        # Tell NervesHub if the network interface has changed since device boot.
-        # This is used as a metric to determine if network interface changes are
-        # a real issue we need to take into account.
-        :ok = report_if_network_interface_changed(state.initial_network_interface)
+        # Tell NervesHub if UpdateManager is downloading via a different network
+        # interface than NervesHubLink.Socket. This is used as a metric to determine
+        # if network interface changes are a real issue we need to take into account.
 
         {:ok, updater_pid} =
           state.updater.start_update(update_info, state.fwup_config, fwup_public_keys)
@@ -263,18 +251,6 @@ defmodule NervesHubLink.UpdateManager do
         )
 
         state
-    end
-  end
-
-  defp report_if_network_interface_changed(nil), do: :ok
-
-  defp report_if_network_interface_changed(initial_interface) do
-    current_network_interface = GenServer.call(Socket, :get_network_interface)
-
-    if current_network_interface == initial_interface do
-      :ok
-    else
-      Socket.send_network_interface_mismatch(initial_interface, current_network_interface)
     end
   end
 end
