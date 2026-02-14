@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.10.2] - 2026-02-14
+
+* Changed
+  * Reverted change which changed the `:remote_iex_timeout` unit value in config to be specified in seconds again to retain backwards compatibility. If you didn't specify this config, the change had no effect.
+
 ## [2.10.1] - 2026-02-09
 
 * Added
