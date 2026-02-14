@@ -745,7 +745,7 @@ defmodule NervesHubLink.Socket do
   end
 
   defp set_iex_timer(socket) do
-    timeout = socket.assigns.config.remote_iex_timeout
+    timeout = socket.assigns.config.remote_iex_timeout * 1000
 
     maybe_cancel_timer(socket.assigns[:iex_timer])
 
