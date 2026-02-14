@@ -36,6 +36,7 @@ defmodule NervesHubLink.Downloader do
   alias NervesHubLink.Downloader
   alias NervesHubLink.Downloader.RetryConfig
   alias NervesHubLink.Downloader.TimeoutCalculation
+  alias NervesHubLink.Socket
 
   require Logger
   require Mint.HTTP
@@ -453,6 +454,8 @@ defmodule NervesHubLink.Downloader do
              transport_opts: transport_opts
            ),
          {:ok, conn, request_ref} <- Mint.HTTP.request(conn, "GET", path, request_headers, nil) do
+      :ok = maybe_report_network_interface_mismatch(conn)
+
       {:ok,
        %Downloader{
          state
@@ -509,5 +512,28 @@ defmodule NervesHubLink.Downloader do
   defp close_conn(%Downloader{conn: conn}) do
     {:ok, _} = Mint.HTTP.close(conn)
     :ok
+  end
+
+  defp maybe_report_network_interface_mismatch(conn) do
+    {:ok, {address, _}} = :inet.sockname(conn.socket)
+
+    case Socket.interface_from_address(address) do
+      nil ->
+        Logger.warning(
+          "[NervesHubLink.Downloader] Could not determine network interface for downloader connection"
+        )
+
+        :ok
+
+      downloader_interface ->
+        Socket.maybe_report_network_interface_mismatch(downloader_interface)
+    end
+  rescue
+    err ->
+      Logger.warning(
+        "[NervesHubLink.Downloader] Error determining network interface for downloader connection: #{inspect(err)}"
+      )
+
+      :ok
   end
 end
