@@ -55,7 +55,7 @@ defmodule NervesHubLink.Configurator do
               params: %{},
               rejoin_after: [5_000],
               remote_iex: false,
-              remote_iex_timeout: 5 * 60 * 1000,
+              remote_iex_timeout: 5 * 60,
               request_archive_public_keys: false,
               request_fwup_public_keys: false,
               shared_secret: [],
