@@ -47,7 +47,7 @@ defmodule NervesHubLink.UpdateManager do
 
   @doc """
   Must be called when an update payload is dispatched from
-  NervesHub. the map must contain a `"firmware_url"` key.
+  NervesHub. The map must contain a `"firmware_url"` key.
   """
   @spec apply_update(GenServer.server(), UpdateInfo.t(), list(String.t())) ::
           UpdateManager.status()
