@@ -205,7 +205,8 @@ defmodule NervesHubLink.Socket do
 
     interface = maybe_report_network_interface(socket)
 
-    {:ok, assign(socket, joined_at: System.monotonic_time(:millisecond), interface: interface)}
+    {:ok,
+     assign(socket, joined_at: System.monotonic_time(:millisecond), network_interface: interface)}
   end
 
   def handle_join(@console_topic, _reply, socket) do
