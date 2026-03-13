@@ -454,7 +454,7 @@ defmodule NervesHubLink.Downloader do
              transport_opts: transport_opts
            ),
          {:ok, conn, request_ref} <- Mint.HTTP.request(conn, "GET", path, request_headers, nil),
-         :ok = report_download_started(conn) do
+         :ok <- report_download_started(conn) do
       {:ok,
        %Downloader{
          state
