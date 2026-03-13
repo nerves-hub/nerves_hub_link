@@ -21,6 +21,7 @@ defmodule NervesHubLink.Socket do
   alias NervesHubLink.Extensions
   alias NervesHubLink.Message.ArchiveInfo
   alias NervesHubLink.Message.UpdateInfo
+  alias NervesHubLink.NetworkInterface
   alias NervesHubLink.SupportScriptsManager
   alias NervesHubLink.UpdateManager
   alias NervesHubLink.UploadFile
@@ -109,14 +110,6 @@ defmodule NervesHubLink.Socket do
     GenServer.call(server, {:push, @extensions_topic, event, message})
   end
 
-  @doc """
-  Report to NervesHub if Downloader's network interface differs from Socket's network interface.
-  """
-  @spec maybe_report_network_interface_mismatch(GenServer.server(), binary()) :: :ok
-  def maybe_report_network_interface_mismatch(server \\ __MODULE__, downloader_interface) do
-    GenServer.cast(server, {:maybe_report_network_interface_mismatch, downloader_interface})
-  end
-
   @impl Slipstream
   def init(config) do
     Alarms.set_alarm({NervesHubLink.Disconnected, []})
@@ -137,7 +130,6 @@ defmodule NervesHubLink.Socket do
       |> assign(joined_at: nil)
       |> assign(firmware_validation_timer_pid: nil)
       |> assign(redirect_count: 0)
-      |> assign(network_interface: nil)
 
     if config.connect_wait_for_network do
       schedule_network_availability_check()
@@ -203,10 +195,17 @@ defmodule NervesHubLink.Socket do
   def handle_join(@device_topic, _reply, socket) do
     Logger.debug("[#{inspect(__MODULE__)}] Joined Device channel")
 
-    interface = maybe_report_network_interface(socket)
+    socket = assign(socket, joined_at: System.monotonic_time(:millisecond))
 
-    {:ok,
-     assign(socket, joined_at: System.monotonic_time(:millisecond), network_interface: interface)}
+    case NetworkInterface.from_slipstream(socket) do
+      nil ->
+        Process.send_after(self(), {:get_network_interface, attempts: 1}, 5_000)
+        {:ok, socket}
+
+      interface ->
+        _ = report_network_interface(socket, interface)
+        {:ok, assign(socket, network_interface: interface)}
+    end
   end
 
   def handle_join(@console_topic, _reply, socket) do
@@ -319,6 +318,9 @@ defmodule NervesHubLink.Socket do
         :received ->
           %{status: :received}
 
+        {:started, downloader_network_interface} ->
+          %{status: :started, downloader_network_interface: downloader_network_interface}
+
         :completed ->
           # Make sure older versions of Hub get the final 100% message
           _ = push(socket, @device_topic, "fwup_progress", %{stage: :updating, value: 100})
@@ -338,26 +340,6 @@ defmodule NervesHubLink.Socket do
       end
 
     _ = push(socket, @device_topic, "status_update", payload)
-
-    {:noreply, socket}
-  end
-
-  def handle_cast(
-        {:maybe_report_network_interface_mismatch, _downloader_interface},
-        %{assigns: %{network_interface: nil}} = socket
-      ),
-      do: {:noreply, socket}
-
-  def handle_cast({:maybe_report_network_interface_mismatch, downloader_interface}, socket) do
-    interface = current_network_interface(socket)
-
-    _ =
-      if interface != downloader_interface do
-        push(socket, @device_topic, "network_interface_mismatch", %{
-          expected: downloader_interface,
-          current: interface
-        })
-      end
 
     {:noreply, socket}
   end
@@ -639,6 +621,22 @@ defmodule NervesHubLink.Socket do
     {:noreply, stop_iex(socket)}
   end
 
+  def handle_info({:get_network_interface, attempts: attempts}, socket) when attempts >= 10 do
+    {:noreply, socket}
+  end
+
+  def handle_info({:get_network_interface, attempts: attempts}, socket) do
+    case NetworkInterface.from_slipstream(socket) do
+      nil ->
+        Process.send_after(self(), {:get_network_interface, attempts: attempts + 1}, 5_000)
+        {:noreply, socket}
+
+      interface ->
+        _ = report_network_interface(socket, interface)
+        {:noreply, assign(socket, network_interface: interface)}
+    end
+  end
+
   def handle_info(msg, socket) do
     Logger.warning("[#{inspect(__MODULE__)}] Unhandled handle_info: #{inspect(msg)}")
     {:noreply, socket}
@@ -812,51 +810,7 @@ defmodule NervesHubLink.Socket do
     :ok
   end
 
-  @doc """
-  Get the network interface name from an :inet Socket
-  """
-  @spec interface_from_address(tuple()) :: nil | binary()
-  def interface_from_address(address) do
-    {:ok, interfaces} = :inet.getifaddrs()
-
-    case Enum.find(interfaces, fn {_name, attrs} -> attrs[:addr] == address end) do
-      {interface, _attrs} ->
-        # charlist -> string
-        List.to_string(interface)
-
-      nil ->
-        nil
-    end
-  end
-
-  @spec current_network_interface(Slipstream.Socket.t()) :: binary() | nil
-  def current_network_interface(socket) do
-    channel_state = :sys.get_state(socket.channel_pid)
-    {:ok, {address, _}} = :ssl.sockname(channel_state.conn.socket)
-    interface_from_address(address)
-  rescue
-    err ->
-      Logger.warning(
-        "[NervesHubLink] Error: could not determine network interface: #{inspect(err)}"
-      )
-
-      nil
-  end
-
-  defp maybe_report_network_interface(socket) do
-    interface = current_network_interface(socket)
-
-    if interface do
-      Logger.info(
-        "[NervesHubLink] Reporting network interface #{inspect(interface)} to NervesHub"
-      )
-
-      _ =
-        push(socket, @device_topic, "network_interface", %{network_interface: interface})
-
-      interface
-    else
-      nil
-    end
+  defp report_network_interface(socket, interface) do
+    push(socket, @device_topic, "network_interface", %{interface: interface})
   end
 end

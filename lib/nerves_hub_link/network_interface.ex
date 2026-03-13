@@ -1,0 +1,49 @@
+# SPDX-FileCopyrightText: 2026 Nate Shoemaker
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+defmodule NervesHubLink.NetworkInterface do
+  require Logger
+
+  @moduledoc """
+  Functions for determining the network interface when connecting to NervesHub and downloading firmware.
+  """
+
+  def from_slipstream(%Slipstream.Socket{} = socket) do
+    channel_state = :sys.get_state(socket.channel_pid)
+    {:ok, {address, _}} = :ssl.sockname(channel_state.conn.socket)
+    interface_from_address(address)
+  rescue
+    err ->
+      Logger.warning(
+        "[NervesHubLink] Error: could not determine network interface for Socket: #{inspect(err)}"
+      )
+
+      nil
+  end
+
+  def from_mint(conn) do
+    {:ok, {address, _}} = :inet.sockname(conn.socket)
+    interface_from_address(address)
+  rescue
+    err ->
+      Logger.warning(
+        "[NervesHubLink] Error: could not determine network interface for Downloader: #{inspect(err)}"
+      )
+
+      nil
+  end
+
+  defp interface_from_address(address) do
+    {:ok, interfaces} = :inet.getifaddrs()
+
+    case Enum.find(interfaces, fn {_name, attrs} -> attrs[:addr] == address end) do
+      {interface, _attrs} ->
+        # charlist -> string
+        List.to_string(interface)
+
+      nil ->
+        nil
+    end
+  end
+end
