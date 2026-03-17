@@ -28,7 +28,7 @@ defmodule NervesHubLink.NetworkInterface do
   rescue
     err ->
       Logger.warning(
-        "[NervesHubLink] Error: could not determine network interface for Socket: #{inspect(err)}"
+        "[NervesHubLink] Error: could not retrieve network interface: #{inspect(err)}"
       )
 
       nil
