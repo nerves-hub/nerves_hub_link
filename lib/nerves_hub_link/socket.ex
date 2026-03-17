@@ -195,17 +195,9 @@ defmodule NervesHubLink.Socket do
   def handle_join(@device_topic, _reply, socket) do
     Logger.debug("[#{inspect(__MODULE__)}] Joined Device channel")
 
-    socket = assign(socket, joined_at: System.monotonic_time(:millisecond))
+    send(self(), :set_network_interface)
 
-    case NetworkInterface.from_slipstream(socket) do
-      nil ->
-        Process.send_after(self(), {:get_network_interface, attempts: 1}, 5_000)
-        {:ok, socket}
-
-      interface ->
-        _ = report_network_interface(socket, interface)
-        {:ok, assign(socket, network_interface: interface)}
-    end
+    {:ok, assign(socket, joined_at: System.monotonic_time(:millisecond))}
   end
 
   def handle_join(@console_topic, _reply, socket) do
@@ -621,14 +613,12 @@ defmodule NervesHubLink.Socket do
     {:noreply, stop_iex(socket)}
   end
 
-  def handle_info({:get_network_interface, attempts: attempts}, socket) when attempts >= 10 do
-    {:noreply, socket}
-  end
+  def handle_info(:set_network_interface, socket) do
+    channel_state = :sys.get_state(socket.channel_pid)
 
-  def handle_info({:get_network_interface, attempts: attempts}, socket) do
-    case NetworkInterface.from_slipstream(socket) do
+    case NetworkInterface.from_socket(channel_state.conn.socket) do
       nil ->
-        Process.send_after(self(), {:get_network_interface, attempts: attempts + 1}, 5_000)
+        Process.send_after(self(), :set_network_interface, 10_000)
         {:noreply, socket}
 
       interface ->
@@ -811,6 +801,6 @@ defmodule NervesHubLink.Socket do
   end
 
   defp report_network_interface(socket, interface) do
-    push(socket, @device_topic, "network_interface", %{interface: interface})
+    push(socket, @device_topic, "set_network_interface", %{interface: interface})
   end
 end

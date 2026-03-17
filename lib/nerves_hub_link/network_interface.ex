@@ -9,17 +9,15 @@ defmodule NervesHubLink.NetworkInterface do
 
   require Logger
 
-  @spec from_slipstream(Slipstream.Socket.t()) :: nil | binary()
-  def from_slipstream(%Slipstream.Socket{} = socket) do
-    channel_state = :sys.get_state(socket.channel_pid)
-
-    case channel_state.conn.socket do
+  @spec from_socket(Slipstream.Socket.t() | Mint.HTTP.t()) :: nil | binary()
+  def from_socket(socket) do
+    case socket do
       {:sslsocket, _, _} ->
-        {:ok, {address, _}} = :ssl.sockname(channel_state.conn.socket)
+        {:ok, {address, _}} = :ssl.sockname(socket)
         address
 
       _ ->
-        {:ok, {address, _}} = :inet.sockname(channel_state.conn.socket)
+        {:ok, {address, _}} = :inet.sockname(socket)
         address
     end
     |> interface_from_address()
@@ -27,19 +25,6 @@ defmodule NervesHubLink.NetworkInterface do
     err ->
       Logger.warning(
         "[NervesHubLink] Error: could not determine network interface for Socket: #{inspect(err)}"
-      )
-
-      nil
-  end
-
-  @spec from_mint(Mint.HTTP.t()) :: nil | binary()
-  def from_mint(conn) do
-    {:ok, {address, _}} = :inet.sockname(conn.socket)
-    interface_from_address(address)
-  rescue
-    err ->
-      Logger.warning(
-        "[NervesHubLink] Error: could not determine network interface for Downloader: #{inspect(err)}"
       )
 
       nil
