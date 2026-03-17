@@ -15,15 +15,7 @@ defmodule NervesHubLink.NetworkInterface do
   """
   @spec from_socket(:ssl.socket() | :inet.socket() | Mint.Types.socket()) :: nil | binary()
   def from_socket(socket) do
-    case socket do
-      {:sslsocket, _, _} ->
-        {:ok, {address, _}} = :ssl.sockname(socket)
-        address
-
-      _ ->
-        {:ok, {address, _}} = :inet.sockname(socket)
-        address
-    end
+    address_from_socket(socket)
     |> interface_from_address()
   rescue
     err ->
@@ -32,6 +24,16 @@ defmodule NervesHubLink.NetworkInterface do
       )
 
       nil
+  end
+
+  defp address_from_socket({:sslsocket, _, _} = socket) do
+    {:ok, {address, _}} = :ssl.sockname(socket)
+    address
+  end
+
+  defp address_from_socket(socket) do
+    {:ok, {address, _}} = :inet.sockname(socket)
+    address
   end
 
   defp interface_from_address(address) do

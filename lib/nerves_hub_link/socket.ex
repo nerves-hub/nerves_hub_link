@@ -616,8 +616,8 @@ defmodule NervesHubLink.Socket do
   def handle_info(:get_network_interface, socket) do
     with pid when is_pid(pid) <- Slipstream.Socket.channel_pid(socket),
          %{conn: conn} <- :sys.get_state(pid),
-         socket = Mint.HTTP.get_socket(conn),
-         interface when is_binary(interface) <- NetworkInterface.from_socket(socket) do
+         underlying_socket = Mint.HTTP.get_socket(conn),
+         interface when is_binary(interface) <- NetworkInterface.from_socket(underlying_socket) do
       _ = report_network_interface(socket, interface)
       {:noreply, assign(socket, network_interface: interface)}
     else
@@ -805,6 +805,6 @@ defmodule NervesHubLink.Socket do
   end
 
   defp report_network_interface(socket, interface) do
-    push(socket, @device_topic, "set_network_interface", %{interface: interface})
+    push(socket, @device_topic, "report_network_interface", %{interface: interface})
   end
 end
