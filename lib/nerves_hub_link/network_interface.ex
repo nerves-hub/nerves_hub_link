@@ -13,7 +13,7 @@ defmodule NervesHubLink.NetworkInterface do
   Get the network interface from a Slipstream.Socket or Mint.HTTP struct. This is used to report the
   network interface being used for the connection to NervesHub and for firmware downloads.
   """
-  @spec from_socket(Slipstream.Socket.t() | Mint.Types.socket()) :: nil | binary()
+  @spec from_socket(:ssl.socket() | :inet.socket() | Mint.Types.socket()) :: nil | binary()
   def from_socket(socket) do
     case socket do
       {:sslsocket, _, _} ->
