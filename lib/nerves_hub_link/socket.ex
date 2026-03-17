@@ -614,16 +614,16 @@ defmodule NervesHubLink.Socket do
   end
 
   def handle_info(:get_network_interface, socket) do
-    channel_state = :sys.get_state(socket.channel_pid)
-
-    case NetworkInterface.from_socket(channel_state.conn.socket) do
-      nil ->
+    with pid when is_pid(pid) <- Slipstream.Socket.channel_pid(socket),
+         %{conn: conn} <- :sys.get_state(pid),
+         socket = Mint.HTTP.get_socket(conn),
+         interface when is_string(interface) <- NetworkInterface.from_socket(socket) do
+      _ = report_network_interface(socket, interface)
+      {:noreply, assign(socket, network_interface: interface)}
+    else
+      _ ->
         Process.send_after(self(), :get_network_interface, 10_000)
-        {:noreply, socket}
-
-      interface ->
-        _ = report_network_interface(socket, interface)
-        {:noreply, assign(socket, network_interface: interface)}
+        {:noreply, socket} 
     end
   end
 
