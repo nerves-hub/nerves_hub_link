@@ -623,7 +623,7 @@ defmodule NervesHubLink.Socket do
     else
       _ ->
         Process.send_after(self(), :get_network_interface, 10_000)
-        {:noreply, socket} 
+        {:noreply, socket}
     end
   end
 
