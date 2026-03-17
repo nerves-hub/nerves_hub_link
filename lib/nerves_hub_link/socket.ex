@@ -617,11 +617,15 @@ defmodule NervesHubLink.Socket do
     with pid when is_pid(pid) <- Slipstream.Socket.channel_pid(socket),
          %{conn: conn} <- :sys.get_state(pid),
          socket = Mint.HTTP.get_socket(conn),
-         interface when is_string(interface) <- NetworkInterface.from_socket(socket) do
+         interface when is_binary(interface) <- NetworkInterface.from_socket(socket) do
       _ = report_network_interface(socket, interface)
       {:noreply, assign(socket, network_interface: interface)}
     else
-      _ ->
+      result ->
+        Logger.warning(
+          "[NervesHubLink] Error: could not determine network interface: #{inspect(result)}"
+        )
+
         Process.send_after(self(), :get_network_interface, 10_000)
         {:noreply, socket}
     end
