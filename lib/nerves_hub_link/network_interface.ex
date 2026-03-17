@@ -13,18 +13,16 @@ defmodule NervesHubLink.NetworkInterface do
   def from_slipstream(%Slipstream.Socket{} = socket) do
     channel_state = :sys.get_state(socket.channel_pid)
 
-    address =
-      case channel_state.conn.socket do
-        {:sslsocket, _, _} ->
-          {:ok, {address, _}} = :ssl.sockname(channel_state.conn.socket)
-          address
+    case channel_state.conn.socket do
+      {:sslsocket, _, _} ->
+        {:ok, {address, _}} = :ssl.sockname(channel_state.conn.socket)
+        address
 
-        _ ->
-          {:ok, {address, _}} = :socket.sockname(channel_state.conn.socket)
-          address
-      end
-
-    interface_from_address(address)
+      _ ->
+        {:ok, {address, _}} = :inet.sockname(channel_state.conn.socket)
+        address
+    end
+    |> interface_from_address()
   rescue
     err ->
       Logger.warning(
