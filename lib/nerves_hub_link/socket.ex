@@ -195,7 +195,7 @@ defmodule NervesHubLink.Socket do
   def handle_join(@device_topic, _reply, socket) do
     Logger.debug("[#{inspect(__MODULE__)}] Joined Device channel")
 
-    send(self(), :set_network_interface)
+    send(self(), :get_network_interface)
 
     {:ok, assign(socket, joined_at: System.monotonic_time(:millisecond))}
   end
@@ -613,12 +613,12 @@ defmodule NervesHubLink.Socket do
     {:noreply, stop_iex(socket)}
   end
 
-  def handle_info(:set_network_interface, socket) do
+  def handle_info(:get_network_interface, socket) do
     channel_state = :sys.get_state(socket.channel_pid)
 
     case NetworkInterface.from_socket(channel_state.conn.socket) do
       nil ->
-        Process.send_after(self(), :set_network_interface, 10_000)
+        Process.send_after(self(), :get_network_interface, 10_000)
         {:noreply, socket}
 
       interface ->
