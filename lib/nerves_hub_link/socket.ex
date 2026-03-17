@@ -21,6 +21,7 @@ defmodule NervesHubLink.Socket do
   alias NervesHubLink.Extensions
   alias NervesHubLink.Message.ArchiveInfo
   alias NervesHubLink.Message.UpdateInfo
+  alias NervesHubLink.NetworkInterface
   alias NervesHubLink.SupportScriptsManager
   alias NervesHubLink.UpdateManager
   alias NervesHubLink.UploadFile
@@ -193,6 +194,9 @@ defmodule NervesHubLink.Socket do
   @impl Slipstream
   def handle_join(@device_topic, _reply, socket) do
     Logger.debug("[#{inspect(__MODULE__)}] Joined Device channel")
+
+    send(self(), :get_network_interface)
+
     {:ok, assign(socket, joined_at: System.monotonic_time(:millisecond))}
   end
 
@@ -305,6 +309,9 @@ defmodule NervesHubLink.Socket do
       case status do
         :received ->
           %{status: :received}
+
+        {:started, downloader_network_interface} ->
+          %{status: :started, downloader_network_interface: downloader_network_interface}
 
         :completed ->
           # Make sure older versions of Hub get the final 100% message
@@ -606,6 +613,24 @@ defmodule NervesHubLink.Socket do
     {:noreply, stop_iex(socket)}
   end
 
+  def handle_info(:get_network_interface, socket) do
+    with pid when is_pid(pid) <- Slipstream.Socket.channel_pid(socket),
+         %{conn: conn} <- :sys.get_state(pid),
+         underlying_socket = Mint.HTTP.get_socket(conn),
+         interface when is_binary(interface) <- NetworkInterface.from_socket(underlying_socket) do
+      _ = report_network_interface(socket, interface)
+      {:noreply, assign(socket, network_interface: interface)}
+    else
+      result ->
+        Logger.warning(
+          "[NervesHubLink] Error: could not determine network interface: #{inspect(result)}"
+        )
+
+        Process.send_after(self(), :get_network_interface, 10_000)
+        {:noreply, socket}
+    end
+  end
+
   def handle_info(msg, socket) do
     Logger.warning("[#{inspect(__MODULE__)}] Unhandled handle_info: #{inspect(msg)}")
     {:noreply, socket}
@@ -777,5 +802,9 @@ defmodule NervesHubLink.Socket do
   defp maybe_cancel_timer(pid) do
     _ = Process.cancel_timer(pid)
     :ok
+  end
+
+  defp report_network_interface(socket, interface) do
+    push(socket, @device_topic, "report_network_interface", %{interface: interface})
   end
 end

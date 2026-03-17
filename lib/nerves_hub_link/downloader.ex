@@ -36,6 +36,7 @@ defmodule NervesHubLink.Downloader do
   alias NervesHubLink.Downloader
   alias NervesHubLink.Downloader.RetryConfig
   alias NervesHubLink.Downloader.TimeoutCalculation
+  alias NervesHubLink.NetworkInterface
 
   require Logger
   require Mint.HTTP
@@ -452,7 +453,8 @@ defmodule NervesHubLink.Downloader do
            Mint.HTTP.connect(String.to_existing_atom(scheme), host, port,
              transport_opts: transport_opts
            ),
-         {:ok, conn, request_ref} <- Mint.HTTP.request(conn, "GET", path, request_headers, nil) do
+         {:ok, conn, request_ref} <- Mint.HTTP.request(conn, "GET", path, request_headers, nil),
+         :ok <- report_download_started(conn) do
       {:ok,
        %Downloader{
          state
@@ -509,5 +511,10 @@ defmodule NervesHubLink.Downloader do
   defp close_conn(%Downloader{conn: conn}) do
     {:ok, _} = Mint.HTTP.close(conn)
     :ok
+  end
+
+  defp report_download_started(conn) do
+    downloader_network_interface = NetworkInterface.from_socket(Mint.HTTP.get_socket(conn))
+    NervesHubLink.send_update_status({:started, downloader_network_interface})
   end
 end

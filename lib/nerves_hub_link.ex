@@ -24,6 +24,7 @@ defmodule NervesHubLink do
 
   @type update_status ::
           :received
+          | {:started, downloader_network_interface :: String.t() | nil}
           | {:downloading, non_neg_integer()}
           | {:updating, non_neg_integer()}
           | :completed
