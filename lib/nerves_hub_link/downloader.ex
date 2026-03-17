@@ -514,7 +514,7 @@ defmodule NervesHubLink.Downloader do
   end
 
   defp report_download_started(conn) do
-    downloader_network_interface = NetworkInterface.from_socket(conn.socket)
+    downloader_network_interface = NetworkInterface.from_socket(Mint.HTTP.get_socket(conn))
     NervesHubLink.send_update_status({:started, downloader_network_interface})
   end
 end
