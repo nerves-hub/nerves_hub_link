@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.11.0] - 2026-03-17
+
+* Added
+  * The network interface used by `NervesHubLink.Socket` is now reported to NervesHub on connect. The `NervesHubLink.Downloader` interface is also reported during downloads to identify whether the two components use different interfaces.
+
 ## [2.10.2] - 2026-02-14
 
 * Changed
