@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.11.1] - 2026-03-23
+
+* Fixed
+  * Archives can now be downloaded successfully again.
+
 ## [2.11.0] - 2026-03-17
 
 * Added
