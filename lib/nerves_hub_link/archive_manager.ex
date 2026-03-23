@@ -160,7 +160,7 @@ defmodule NervesHubLink.ArchiveManager do
   end
 
   # Data from the downloader
-  def handle_info({:download, {:data, data}, _verification_keys}, state) do
+  def handle_info({:download, {:data, data, _percentage}, _verification_keys}, state) do
     :ok =
       File.open!(state.temp_file_path, [:append], fn fd ->
         IO.binwrite(fd, data)
@@ -185,8 +185,14 @@ defmodule NervesHubLink.ArchiveManager do
 
     case Client.archive_available(info) do
       :download ->
+        handler_fun = fn message ->
+          send(pid, {:download, message, verification_keys})
+
+          :ok
+        end
+
         {:ok, download} =
-          Downloader.start_download(info.url, &send(pid, {:download, &1, verification_keys}))
+          Downloader.start_download(info.url, handler_fun)
 
         _ = File.mkdir_p(directory)
         _ = File.rm_rf(temp_file_path)
