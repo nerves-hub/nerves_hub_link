@@ -623,7 +623,7 @@ defmodule NervesHubLink.Socket do
     else
       result ->
         Logger.warning(
-          "[NervesHubLink] Error: could not determine network interface: #{inspect(result)}"
+          "[NervesHubLink] Could not determine network interface: #{inspect(result)}"
         )
 
         Process.send_after(self(), :get_network_interface, 10_000)
