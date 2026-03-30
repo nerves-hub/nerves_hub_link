@@ -437,8 +437,8 @@ defmodule NervesHubLink.Downloader do
 
   # While not expected, it has been observed that downloaded_length may be greater than content_length.
   # I'm unsure why this happens, and if this is a bug with the Downloader or something happening on the other end.
-  # This function signature handles the case where downloaded_length is greater than content_length and marks the download
-  # as completed, leaving the cleanup to the caller.
+  # This function signature handles the case where downloaded_length is greater than content_length and marks the
+  # download as completed, leaving the cleanup to the caller.
   def handle_response(
         {:done, request_ref},
         %Downloader{
