@@ -168,11 +168,14 @@ defmodule NervesHubLink.Downloader do
   # it is a extreme condition where regardless of download attempts,
   # idle timeouts etc, this entire process has lived for TOO long.
   def handle_info(:max_timeout, %Downloader{} = state) do
+    Logger.debug("[NervesHubLink.Downloader] Max timeout reached")
     {:stop, :max_timeout_reached, state}
   end
 
   # this message is scheduled when we receive the `content_length` value
   def handle_info(:worst_case_download_speed_timeout, %Downloader{} = state) do
+    Logger.debug("[NervesHubLink.Downloader] Worst case download speed timeout reached")
+
     {:stop, :worst_case_download_speed_reached, state}
   end
 
@@ -182,6 +185,7 @@ defmodule NervesHubLink.Downloader do
   def handle_info(:timeout, %Downloader{handler_fun: handler} = state) do
     close_conn(state)
     _ = handler.({:error, :idle_timeout})
+    Logger.debug("[NervesHubLink.Downloader] Idle timeout reached")
     state = reschedule_resume(state)
     {:noreply, %{state | conn: nil}}
   end
@@ -194,6 +198,7 @@ defmodule NervesHubLink.Downloader do
           retry_args: %RetryConfig{max_disconnects: retry_number}
         } = state
       ) do
+    Logger.debug("[NervesHubLink.Downloader] Max disconnects reached")
     {:stop, :max_disconnects_reached, state}
   end
 
