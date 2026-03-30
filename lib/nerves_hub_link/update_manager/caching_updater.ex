@@ -112,6 +112,17 @@ defmodule NervesHubLink.UpdateManager.CachingUpdater do
      })}
   end
 
+  def handle_downloader_message({:error, {:http_error, 404}}, state) do
+    Logger.error(
+      "[#{log_prefix()}] 404 error. This could be related to incorrect ranges. Cleaning up any partials which may exist."
+    )
+
+    settings()[:cache_dir]
+    |> clean_caching_directory()
+
+    {:ok, state}
+  end
+
   def handle_downloader_message({:error, reason}, state) do
     Logger.error("[#{log_prefix()}] Nonfatal HTTP download error: #{inspect(reason)}")
     {:ok, state}
@@ -155,6 +166,26 @@ defmodule NervesHubLink.UpdateManager.CachingUpdater do
   end
 
   def cleanup(_state), do: :ok
+
+  defp clean_caching_directory(caching_dir, file \\ nil)
+
+  defp clean_caching_directory(caching_dir, nil) do
+    case File.ls(caching_dir) do
+      {:ok, file_list} ->
+        if Enum.any?(file_list) do
+          Logger.info(
+            "[#{log_prefix()}] Removing #{Enum.count(file_list)} previous firmware files from the cache directory"
+          )
+
+          Enum.each(file_list, &File.rm(Path.join(caching_dir, &1)))
+        end
+
+        :ok
+
+      _ ->
+        :ok
+    end
+  end
 
   defp clean_caching_directory(caching_dir, file_name) do
     case File.ls(caching_dir) do

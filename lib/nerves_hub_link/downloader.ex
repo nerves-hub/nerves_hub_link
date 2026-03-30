@@ -168,11 +168,14 @@ defmodule NervesHubLink.Downloader do
   # it is a extreme condition where regardless of download attempts,
   # idle timeouts etc, this entire process has lived for TOO long.
   def handle_info(:max_timeout, %Downloader{} = state) do
+    Logger.debug("[NervesHubLink.Downloader] Max timeout reached")
     {:stop, :max_timeout_reached, state}
   end
 
   # this message is scheduled when we receive the `content_length` value
   def handle_info(:worst_case_download_speed_timeout, %Downloader{} = state) do
+    Logger.debug("[NervesHubLink.Downloader] Worst case download speed timeout reached")
+
     {:stop, :worst_case_download_speed_reached, state}
   end
 
@@ -182,6 +185,7 @@ defmodule NervesHubLink.Downloader do
   def handle_info(:timeout, %Downloader{handler_fun: handler} = state) do
     close_conn(state)
     _ = handler.({:error, :idle_timeout})
+    Logger.debug("[NervesHubLink.Downloader] Idle timeout reached")
     state = reschedule_resume(state)
     {:noreply, %{state | conn: nil}}
   end
@@ -194,6 +198,7 @@ defmodule NervesHubLink.Downloader do
           retry_args: %RetryConfig{max_disconnects: retry_number}
         } = state
       ) do
+    Logger.debug("[NervesHubLink.Downloader] Max disconnects reached")
     {:stop, :max_disconnects_reached, state}
   end
 
@@ -406,8 +411,43 @@ defmodule NervesHubLink.Downloader do
     end
   end
 
-  def handle_response({:done, request_ref}, %Downloader{request_ref: request_ref} = state) do
+  def handle_response(
+        {:done, request_ref},
+        %Downloader{
+          request_ref: request_ref,
+          content_length: total,
+          downloaded_length: total
+        } = state
+      ) do
+    Logger.debug(
+      "[NervesHubLink.Downloader] Download completed (downloaded_length and content_length match: #{total})"
+    )
+
     %{state | completed: true}
+  end
+
+  def handle_response(
+        {:done, request_ref},
+        %Downloader{
+          request_ref: request_ref,
+          content_length: content_length,
+          downloaded_length: downloaded_length
+        } = state
+      )
+      when downloaded_length > content_length do
+    Logger.warning(
+      "[NervesHubLink.Downloader] Download completed, but downloaded length is greater than content length (downloaded_length: #{downloaded_length} | content_length: #{content_length})"
+    )
+
+    %{state | completed: true}
+  end
+
+  def handle_response({:done, request_ref}, %Downloader{request_ref: request_ref} = state) do
+    Logger.warning(
+      "[NervesHubLink.Downloader] Download completed, but content length and download length mismatch detected (downloaded_length: #{state.downloaded_length} | content_length: #{state.content_length})"
+    )
+
+    {:error, :downloaded_content_length_mismatch, state}
   end
 
   # ignore other messages when redirecting
