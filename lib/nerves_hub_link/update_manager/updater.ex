@@ -120,6 +120,7 @@ defmodule NervesHubLink.UpdateManager.Updater do
       alias NervesHubLink.Client
       alias NervesHubLink.FwupConfig
       alias NervesHubLink.Message.UpdateInfo
+      alias NervesHubLink.NetworkInterface
 
       require Logger
 
@@ -196,6 +197,12 @@ defmodule NervesHubLink.UpdateManager.Updater do
       end
 
       @impl GenServer
+      def handle_call({:downloader, {:started, conn}}, _from, state) do
+        downloader_network_interface = NetworkInterface.from_socket(Mint.HTTP.get_socket(conn))
+        NervesHubLink.send_update_status({:started, downloader_network_interface})
+        {:reply, :ok, state}
+      end
+
       def handle_call({:downloader, message}, _from, state) do
         case handle_downloader_message(message, state) do
           {:ok, state} ->
