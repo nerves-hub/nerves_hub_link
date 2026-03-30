@@ -411,8 +411,43 @@ defmodule NervesHubLink.Downloader do
     end
   end
 
-  def handle_response({:done, request_ref}, %Downloader{request_ref: request_ref} = state) do
+  def handle_response(
+        {:done, request_ref},
+        %Downloader{
+          request_ref: request_ref,
+          content_length: total,
+          downloaded_length: total
+        } = state
+      ) do
+    Logger.debug(
+      "[NervesHubLink.Downloader] Download completed (downloaded_length and content_length match: #{total})"
+    )
+
     %{state | completed: true}
+  end
+
+  def handle_response(
+        {:done, request_ref},
+        %Downloader{
+          request_ref: request_ref,
+          content_length: content_length,
+          downloaded_length: downloaded_length
+        } = state
+      )
+      when downloaded_length > content_length do
+    Logger.warning(
+      "[NervesHubLink.Downloader] Download completed, but downloaded length is greater than content length (downloaded_length: #{downloaded_length} | content_length: #{content_length})"
+    )
+
+    %{state | completed: true}
+  end
+
+  def handle_response({:done, request_ref}, %Downloader{request_ref: request_ref} = state) do
+    Logger.warning(
+      "[NervesHubLink.Downloader] Download completed, but content length and download length mismatch detected (downloaded_length: #{state.downloaded_length} | content_length: #{state.content_length})"
+    )
+
+    {:error, :downloaded_content_length_mismatch, state}
   end
 
   # ignore other messages when redirecting
