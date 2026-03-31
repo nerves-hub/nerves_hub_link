@@ -7,6 +7,7 @@ defmodule NervesHubLink.DownloaderTest do
   use ExUnit.Case, async: true
 
   alias NervesHubLink.Support.{
+    DoneNotDonePlug,
     HTTPErrorPlug,
     IdleTimeoutPlug,
     RangeRequestPlug,
@@ -163,6 +164,42 @@ defmodule NervesHubLink.DownloaderTest do
       assert_receive :complete
 
       refute Process.alive?(download)
+    end
+  end
+
+  describe "done but not done" do
+    setup do
+      {:ok, plug, port} = Utils.supervise_plug(DoneNotDonePlug)
+      {:ok, [plug: plug, url: "http://localhost:#{port}/test"]}
+    end
+
+    test "retries when Mint signals done before all bytes are received", %{url: url} do
+      test_pid = self()
+
+      handler_fun = fn msg ->
+        send(test_pid, msg)
+        :ok
+      end
+
+      expected_data_part_1 = :binary.copy(<<0>>, 2048)
+      expected_data_part_2 = :binary.copy(<<1>>, 1024)
+      expected_data_part_3 = :binary.copy(<<1>>, 1024)
+
+      {:ok, _download} =
+        Downloader.start_download(url, handler_fun, retry_config: @short_retry_args)
+
+      # First request: receives partial data then connection error
+      assert_receive {:data, ^expected_data_part_1, _}, 1000
+      assert_receive {:error, _}
+
+      # Second request: Mint signals :done (chunked terminator) but
+      # downloaded_length (3072) != content_length (4096)
+      assert_receive {:data, ^expected_data_part_2, _}
+      assert_receive {:error, :downloaded_content_length_mismatch}
+
+      # Third request: receives remaining data and completes
+      assert_receive {:data, ^expected_data_part_3, _}
+      assert_receive :complete
     end
   end
 
