@@ -626,7 +626,7 @@ defmodule NervesHubLink.Socket do
           "[NervesHubLink] Could not determine network interface: #{inspect(result)}"
         )
 
-        Process.send_after(self(), :get_network_interface, 10_000)
+        Process.send_after(self(), :get_network_interface, 60_000)
         {:noreply, socket}
     end
   end
