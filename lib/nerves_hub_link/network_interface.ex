@@ -25,7 +25,7 @@ defmodule NervesHubLink.NetworkInterface do
       nil
   end
 
-  defp address_from_socket({:sslsocket, _, _} = socket) do
+  defp address_from_socket(socket) when is_tuple(socket) and elem(socket, 0) == :sslsocket do
     {:ok, {address, _}} = :ssl.sockname(socket)
     address
   end
