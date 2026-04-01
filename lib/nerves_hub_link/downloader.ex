@@ -168,25 +168,30 @@ defmodule NervesHubLink.Downloader do
   # it is a extreme condition where regardless of download attempts,
   # idle timeouts etc, this entire process has lived for TOO long.
   def handle_info(:max_timeout, %Downloader{} = state) do
+    Logger.debug("[NervesHubLink.Downloader] Max timeout reached")
     {:stop, :max_timeout_reached, state}
   end
 
-  # this message is scheduled when we receive the `content_length` value
+  # Handle the worst case download speed timeout.
+  # Please refer to `retry_config.ex` for more information on how this is calculated.
   def handle_info(:worst_case_download_speed_timeout, %Downloader{} = state) do
+    Logger.debug("[NervesHubLink.Downloader] Worst case download speed timeout reached")
     {:stop, :worst_case_download_speed_reached, state}
   end
 
-  # this message is delivered after `state.retry_args.idle_timeout`
+  # a `:timeout` message is delivered by the `GenServer` after `state.retry_args.idle_timeout`
   # milliseconds have occurred. It indicates that many milliseconds have elapsed since
   # the last "chunk" from the HTTP server
   def handle_info(:timeout, %Downloader{handler_fun: handler} = state) do
     close_conn(state)
     _ = handler.({:error, :idle_timeout})
+    Logger.debug("[NervesHubLink.Downloader] Idle timeout reached")
     state = reschedule_resume(state)
     {:noreply, %{state | conn: nil}}
   end
 
-  # message is scheduled when a resumable event happens.
+  # if a download has been rescheduled to resume, but the maximum number of retries has been reached,
+  # stop the download and return an error.
   def handle_info(
         :resume,
         %Downloader{
@@ -194,9 +199,11 @@ defmodule NervesHubLink.Downloader do
           retry_args: %RetryConfig{max_disconnects: retry_number}
         } = state
       ) do
+    Logger.debug("[NervesHubLink.Downloader] Max disconnects reached")
     {:stop, :max_disconnects_reached, state}
   end
 
+  # resume a download that has been rescheduled to resume, and set the idle timeout.
   def handle_info(:resume, %Downloader{handler_fun: handler} = state) do
     case resume_download(state.uri, state) do
       {:ok, state} ->
@@ -209,6 +216,7 @@ defmodule NervesHubLink.Downloader do
     end
   end
 
+  # process a streaming message from Mint
   def handle_info(message, %Downloader{conn: conn, handler_fun: handler} = state)
       when Mint.HTTP.is_connection_message(conn, message) do
     case Mint.HTTP.stream(state.conn, message) do
@@ -250,14 +258,15 @@ defmodule NervesHubLink.Downloader do
 
     %Downloader{
       state
-      | retry_timeout: timer,
+      | request_ref: nil,
+        retry_timeout: timer,
         retry_number: retry_number + 1,
         worst_case_timeout_remaining_ms: worst_case_timeout_remaining_ms
     }
   end
 
   @spec schedule_worst_case_timer(t()) :: t()
-  # only calculate worst_case_timeout_remaining_ms is not set
+  # only calculate worst_case_timeout_remaining_ms if it's nil (i.e. not set)
   defp schedule_worst_case_timer(%Downloader{worst_case_timeout_remaining_ms: nil} = downloader) do
     # decompose here because in the formatter doesn't like all this being in the head
     %Downloader{retry_args: retry_config, content_length: content_length} = downloader
@@ -290,12 +299,16 @@ defmodule NervesHubLink.Downloader do
     end
   end
 
+  # when there are no more responses, and the download is marked as complete,
+  # close the connection, let the handler know, and stop the process
   defp handle_responses([], %Downloader{completed: true} = state) do
     close_conn(state)
     _ = state.handler_fun.(:complete)
     {:stop, :normal, state}
   end
 
+  # when there are no more responses, and the download isn't marked as complete,
+  # wait for more responses, while also setting the idle timeout
   defp handle_responses([], %Downloader{} = state) do
     {:noreply, state, state.retry_args.idle_timeout}
   end
@@ -406,8 +419,53 @@ defmodule NervesHubLink.Downloader do
     end
   end
 
-  def handle_response({:done, request_ref}, %Downloader{request_ref: request_ref} = state) do
+  # Mark the download as completed when downloaded_length matches content_length.
+  def handle_response(
+        {:done, request_ref},
+        %Downloader{
+          request_ref: request_ref,
+          content_length: total,
+          downloaded_length: total
+        } = state
+      ) do
+    Logger.debug(
+      "[NervesHubLink.Downloader] Download completed (downloaded_length and content_length match: #{total})"
+    )
+
     %{state | completed: true}
+  end
+
+  # While not expected, it has been observed that downloaded_length may be greater than content_length.
+  # I'm unsure why this happens, and if this is a bug with the Downloader or something happening on the other end.
+  # This function signature handles the case where downloaded_length is greater than content_length and marks the
+  # download as completed, leaving the cleanup to the caller.
+  def handle_response(
+        {:done, request_ref},
+        %Downloader{
+          request_ref: request_ref,
+          content_length: content_length,
+          downloaded_length: downloaded_length
+        } = state
+      )
+      when downloaded_length > content_length do
+    Logger.warning(
+      "[NervesHubLink.Downloader] Download completed, but downloaded length is greater than content length (downloaded_length: #{downloaded_length} | content_length: #{content_length})"
+    )
+
+    %{state | completed: true}
+  end
+
+  # Its possible for the underlying tcp/ssl connection to be closed before the download is complete.
+  # https://github.com/elixir-mint/mint/blob/0bfcc869b53b83989c24ba681d66d0a447b5a1c3/lib/mint/http1.ex#L488-L491
+  #
+  # If that happens, Mint will send a `{:done, request_ref}` but the body may not be fully received.
+  # https://github.com/elixir-mint/mint/blob/0bfcc869b53b83989c24ba681d66d0a447b5a1c3/lib/mint/http1.ex#L524
+  def handle_response({:done, request_ref}, %Downloader{request_ref: request_ref} = state) do
+    Logger.warning(
+      "[NervesHubLink.Downloader] Download completed, but content length and download length mismatch detected (downloaded_length: #{state.downloaded_length} | content_length: #{state.content_length})"
+    )
+
+    {:error, :downloaded_content_length_mismatch, state}
   end
 
   # ignore other messages when redirecting
