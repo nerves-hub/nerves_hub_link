@@ -1,3 +1,4 @@
+# SPDX-FileCopyrightText: 2026 Josh Kalderimis
 # SPDX-FileCopyrightText: 2026 Nate Shoemaker
 #
 # SPDX-License-Identifier: Apache-2.0
@@ -19,21 +20,27 @@ defmodule NervesHubLink.NetworkInterface do
     |> interface_from_address()
   rescue
     err ->
-      Logger.warning(
-        "[NervesHubLink] Error: could not retrieve network interface: #{inspect(err)}"
-      )
+      Logger.warning("[NervesHubLink] Could not retrieve network interface: #{inspect(err)}")
 
       nil
   end
 
-  defp address_from_socket({:sslsocket, _, _} = socket) do
+  defp address_from_socket(socket) when is_tuple(socket) and elem(socket, 0) == :sslsocket do
     {:ok, {address, _}} = :ssl.sockname(socket)
     address
   end
 
-  defp address_from_socket(socket) do
+  defp address_from_socket(socket) when is_port(socket) do
     {:ok, {address, _}} = :inet.sockname(socket)
     address
+  end
+
+  defp address_from_socket(socket) do
+    Logger.warning(
+      "[NervesHubLink] Could not retrieve network interface from socket: #{inspect(socket)}"
+    )
+
+    nil
   end
 
   defp interface_from_address(address) do

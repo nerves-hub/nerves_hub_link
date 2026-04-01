@@ -618,15 +618,15 @@ defmodule NervesHubLink.Socket do
          %{conn: conn} <- :sys.get_state(pid),
          underlying_socket = Mint.HTTP.get_socket(conn),
          interface when is_binary(interface) <- NetworkInterface.from_socket(underlying_socket) do
-      _ = report_network_interface(socket, interface)
+      _ = push(socket, @device_topic, "report_network_interface", %{interface: interface})
       {:noreply, assign(socket, network_interface: interface)}
     else
       result ->
         Logger.warning(
-          "[NervesHubLink] Error: could not determine network interface: #{inspect(result)}"
+          "[NervesHubLink] Could not determine network interface: #{inspect(result)}"
         )
 
-        Process.send_after(self(), :get_network_interface, 10_000)
+        Process.send_after(self(), :get_network_interface, 60_000)
         {:noreply, socket}
     end
   end
@@ -802,9 +802,5 @@ defmodule NervesHubLink.Socket do
   defp maybe_cancel_timer(pid) do
     _ = Process.cancel_timer(pid)
     :ok
-  end
-
-  defp report_network_interface(socket, interface) do
-    push(socket, @device_topic, "report_network_interface", %{interface: interface})
   end
 end
