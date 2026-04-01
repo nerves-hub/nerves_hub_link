@@ -40,8 +40,10 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
   """
   @impl Report
   def alarms() do
+    ignore_disk_full_mounts = ignore_disk_full_alarms()
+
     Alarms.get_alarms()
-    |> Enum.reject(fn {id, _} -> id == {:disk_almost_full, ~c"/"} end)
+    |> Enum.reject(fn {id, _} -> id in ignore_disk_full_mounts end)
     |> Enum.into(%{}, fn {id, description} ->
       try do
         {inspect(id), inspect(description)}
@@ -73,6 +75,12 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
       vintage_net()
     ]
     |> Enum.reduce(%{}, &Map.merge/2)
+  end
+
+  defp ignore_disk_full_alarms() do
+    get_health_config(:alarms, [])
+    |> Keyword.get(:ignore_disk_full_mounts, ["/"])
+    |> Enum.map(fn mount -> {:disk_almost_full, to_charlist(mount)} end)
   end
 
   defp get_metric_sets() do

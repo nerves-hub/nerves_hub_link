@@ -93,7 +93,7 @@ defmodule NervesHubLink.Extensions.Health do
 
   @spec check_health(module()) :: DeviceStatus.t() | nil
   def check_health(default_report \\ DefaultReport) do
-    config = Application.get_env(:nerves_hub, :health, [])
+    config = Application.get_env(:nerves_hub_link, :health, [])
     report = Keyword.get(config, :report, default_report)
 
     if report do

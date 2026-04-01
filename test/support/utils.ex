@@ -11,23 +11,14 @@ defmodule NervesHubLink.Support.Utils do
     System.unique_integer([:positive, :monotonic]) + 6000
   end
 
-  @spec supervise_with_port(function(), integer() | nil) :: {:ok, pid, integer()}
-  def supervise_with_port(child_spec_fn, port \\ nil) do
-    port =
-      if port do
-        port + 1
-      else
-        unique_port_number()
-      end
+  @spec supervise_plug(plug :: module()) :: {:ok, pid, integer()}
+  def supervise_plug(plug) do
+    server =
+      {Bandit, scheme: :http, plug: plug, ip: :loopback, port: 0}
+      |> ExUnit.Callbacks.start_supervised!()
 
-    child_spec = child_spec_fn.(port)
+    {:ok, {_address, port}} = ThousandIsland.listener_info(server)
 
-    case ExUnit.Callbacks.start_supervised(child_spec) do
-      {:ok, plug} ->
-        {:ok, plug, port}
-
-      {:error, :eaddrinuse} ->
-        supervise_with_port(child_spec_fn, port)
-    end
+    {:ok, server, port}
   end
 end

@@ -14,6 +14,8 @@ defmodule NervesHubLink.Configurator.SharedSecret do
   alias NervesHubLink.Certificate
   alias NervesHubLink.Configurator.Config
 
+  require Logger
+
   @impl NervesHubLink.Configurator
   def build(%Config{ssl: ssl, socket: socket} = config) do
     ssl =
@@ -42,6 +44,9 @@ defmodule NervesHubLink.Configurator.SharedSecret do
       # Important to use os_time as system_time is not updated by Erlang as
       # quickly. See https://www.erlang.org/doc/apps/erts/time_correction#erlang-system-time
       |> Keyword.put(:signed_at, System.os_time(:second))
+
+    datetime = DateTime.from_unix!(opts[:signed_at]) |> DateTime.to_iso8601()
+    Logger.info("[NervesHubLink:SharedSecret] Generating auth headers with time #{datetime}")
 
     alg =
       "#{opts[:signature_version]}-HMAC-#{opts[:key_digest]}-#{opts[:key_iterations]}-#{opts[:key_length]}"

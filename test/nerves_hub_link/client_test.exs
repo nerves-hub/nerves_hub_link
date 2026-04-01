@@ -7,15 +7,29 @@
 #
 defmodule NervesHubLink.ClientTest do
   use ExUnit.Case, async: true
-  alias NervesHubLink.{Client, ClientMock}
+
+  import Mox
+
+  alias NervesHubLink.Client
+  alias NervesHubLink.ClientMock
 
   @compile {:no_warn_undefined, {Not, :real, 0}}
   @compile {:no_warn_undefined, {:something, :exception, 1}}
 
   doctest Client
 
-  setup context do
-    Mox.verify_on_exit!(context)
+  setup :verify_on_exit!
+
+  test "firmware_validated?/0" do
+    assert Client.firmware_validated?() == true
+    Mox.expect(ClientMock, :firmware_validated?, fn -> false end)
+    assert Client.firmware_validated?() == false
+  end
+
+  test "firmware_auto_revert_detected?/0" do
+    assert Client.firmware_auto_revert_detected?() == false
+    Mox.expect(ClientMock, :firmware_auto_revert_detected?, fn -> true end)
+    assert Client.firmware_auto_revert_detected?() == true
   end
 
   test "connected/0" do

@@ -23,7 +23,6 @@ defmodule NervesHubLink.Configurator.LocalCertKey do
     |> maybe_add_cacerts()
     |> maybe_add_cert()
     |> maybe_add_key()
-    |> maybe_add_sni()
   end
 
   defp maybe_add_cacerts(%{ssl: ssl} = config) do
@@ -67,11 +66,6 @@ defmodule NervesHubLink.Configurator.LocalCertKey do
           Keyword.put_new(ssl, :keyfile, Path.join(config.data_path, "key.pem"))
       end
 
-    %{config | ssl: ssl}
-  end
-
-  defp maybe_add_sni(%{ssl: ssl, sni: sni} = config) do
-    ssl = Keyword.put_new(ssl, :server_name_indication, to_charlist(sni))
     %{config | ssl: ssl}
   end
 end

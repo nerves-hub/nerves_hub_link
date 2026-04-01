@@ -18,11 +18,15 @@ defmodule NervesHubLink.Socket do
   alias NervesHubLink.Client
   alias NervesHubLink.Configurator
   alias NervesHubLink.Configurator.SharedSecret
+  alias NervesHubLink.Extensions
   alias NervesHubLink.Message.ArchiveInfo
   alias NervesHubLink.Message.UpdateInfo
-  alias NervesHubLink.Script
+  alias NervesHubLink.NetworkInterface
+  alias NervesHubLink.SupportScriptsManager
   alias NervesHubLink.UpdateManager
   alias NervesHubLink.UploadFile
+
+  alias Mint.WebSocket.UpgradeFailureError
 
   require Logger
 
@@ -30,54 +34,54 @@ defmodule NervesHubLink.Socket do
   @device_topic "device"
   @extensions_topic "extensions"
 
-  @spec start_link(Configurator.Config.t()) :: GenServer.on_start()
-  def start_link(config) do
-    GenServer.start_link(__MODULE__, config, name: __MODULE__)
+  @firmware_validation_check_interval :timer.seconds(10)
+
+  @max_redirects 2
+
+  @spec start_link(Configurator.Config.t(), GenServer.options()) :: GenServer.on_start()
+  def start_link(config, opts \\ []) do
+    opts = Keyword.put_new(opts, :name, __MODULE__)
+    GenServer.start_link(__MODULE__, config, opts)
   end
 
-  @spec reconnect() :: :ok
-  def reconnect() do
-    GenServer.cast(__MODULE__, :reconnect)
+  @spec reconnect!(GenServer.server()) :: :ok
+  def reconnect!(server \\ __MODULE__) do
+    GenServer.cast(server, :reconnect)
   end
 
-  @spec send_update_progress(non_neg_integer()) :: :ok
-  def send_update_progress(progress) do
-    GenServer.cast(__MODULE__, {:send_update_progress, progress})
+  @spec send_update_status(GenServer.server(), NervesHubLink.update_status()) :: :ok
+  def send_update_status(server \\ __MODULE__, status) do
+    GenServer.cast(server, {:send_update_status, status})
   end
 
-  @spec send_update_status(String.t()) :: :ok
-  def send_update_status(status) do
-    GenServer.cast(__MODULE__, {:send_update_status, status})
-  end
-
-  @spec check_connection(atom()) :: boolean()
-  def check_connection(type) do
-    GenServer.call(__MODULE__, {:check_connection, type})
+  @spec check_connection(GenServer.server(), atom()) :: boolean()
+  def check_connection(server \\ __MODULE__, type) do
+    GenServer.call(server, {:check_connection, type})
   catch
     :exit, _ -> false
   end
 
-  @spec send_file(Path.t()) :: :ok | {:error, :too_large | File.posix()}
-  def send_file(file_path) do
-    GenServer.call(__MODULE__, {:send_file, file_path})
+  @spec send_file(GenServer.server(), Path.t()) :: :ok | {:error, :too_large | File.posix()}
+  def send_file(server \\ __MODULE__, file_path) do
+    GenServer.call(server, {:send_file, file_path})
   end
 
   @doc false
-  @spec start_uploading(pid(), String.t()) :: :ok | :error
-  def start_uploading(pid, filename) do
-    GenServer.call(pid, {:start_uploading, filename})
+  @spec start_uploading(GenServer.server(), String.t()) :: :ok | :error
+  def start_uploading(server \\ __MODULE__, filename) do
+    GenServer.call(server, {:start_uploading, filename})
   end
 
   @doc false
-  @spec upload_data(pid(), String.t(), any(), any()) :: :ok | :error
-  def upload_data(pid, filename, index, chunk) do
-    GenServer.call(pid, {:upload_data, filename, index, chunk})
+  @spec upload_data(GenServer.server(), String.t(), any(), any()) :: :ok | :error
+  def upload_data(server \\ __MODULE__, filename, index, chunk) do
+    GenServer.call(server, {:upload_data, filename, index, chunk})
   end
 
   @doc false
-  @spec finish_uploading(pid(), String.t()) :: :ok | :error
-  def finish_uploading(pid, filename) do
-    GenServer.call(pid, {:finish_uploading, filename})
+  @spec finish_uploading(GenServer.server(), String.t()) :: :ok | :error
+  def finish_uploading(server \\ __MODULE__, filename) do
+    GenServer.call(server, {:finish_uploading, filename})
   end
 
   @doc """
@@ -86,31 +90,33 @@ defmodule NervesHubLink.Socket do
   Escape hatch for uploading files via the console, kill the upload
   process to stop uploading.
   """
-  @spec cancel_upload() :: :ok | :error
-  def cancel_upload() do
-    GenServer.call(__MODULE__, :cancel_upload)
+  @spec cancel_upload(GenServer.server()) :: :ok | :error
+  def cancel_upload(server \\ __MODULE__) do
+    GenServer.call(server, :cancel_upload)
   end
 
   @doc """
   Return whether an IEx or other console session is active
   """
-  @spec console_active?() :: boolean()
-  def console_active?() do
-    GenServer.call(__MODULE__, :console_active?)
+  @spec console_active?(GenServer.server()) :: boolean()
+  def console_active?(server \\ __MODULE__) do
+    GenServer.call(server, :console_active?)
   end
 
-  @spec push(
-          topic :: String.t(),
+  @spec push_extensions_message(
+          GenServer.server(),
           event :: String.t(),
           message :: Slipstream.json_serializable() | {:binary, binary()}
         ) :: {:ok, Slipstream.push_reference()} | {:error, reason :: term()}
-  def push(topic, event, message) do
-    GenServer.call(__MODULE__, {:push, topic, event, message})
+  def push_extensions_message(server \\ __MODULE__, event, message) do
+    GenServer.call(server, {:push, @extensions_topic, event, message})
   end
 
   @impl Slipstream
   def init(config) do
     Alarms.set_alarm({NervesHubLink.Disconnected, []})
+
+    alarm_if_firmware_auto_reverted()
 
     socket =
       new_socket()
@@ -124,6 +130,8 @@ defmodule NervesHubLink.Socket do
       |> assign(started_at: System.monotonic_time(:millisecond))
       |> assign(connected_at: nil)
       |> assign(joined_at: nil)
+      |> assign(firmware_validation_timer_pid: nil)
+      |> assign(redirect_count: 0)
 
     if config.connect_wait_for_network do
       schedule_network_availability_check()
@@ -137,14 +145,12 @@ defmodule NervesHubLink.Socket do
   def handle_continue(:connect, %{assigns: %{config: config}} = socket) do
     Logger.info("[NervesHubLink] connecting to #{config.socket[:url].host}")
 
-    rejoin_after = Application.get_env(:nerves_hub_link, :rejoin_after, 5_000)
-
     opts = [
       mint_opts: mint_opts(config),
       extensions: mint_extensions(config),
       headers: config.socket[:headers] || [],
       uri: config.socket[:url],
-      rejoin_after_msec: [rejoin_after],
+      rejoin_after_msec: List.flatten([config.rejoin_after]),
       reconnect_after_msec: config.socket[:reconnect_after_msec],
       heartbeat_interval_msec: config.heartbeat_interval_msec
     ]
@@ -165,24 +171,34 @@ defmodule NervesHubLink.Socket do
     device_join_params =
       socket.assigns.params
       |> Map.put("currently_downloading_uuid", currently_downloading_uuid)
+      |> Map.put("meta", %{
+        "firmware_auto_revert_detected" => Client.firmware_auto_revert_detected?(),
+        "firmware_validated" => Client.firmware_validated?()
+      })
 
     socket =
       socket
+      |> assign(params: device_join_params)
       |> join(@device_topic, device_join_params)
       |> maybe_join_console()
       |> assign(connected_at: System.monotonic_time(:millisecond))
+      |> assign(redirect_count: 0)
 
     Alarms.clear_alarm(NervesHubLink.Disconnected)
 
     Client.connected()
 
+    socket = schedule_firmware_validation_status_check(socket)
+
     {:ok, socket}
   end
 
   @impl Slipstream
-  def handle_join(@device_topic, reply, socket) do
+  def handle_join(@device_topic, _reply, socket) do
     Logger.debug("[#{inspect(__MODULE__)}] Joined Device channel")
-    _ = handle_join_reply(reply, socket)
+
+    send(self(), :get_network_interface)
+
     {:ok, assign(socket, joined_at: System.monotonic_time(:millisecond))}
   end
 
@@ -192,7 +208,8 @@ defmodule NervesHubLink.Socket do
   end
 
   def handle_join(@extensions_topic, extensions, socket) do
-    NervesHubLink.Extensions.attach(extensions)
+    Extensions.attach(extensions)
+    Logger.debug("[#{inspect(__MODULE__)}] Joined Extensions channel")
     {:ok, socket}
   end
 
@@ -279,18 +296,45 @@ defmodule NervesHubLink.Socket do
 
   @impl Slipstream
   def handle_cast(:reconnect, socket) do
-    # See handle_disconnect/2 for the reconnect call once the connection is
-    # closed.
+    # See handle_disconnect/2 for the reconnect call once the connection is closed.
     {:noreply, disconnect(socket)}
   end
 
-  def handle_cast({:send_update_progress, progress}, socket) do
-    _ = push(socket, @device_topic, "fwup_progress", %{value: progress})
+  def handle_cast({:send_update_status, {stage, progress}}, socket)
+      when stage in [:downloading, :updating] do
+    _ = push(socket, @device_topic, "fwup_progress", %{stage: stage, value: progress})
     {:noreply, socket}
   end
 
   def handle_cast({:send_update_status, status}, socket) do
-    _ = push(socket, @device_topic, "status_update", %{status: status})
+    payload =
+      case status do
+        :received ->
+          %{status: :received}
+
+        {:started, downloader_network_interface} ->
+          %{status: :started, downloader_network_interface: downloader_network_interface}
+
+        :completed ->
+          # Make sure older versions of Hub get the final 100% message
+          _ = push(socket, @device_topic, "fwup_progress", %{stage: :updating, value: 100})
+          %{status: :completed}
+
+        {:ignored, reason} ->
+          %{status: :ignored, reason: reason}
+
+        {:reschedule, delay_for} ->
+          %{status: :rescheduled, delay_for: delay_for}
+
+        {:reschedule, delay_for, reason} ->
+          %{status: :rescheduled, delay_for: delay_for, reason: reason}
+
+        {:failed, reason} ->
+          %{status: :failed, reason: reason}
+      end
+
+    _ = push(socket, @device_topic, "status_update", payload)
+
     {:noreply, socket}
   end
 
@@ -349,7 +393,7 @@ defmodule NervesHubLink.Socket do
 
   def handle_message(@device_topic, "scripts/run", params, socket) do
     # See related handle_info for pushing back the script result
-    :ok = Script.capture(params["text"], params["ref"])
+    :ok = SupportScriptsManager.start_task(params["ref"], params["text"], params["timeout"])
     {:ok, socket}
   end
 
@@ -376,7 +420,7 @@ defmodule NervesHubLink.Socket do
 
   def handle_message(@device_topic, "extensions:get", _payload, socket) do
     available_extensions =
-      for {name, %{version: ver}} <- NervesHubLink.Extensions.list(),
+      for {name, %{version: ver}} <- Extensions.list(),
           into: %{},
           do: {name, to_string(ver)}
 
@@ -443,7 +487,7 @@ defmodule NervesHubLink.Socket do
   end
 
   def handle_message(@extensions_topic, event, payload, socket) do
-    NervesHubLink.Extensions.handle_event(event, payload)
+    Extensions.handle_event(event, payload)
     {:ok, socket}
   end
 
@@ -458,26 +502,65 @@ defmodule NervesHubLink.Socket do
 
   @impl Slipstream
   def handle_info(:connect_check_network_availability, socket) do
-    hostname = URI.parse(socket.assigns.config.socket[:url]).host
+    uri = URI.parse(socket.assigns.config.socket[:url])
 
-    case :inet.gethostbyname(to_charlist(hostname)) do
-      {:ok, _} ->
+    case :gen_tcp.connect(to_charlist(uri.host), uri.port, [active: false, packet: 0], 2_000) do
+      {:ok, tcp_socket} ->
+        :gen_tcp.close(tcp_socket)
         {:noreply, socket, {:continue, :connect}}
 
-      _ ->
+      {:error, _reason} ->
         Logger.info("[NervesHubLink] waiting for network to become available")
-        schedule_network_availability_check(2_000)
+        schedule_network_availability_check(3_000)
         {:noreply, socket}
     end
   end
 
-  def handle_info({"scripts/run", ref, output, return}, socket) do
-    _ =
-      push(socket, @device_topic, "scripts/run", %{
-        ref: ref,
-        output: output,
-        return: inspect(return, pretty: true)
-      })
+  def handle_info(:firmware_validation_status_check, socket) do
+    if Client.firmware_validated?() do
+      Logger.info("[NervesHubLink] Firmware is validated, notifying NervesHub")
+      _ = push(socket, @device_topic, "firmware_validated", %{})
+      {:noreply, assign(socket, :firmware_validation_timer_pid, nil)}
+    else
+      Logger.debug(
+        "[NervesHubLink] Firmware is not marked as validated, checking again in #{@firmware_validation_check_interval / 1000} seconds"
+      )
+
+      {:noreply, schedule_firmware_validation_status_check(socket)}
+    end
+  end
+
+  def handle_info({"scripts/result", identifier, result}, socket) do
+    payload =
+      case result do
+        {:ok, result, output} ->
+          %{
+            ref: identifier,
+            result: "completed",
+            output: output,
+            return: inspect(result, pretty: true)
+          }
+
+        {:error, :timeout} ->
+          %{
+            ref: identifier,
+            result: "error",
+            reason: "timeout",
+            output: "Error running script: timeout exceeded",
+            return: ""
+          }
+
+        {:error, reason} ->
+          %{
+            ref: identifier,
+            result: "error",
+            reason: inspect(reason, pretty: true),
+            output: "Error running script: #{inspect(reason, pretty: true)}",
+            return: ""
+          }
+      end
+
+    _ = push(socket, @device_topic, "scripts/run", payload)
 
     {:noreply, socket}
   end
@@ -488,8 +571,8 @@ defmodule NervesHubLink.Socket do
   end
 
   def handle_info({:EXIT, iex_pid, reason}, %{assigns: %{iex_pid: iex_pid}} = socket) do
-    msg = "\r******* Remote IEx stopped: #{inspect(reason)} *******\r"
-    _ = push(socket, @console_topic, "up", %{data: msg})
+    msg = "Remote IEx stopped: #{inspect(reason)}"
+    _ = push(socket, @console_topic, "up", %{data: "\r******* #{msg} *******\r"})
     Logger.warning("[NervesHubLink] #{msg}")
 
     socket =
@@ -509,6 +592,14 @@ defmodule NervesHubLink.Socket do
     {:noreply, assign(socket, :uploader_pid, nil)}
   end
 
+  def handle_info({:EXIT, port, reason}, socket) when is_port(port) do
+    Logger.debug(
+      "[NervesHubLink] Ignoring :Exit message from Slipstream connection Port (#{inspect(port)} : #{reason})"
+    )
+
+    {:noreply, socket}
+  end
+
   def handle_info(:iex_timeout, socket) do
     msg = """
     \r
@@ -524,6 +615,24 @@ defmodule NervesHubLink.Socket do
     {:noreply, stop_iex(socket)}
   end
 
+  def handle_info(:get_network_interface, socket) do
+    with pid when is_pid(pid) <- Slipstream.Socket.channel_pid(socket),
+         %{conn: conn} <- :sys.get_state(pid),
+         underlying_socket = Mint.HTTP.get_socket(conn),
+         interface when is_binary(interface) <- NetworkInterface.from_socket(underlying_socket) do
+      _ = report_network_interface(socket, interface)
+      {:noreply, assign(socket, network_interface: interface)}
+    else
+      result ->
+        Logger.warning(
+          "[NervesHubLink] Error: could not determine network interface: #{inspect(result)}"
+        )
+
+        Process.send_after(self(), :get_network_interface, 10_000)
+        {:noreply, socket}
+    end
+  end
+
   def handle_info(msg, socket) do
     Logger.warning("[#{inspect(__MODULE__)}] Unhandled handle_info: #{inspect(msg)}")
     {:noreply, socket}
@@ -531,7 +640,7 @@ defmodule NervesHubLink.Socket do
 
   @impl Slipstream
   def handle_reply(ref, {:error, "detach"}, socket) do
-    NervesHubLink.Extensions.detach(ref)
+    Extensions.detach(ref)
     {:ok, socket}
   end
 
@@ -563,14 +672,57 @@ defmodule NervesHubLink.Socket do
           channel_config
       end
 
-    socket = %{socket | channel_config: channel_config}
+    %{socket | channel_config: channel_config}
+    |> handle_redirect(reason)
+  end
 
+  defp handle_redirect(
+         %{assigns: %{redirect_count: redirect_count}} = socket,
+         {:error,
+          {:upgrade_failure,
+           %{reason: %UpgradeFailureError{status_code: status, headers: headers}}}} = error
+       )
+       when status >= 300 and status < 400 do
+    if redirect_count < @max_redirects do
+      {_, location} = Enum.find(headers, fn {k, _v} -> k == "location" end)
+
+      uri = URI.merge(socket.channel_config.uri, URI.parse(location))
+
+      uri =
+        case uri.scheme do
+          "http" -> %{uri | scheme: "ws"}
+          "https" -> %{uri | scheme: "wss"}
+          _ -> uri
+        end
+
+      channel_config = %{socket.channel_config | uri: uri}
+
+      Logger.info("[NervesHubLink] redirect received : #{URI.to_string(uri)}")
+
+      %{socket | channel_config: channel_config}
+      |> update(:redirect_count, &(&1 + 1))
+      |> reconnect()
+    else
+      Logger.error("[NervesHubLink] maximum redirect count reached : #{inspect(error)}")
+      {:ok, socket}
+    end
+  end
+
+  defp handle_redirect(socket, _reason) do
     reconnect(socket)
   end
 
   @impl Slipstream
   def terminate(_reason, socket) do
     disconnect(socket)
+  end
+
+  defp alarm_if_firmware_auto_reverted() do
+    if Client.firmware_auto_revert_detected?() do
+      Alarms.set_alarm({NervesHubLink.FirmwareReverted, []})
+    else
+      :ok
+    end
   end
 
   defp mint_opts(config) do
@@ -593,21 +745,23 @@ defmodule NervesHubLink.Socket do
     Process.send_after(self(), :connect_check_network_availability, delay)
   end
 
-  defp handle_join_reply(%{"firmware_url" => url} = update, socket) when is_binary(url) do
-    case UpdateInfo.parse(update) do
-      {:ok, %UpdateInfo{} = info} ->
-        UpdateManager.apply_update(info, socket.assigns.config.fwup_public_keys)
+  defp schedule_firmware_validation_status_check(socket) do
+    if socket.assigns.params["meta"]["firmware_validated"] == true do
+      Logger.debug("[NervesHubLink] Firmware validated and information sent during connection")
+      socket
+    else
+      maybe_cancel_timer(socket.assigns[:firmware_validation_timer_pid])
 
-      error ->
-        Logger.error(
-          "[NervesHubLink] Error parsing update data: #{inspect(update)} error: #{inspect(error)}"
+      pid =
+        Process.send_after(
+          self(),
+          :firmware_validation_status_check,
+          @firmware_validation_check_interval
         )
 
-        :noop
+      assign(socket, :firmware_validation_timer_pid, pid)
     end
   end
-
-  defp handle_join_reply(_, _), do: :noop
 
   defp maybe_join_console(socket) do
     if socket.assigns.remote_iex do
@@ -618,10 +772,9 @@ defmodule NervesHubLink.Socket do
   end
 
   defp set_iex_timer(socket) do
-    timeout = Application.get_env(:nerves_hub_link, :remote_iex_timeout, 300) * 1000
-    old_timer = socket.assigns[:iex_timer]
+    timeout = socket.assigns.config.remote_iex_timeout * 1000
 
-    _ = if old_timer, do: Process.cancel_timer(old_timer)
+    maybe_cancel_timer(socket.assigns[:iex_timer])
 
     assign(socket, iex_timer: Process.send_after(self(), :iex_timeout, timeout))
   end
@@ -629,7 +782,6 @@ defmodule NervesHubLink.Socket do
   defp start_iex(socket) do
     shell_opts = [[dot_iex_path: dot_iex_path()]]
     {:ok, iex_pid} = ExTTY.start_link(handler: self(), type: :elixir, shell_opts: shell_opts)
-    # %{state | iex_pid: iex_pid}
     assign(socket, iex_pid: iex_pid)
   end
 
@@ -645,5 +797,16 @@ defmodule NervesHubLink.Socket do
     _ = Process.unlink(iex)
     GenServer.stop(iex, :normal, 10_000)
     assign(socket, iex_pid: nil)
+  end
+
+  defp maybe_cancel_timer(nil), do: :ok
+
+  defp maybe_cancel_timer(pid) do
+    _ = Process.cancel_timer(pid)
+    :ok
+  end
+
+  defp report_network_interface(socket, interface) do
+    push(socket, @device_topic, "report_network_interface", %{interface: interface})
   end
 end

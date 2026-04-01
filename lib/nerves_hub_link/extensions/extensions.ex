@@ -27,10 +27,14 @@ defmodule NervesHubLink.Extensions do
   require Logger
 
   @default_extension_modules [
-    NervesHubLink.Extensions.Geo,
-    NervesHubLink.Extensions.Health,
-    NervesHubLink.Extensions.Logging
-  ]
+                               NervesHubLink.Extensions.Geo,
+                               NervesHubLink.Extensions.Health,
+                               NervesHubLink.Extensions.Logging
+                             ] ++
+                               if(Code.ensure_loaded?(ExPTY),
+                                 do: [NervesHubLink.Extensions.LocalShell],
+                                 else: []
+                               )
 
   @doc """
   Invoked when routing an Extension event
@@ -130,7 +134,7 @@ defmodule NervesHubLink.Extensions do
             else: "#{extension}:#{event}"
 
         if Socket.check_connection(:extensions) do
-          Socket.push("extensions", scoped_event, payload)
+          Socket.push_extensions_message(scoped_event, payload)
         else
           {:ok, :disconnected}
         end
@@ -152,7 +156,7 @@ defmodule NervesHubLink.Extensions do
         acc ->
           # Ignore since either :ok, or {:error, :not_found}
           _ = DynamicSupervisor.terminate_child(ExtensionsSupervisor, pid)
-          _ = Socket.push("extensions", "#{extension}:detached", %{})
+          _ = Socket.push_extensions_message("#{extension}:detached", %{})
           put_in(acc.extensions[extension][:attached?], false)
       end
 
@@ -167,12 +171,12 @@ defmodule NervesHubLink.Extensions do
         acc ->
           with mod when not is_nil(mod) <- state.extensions[extension][:module],
                :ok <- start_extension(mod),
-               {:ok, ref} <- Socket.push("extensions", "#{extension}:attached", %{}) do
+               {:ok, ref} <- Socket.push_extensions_message("#{extension}:attached", %{}) do
             update_in(acc.extensions[extension], &%{&1 | attached?: true, attach_ref: ref})
           else
             error ->
-              reason = if error, do: "start_failure", else: "unknown_extension"
-              _ = Socket.push("extensions", "#{extension}:error", %{reason: reason})
+              reason = extension_message_from_error(error)
+              _ = Socket.push_extensions_message("#{extension}:error", %{reason: reason})
 
               Logger.warning(
                 "[NervesHubLink.Extensions] failed to start #{extension}: #{inspect(error)}"
@@ -214,7 +218,16 @@ defmodule NervesHubLink.Extensions do
         [extension, event] ->
           case state.extensions[extension] do
             %{module: module} ->
-              send(module, {:__extension_event__, event, payload})
+              try do
+                send(module, {:__extension_event__, event, payload})
+              rescue
+                error ->
+                  Logger.error(
+                    "[NervesHubLink.Extensions] Error handling event `#{inspect(event)}` with payload `#{inspect(payload)}`: #{inspect(error)}"
+                  )
+
+                  nil
+              end
 
             _ ->
               nil
@@ -245,6 +258,9 @@ defmodule NervesHubLink.Extensions do
     end
   end
 
+  defp extension_message_from_error(error),
+    do: if(error, do: "start_failure", else: "unknown_extension")
+
   defmacro __using__(opts) do
     name = opts[:name] || raise "Missing required extension arg: name"
     version = opts[:version] || raise "Missing required extension arg: version"
@@ -256,10 +272,24 @@ defmodule NervesHubLink.Extensions do
       def __name__(), do: unquote(name)
       def __version__(), do: unquote(version)
 
+      # Re-implemented the included `child_spec/1` function from `use GenServer` so
+      # that `@doc false` can be used to hide `child_spec/1` from the generated docs.
+      @doc false
+      def child_spec(init_arg) do
+        default = %{
+          id: __MODULE__,
+          start: {__MODULE__, :start_link, [init_arg]}
+        }
+
+        Supervisor.child_spec(default, [])
+      end
+
+      @doc false
       def start_link(opts) do
         GenServer.start_link(__MODULE__, opts, name: __MODULE__)
       end
 
+      @doc false
       @spec push(String.t(), map()) ::
               {:ok, Slipstream.push_reference()} | {:error, reason :: :detached | term()}
       def push(event, payload) do

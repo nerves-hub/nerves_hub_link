@@ -1,7 +1,7 @@
 defmodule NervesHubLink.MixProject do
   use Mix.Project
 
-  @version "2.7.3"
+  @version "2.11.1"
   @description "Manage your Nerves fleet by connecting it to NervesHub"
   @source_url "https://github.com/nerves-hub/nerves_hub_link"
 
@@ -12,17 +12,9 @@ defmodule NervesHubLink.MixProject do
       description: @description,
       dialyzer: dialyzer(),
       docs: docs(),
-      elixir: "~> 1.13",
+      elixir: "~> 1.14",
       elixirc_paths: elixirc_paths(Mix.env()),
       package: package(),
-      preferred_cli_env: [
-        coveralls: :test,
-        "coveralls.detail": :test,
-        "coveralls.post": :test,
-        "coveralls.html": :test,
-        docs: :docs,
-        "hex.publish": :docs
-      ],
       start_permanent: Mix.env() == :prod,
       test_coverage: [tool: ExCoveralls],
       version: @version
@@ -40,13 +32,28 @@ defmodule NervesHubLink.MixProject do
     ]
   end
 
+  def cli do
+    [
+      preferred_envs: [
+        coveralls: :test,
+        "coveralls.detail": :test,
+        "coveralls.post": :test,
+        "coveralls.html": :test,
+        docs: :docs,
+        "hex.publish": :docs
+      ]
+    ]
+  end
+
   defp elixirc_paths(:test), do: ["test/support", "lib"]
 
   defp elixirc_paths(_), do: ["lib"]
 
   defp dialyzer() do
     [
-      flags: [:missing_return, :extra_return, :error_handling, :underspecs, :unmatched_returns]
+      flags: [:missing_return, :extra_return, :error_handling, :underspecs, :unmatched_returns],
+      plt_file: {:no_warn, "priv/plts/project.plt"},
+      plt_add_apps: [:ex_unit]
     ]
   end
 
@@ -77,6 +84,7 @@ defmodule NervesHubLink.MixProject do
           NervesHubLink.Configurator.LocalCertKey,
           NervesHubLink.Configurator.NervesKey,
           NervesHubLink.Configurator.SharedSecret,
+          NervesHubLink.Configurator.TPM,
           NervesHubLink.FwupConfig
         ],
         Extensions: [
@@ -87,11 +95,20 @@ defmodule NervesHubLink.MixProject do
           NervesHubLink.Extensions.Health,
           NervesHubLink.Extensions.Health.DefaultReport,
           NervesHubLink.Extensions.Health.DeviceStatus,
-          NervesHubLink.Extensions.Health.Report
+          NervesHubLink.Extensions.Health.MetricSet,
+          NervesHubLink.Extensions.Health.MetricSet.CPU,
+          NervesHubLink.Extensions.Health.MetricSet.Disk,
+          NervesHubLink.Extensions.Health.MetricSet.Memory,
+          NervesHubLink.Extensions.Health.MetricSet.NetworkTraffic,
+          NervesHubLink.Extensions.Health.Report,
+          NervesHubLink.Extensions.LocalShell
         ],
         "Downloads and Updates": [
           NervesHubLink.UpdateManager,
           NervesHubLink.UpdateManager.State,
+          NervesHubLink.UpdateManager.Updater,
+          NervesHubLink.UpdateManager.CachingUpdater,
+          NervesHubLink.UpdateManager.StreamingUpdater,
           NervesHubLink.ArchiveManager,
           NervesHubLink.Downloader,
           NervesHubLink.Downloader.RetryConfig,
@@ -101,6 +118,11 @@ defmodule NervesHubLink.MixProject do
           NervesHubLink.Message.ArchiveInfo,
           NervesHubLink.Message.FirmwareMetadata,
           NervesHubLink.Message.UpdateInfo
+        ],
+        Utilities: [
+          NervesHubLink.Alarms,
+          NervesHubLink.Backoff,
+          NervesHubLink.Certificate
         ]
       ]
     ]
@@ -130,10 +152,11 @@ defmodule NervesHubLink.MixProject do
     [
       {:alarmist, "~> 0.3", optional: true},
       {:castore, "~> 0.1 or ~> 1.0", optional: true},
-      {:credo, "~> 1.2", only: :dev, runtime: false},
+      {:credo, "~> 1.2", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.1", only: [:dev, :test], runtime: false},
       {:excoveralls, "~> 0.10", only: :test},
       {:ex_doc, "~> 0.18", only: :docs, runtime: false},
+      {:expty, "~> 0.2.1", optional: true},
       {:extty, "~> 0.4.1"},
       {:fwup, "~> 1.0"},
       {:jason, "~> 1.0"},
@@ -145,8 +168,9 @@ defmodule NervesHubLink.MixProject do
       {:nerves_time, "~> 0.4"},
       {:nimble_options, "~> 1.0"},
       {:plug_crypto, "~> 2.0"},
-      {:plug_cowboy, "~> 2.0", only: :test},
+      {:bandit, "~> 1.10.2", only: :test},
       {:slipstream, "~> 1.0 or ~> 0.8"},
+      {:tpm, "~> 0.2.0", optional: true},
       {:whenwhere, "~> 0.1.2"},
       {:x509, "~> 0.5"}
     ]

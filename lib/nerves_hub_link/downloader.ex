@@ -36,25 +36,31 @@ defmodule NervesHubLink.Downloader do
   alias NervesHubLink.Downloader
   alias NervesHubLink.Downloader.RetryConfig
   alias NervesHubLink.Downloader.TimeoutCalculation
+  alias NervesHubLink.NetworkInterface
 
   require Logger
+  require Mint.HTTP
 
   defstruct uri: nil,
             conn: nil,
             request_ref: nil,
             status: nil,
+            completed: false,
             response_headers: [],
             content_length: 0,
             downloaded_length: 0,
             retry_number: 0,
             handler_fun: nil,
             retry_args: nil,
+            transport_opts: [],
             max_timeout: nil,
+            resume_from_bytes: nil,
             retry_timeout: nil,
             worst_case_timeout: nil,
             worst_case_timeout_remaining_ms: nil
 
-  @type handler_event :: {:data, binary()} | {:error, any()} | :complete
+  @type handler_event ::
+          {:data, data :: binary(), percent_complete :: float()} | {:error, any()} | :complete
   @type event_handler_fun :: (handler_event -> any())
   @type retry_args :: RetryConfig.t()
 
@@ -66,12 +72,15 @@ defmodule NervesHubLink.Downloader do
           conn: nil | Mint.HTTP.t(),
           request_ref: nil | reference(),
           status: nil | Mint.Types.status(),
+          completed: boolean(),
           response_headers: Mint.Types.headers(),
           content_length: non_neg_integer(),
           downloaded_length: non_neg_integer(),
+          resume_from_bytes: nil | non_neg_integer(),
           retry_number: non_neg_integer(),
           handler_fun: event_handler_fun,
           retry_args: retry_args(),
+          transport_opts: keyword(),
           max_timeout: timer(),
           retry_timeout: nil | timer(),
           worst_case_timeout: nil | timer(),
@@ -93,6 +102,12 @@ defmodule NervesHubLink.Downloader do
   # todo, this should be `t`, but with retry_timeout
   @type resume_rescheduled :: t()
 
+  @type option ::
+          {:resume_from_bytes, integer()}
+          | {:retry_config, RetryConfig.t()}
+          | {:downloader_ssl, keyword()}
+  @type options :: [option()]
+
   @doc """
   Begins downloading a file at `url` handled by `fun`.
 
@@ -100,7 +115,7 @@ defmodule NervesHubLink.Downloader do
 
         iex> pid = self()
         #PID<0.110.0>
-        iex> fun = fn {:data, data} -> File.write("index.html", data)
+        iex> fun = fn {:data, data, _percent} -> File.write("index.html", data)
         ...> {:error, error} -> IO.puts("error streaming file: \#{inspect(error)}")
         ...> :complete -> send pid, :complete
         ...> end
@@ -110,34 +125,41 @@ defmodule NervesHubLink.Downloader do
         iex> flush()
         :complete
   """
-  @spec start_download(String.t() | URI.t(), event_handler_fun()) :: GenServer.on_start()
-  def start_download(url, fun) when is_function(fun, 1) do
-    retry_config =
-      Application.get_env(:nerves_hub_link, :retry_config, [])
-      |> RetryConfig.validate()
-
-    GenServer.start_link(__MODULE__, [URI.parse(url), fun, retry_config])
-  end
-
-  @spec start_download(String.t() | URI.t(), event_handler_fun(), RetryConfig.t()) ::
+  @spec start_download(String.t() | URI.t(), event_handler_fun(), [option()]) ::
           GenServer.on_start()
-  def start_download(url, fun, %RetryConfig{} = retry_args) when is_function(fun, 1) do
-    GenServer.start_link(__MODULE__, [URI.parse(url), fun, retry_args])
+  def start_download(url, fun, opts \\ [])
+      when is_function(fun, 1) do
+    retry_config =
+      opts[:retry_config] ||
+        Application.get_env(:nerves_hub_link, :retry_config, []) |> RetryConfig.validate()
+
+    opts = Keyword.put(opts, :retry_config, retry_config)
+
+    transport_opts =
+      opts[:downloader_ssl] ||
+        Application.get_env(:nerves_hub_link, :downloader_ssl, [])
+
+    opts = Keyword.put(opts, :transport_opts, transport_opts)
+
+    GenServer.start_link(__MODULE__, [URI.parse(url), fun, opts])
   end
 
   @impl GenServer
-  def init([%URI{} = uri, fun, %RetryConfig{} = retry_args]) do
-    timer = Process.send_after(self(), :max_timeout, retry_args.max_timeout)
+  def init([%URI{} = uri, fun, opts]) do
+    timer = Process.send_after(self(), :max_timeout, opts[:retry_config].max_timeout)
 
     state =
       reset(%Downloader{
         handler_fun: fun,
-        retry_args: retry_args,
+        retry_args: opts[:retry_config],
+        transport_opts: opts[:transport_opts],
         max_timeout: timer,
-        uri: uri
+        uri: uri,
+        resume_from_bytes: opts[:resume_from_bytes]
       })
 
     send(self(), :resume)
+
     {:ok, state}
   end
 
@@ -146,24 +168,30 @@ defmodule NervesHubLink.Downloader do
   # it is a extreme condition where regardless of download attempts,
   # idle timeouts etc, this entire process has lived for TOO long.
   def handle_info(:max_timeout, %Downloader{} = state) do
+    Logger.debug("[NervesHubLink.Downloader] Max timeout reached")
     {:stop, :max_timeout_reached, state}
   end
 
-  # this message is scheduled when we receive the `content_length` value
+  # Handle the worst case download speed timeout.
+  # Please refer to `retry_config.ex` for more information on how this is calculated.
   def handle_info(:worst_case_download_speed_timeout, %Downloader{} = state) do
+    Logger.debug("[NervesHubLink.Downloader] Worst case download speed timeout reached")
     {:stop, :worst_case_download_speed_reached, state}
   end
 
-  # this message is delivered after `state.retry_args.idle_timeout`
+  # a `:timeout` message is delivered by the `GenServer` after `state.retry_args.idle_timeout`
   # milliseconds have occurred. It indicates that many milliseconds have elapsed since
   # the last "chunk" from the HTTP server
   def handle_info(:timeout, %Downloader{handler_fun: handler} = state) do
+    close_conn(state)
     _ = handler.({:error, :idle_timeout})
+    Logger.debug("[NervesHubLink.Downloader] Idle timeout reached")
     state = reschedule_resume(state)
-    {:noreply, state}
+    {:noreply, %{state | conn: nil}}
   end
 
-  # message is scheduled when a resumable event happens.
+  # if a download has been rescheduled to resume, but the maximum number of retries has been reached,
+  # stop the download and return an error.
   def handle_info(
         :resume,
         %Downloader{
@@ -171,9 +199,11 @@ defmodule NervesHubLink.Downloader do
           retry_args: %RetryConfig{max_disconnects: retry_number}
         } = state
       ) do
+    Logger.debug("[NervesHubLink.Downloader] Max disconnects reached")
     {:stop, :max_disconnects_reached, state}
   end
 
+  # resume a download that has been rescheduled to resume, and set the idle timeout.
   def handle_info(:resume, %Downloader{handler_fun: handler} = state) do
     case resume_download(state.uri, state) do
       {:ok, state} ->
@@ -186,18 +216,33 @@ defmodule NervesHubLink.Downloader do
     end
   end
 
-  def handle_info(message, %Downloader{handler_fun: handler} = state) do
+  # process a streaming message from Mint
+  def handle_info(message, %Downloader{conn: conn, handler_fun: handler} = state)
+      when Mint.HTTP.is_connection_message(conn, message) do
     case Mint.HTTP.stream(state.conn, message) do
       {:ok, conn, responses} ->
         handle_responses(responses, %{state | conn: conn})
 
-      {:error, conn, error, responses} ->
+      {:error, _conn, error, _responses} ->
+        close_conn(state)
         _ = handler.({:error, error})
-        handle_responses(responses, reschedule_resume(%{state | conn: conn}))
+        {:noreply, reschedule_resume(%{state | conn: nil})}
 
       :unknown ->
-        {:stop, :unknown, state}
+        Logger.warning(
+          "[NervesHubLink.Downloader] Mint didn't recognize the message : #{inspect(message)}"
+        )
+
+        {:noreply, state}
     end
+  end
+
+  def handle_info(message, state) do
+    Logger.warning(
+      "[NervesHubLink.Downloader] Unhandled message in `handle_info` : #{inspect(message)}"
+    )
+
+    {:noreply, state}
   end
 
   # schedules a message to be delivered based on retry args
@@ -213,14 +258,15 @@ defmodule NervesHubLink.Downloader do
 
     %Downloader{
       state
-      | retry_timeout: timer,
+      | request_ref: nil,
+        retry_timeout: timer,
         retry_number: retry_number + 1,
         worst_case_timeout_remaining_ms: worst_case_timeout_remaining_ms
     }
   end
 
   @spec schedule_worst_case_timer(t()) :: t()
-  # only calculate worst_case_timeout_remaining_ms is not set
+  # only calculate worst_case_timeout_remaining_ms if it's nil (i.e. not set)
   defp schedule_worst_case_timer(%Downloader{worst_case_timeout_remaining_ms: nil} = downloader) do
     # decompose here because in the formatter doesn't like all this being in the head
     %Downloader{retry_args: retry_config, content_length: content_length} = downloader
@@ -243,20 +289,26 @@ defmodule NervesHubLink.Downloader do
       %Downloader{status: status} = state when status != nil and status >= 400 ->
         {:stop, {:http_error, status}, state}
 
+      {:error, reason, state} ->
+        close_conn(state)
+        _ = state.handler_fun.({:error, reason})
+        {:noreply, reschedule_resume(%{state | conn: nil})}
+
       state ->
         handle_responses(rest, state)
     end
   end
 
-  defp handle_responses(
-         [],
-         %Downloader{downloaded_length: downloaded, content_length: downloaded} = state
-       )
-       when downloaded != 0 do
+  # when there are no more responses, and the download is marked as complete,
+  # close the connection, let the handler know, and stop the process
+  defp handle_responses([], %Downloader{completed: true} = state) do
+    close_conn(state)
     _ = state.handler_fun.(:complete)
     {:stop, :normal, state}
   end
 
+  # when there are no more responses, and the download isn't marked as complete,
+  # wait for more responses, while also setting the idle timeout
   defp handle_responses([], %Downloader{} = state) do
     {:noreply, state, state.retry_args.idle_timeout}
   end
@@ -266,7 +318,7 @@ defmodule NervesHubLink.Downloader do
           {:status, reference(), non_neg_integer()} | {:headers, reference(), keyword()},
           Downloader.t()
         ) ::
-          Downloader.t()
+          Downloader.t() | {:error, reason :: term(), Downloader.t()}
   def handle_response(
         {:status, request_ref, status},
         %Downloader{request_ref: request_ref} = state
@@ -282,8 +334,9 @@ defmodule NervesHubLink.Downloader do
       )
       when status >= 400 do
     # kind of a hack to make the error type uniform
+    close_conn(state)
     state.handler_fun.({:error, %Mint.HTTPError{reason: {:http_error, status}}})
-    %Downloader{state | status: status}
+    %Downloader{state | status: status, conn: nil}
   end
 
   def handle_response(
@@ -300,7 +353,7 @@ defmodule NervesHubLink.Downloader do
         %Downloader{request_ref: request_ref, status: status, handler_fun: handler} = state
       )
       when status >= 300 and status < 400 do
-    location = fetch_location(headers)
+    location = URI.merge(state.uri, fetch_location(headers))
     Logger.info("[NervesHubLink] Redirecting to #{location}")
 
     state = reset(state)
@@ -348,14 +401,71 @@ defmodule NervesHubLink.Downloader do
 
   def handle_response(
         {:data, request_ref, data},
-        %Downloader{request_ref: request_ref, downloaded_length: downloaded} = state
+        %Downloader{
+          request_ref: request_ref,
+          resume_from_bytes: resume_from_bytes,
+          downloaded_length: downloaded,
+          content_length: content_length
+        } = state
       ) do
-    _ = state.handler_fun.({:data, data})
-    %Downloader{state | downloaded_length: downloaded + byte_size(data)}
+    downloaded_length = downloaded + byte_size(data)
+
+    resume_from_bytes = resume_from_bytes || 0
+    percent = (downloaded + resume_from_bytes) / (content_length + resume_from_bytes) * 100
+
+    case state.handler_fun.({:data, data, Float.round(percent, 2)}) do
+      :ok -> %Downloader{state | downloaded_length: downloaded_length}
+      {:error, reason} -> {:error, reason, state}
+    end
   end
 
+  # Mark the download as completed when downloaded_length matches content_length.
+  def handle_response(
+        {:done, request_ref},
+        %Downloader{
+          request_ref: request_ref,
+          content_length: total,
+          downloaded_length: total
+        } = state
+      ) do
+    Logger.debug(
+      "[NervesHubLink.Downloader] Download completed (downloaded_length and content_length match: #{total})"
+    )
+
+    %{state | completed: true}
+  end
+
+  # While not expected, it has been observed that downloaded_length may be greater than content_length.
+  # I'm unsure why this happens, and if this is a bug with the Downloader or something happening on the other end.
+  # This function signature handles the case where downloaded_length is greater than content_length and marks the
+  # download as completed, leaving the cleanup to the caller.
+  def handle_response(
+        {:done, request_ref},
+        %Downloader{
+          request_ref: request_ref,
+          content_length: content_length,
+          downloaded_length: downloaded_length
+        } = state
+      )
+      when downloaded_length > content_length do
+    Logger.warning(
+      "[NervesHubLink.Downloader] Download completed, but downloaded length is greater than content length (downloaded_length: #{downloaded_length} | content_length: #{content_length})"
+    )
+
+    %{state | completed: true}
+  end
+
+  # Its possible for the underlying tcp/ssl connection to be closed before the download is complete.
+  # https://github.com/elixir-mint/mint/blob/0bfcc869b53b83989c24ba681d66d0a447b5a1c3/lib/mint/http1.ex#L488-L491
+  #
+  # If that happens, Mint will send a `{:done, request_ref}` but the body may not be fully received.
+  # https://github.com/elixir-mint/mint/blob/0bfcc869b53b83989c24ba681d66d0a447b5a1c3/lib/mint/http1.ex#L524
   def handle_response({:done, request_ref}, %Downloader{request_ref: request_ref} = state) do
-    state
+    Logger.warning(
+      "[NervesHubLink.Downloader] Download completed, but content length and download length mismatch detected (downloaded_length: #{state.downloaded_length} | content_length: #{state.content_length})"
+    )
+
+    {:error, :downloaded_content_length_mismatch, state}
   end
 
   # ignore other messages when redirecting
@@ -378,7 +488,7 @@ defmodule NervesHubLink.Downloader do
           | {:error, Mint.HTTP.t(), Mint.Types.error()}
   defp resume_download(
          %URI{scheme: scheme, host: host, port: port, path: path, query: query} = uri,
-         %Downloader{} = state
+         %Downloader{transport_opts: transport_opts} = state
        )
        when scheme in ["https", "http"] do
     request_headers =
@@ -391,10 +501,18 @@ defmodule NervesHubLink.Downloader do
     # like this. There may be a better way to do this..
     path = if query, do: "#{path}?#{query}", else: path
 
-    Logger.info("[NervesHubLink] Resuming download attempt number #{state.retry_number} #{uri}")
+    if state.retry_number > 0 do
+      Logger.info("[NervesHubLink] Resuming download attempt number #{state.retry_number} #{uri}")
+    end
 
-    with {:ok, conn} <- Mint.HTTP.connect(String.to_existing_atom(scheme), host, port),
-         {:ok, conn, request_ref} <- Mint.HTTP.request(conn, "GET", path, request_headers, nil) do
+    close_conn(state)
+
+    with {:ok, conn} <-
+           Mint.HTTP.connect(String.to_existing_atom(scheme), host, port,
+             transport_opts: transport_opts
+           ),
+         {:ok, conn, request_ref} <- Mint.HTTP.request(conn, "GET", path, request_headers, nil),
+         :ok <- report_download_started(conn) do
       {:ok,
        %Downloader{
          state
@@ -427,11 +545,17 @@ defmodule NervesHubLink.Downloader do
   @spec add_range_header(Mint.Types.headers(), t()) :: Mint.Types.headers()
   defp add_range_header(headers, state)
 
+  defp add_range_header(headers, %Downloader{resume_from_bytes: r, content_length: 0})
+       when not is_nil(r) and r > 0 do
+    [{"Range", "bytes=#{r}-"} | headers]
+  end
+
   defp add_range_header(headers, %Downloader{content_length: 0}), do: headers
 
   defp add_range_header(headers, %Downloader{downloaded_length: r, content_length: total})
-       when total > 0,
-       do: [{"Range", "bytes=#{r}-#{total}"} | headers]
+       when total > 0 do
+    [{"Range", "bytes=#{r}-#{total}"} | headers]
+  end
 
   @spec add_retry_number_header(Mint.Types.headers(), t()) :: Mint.Types.headers()
   defp add_retry_number_header(headers, %Downloader{retry_number: retry_number}),
@@ -439,4 +563,16 @@ defmodule NervesHubLink.Downloader do
 
   defp add_user_agent_header(headers, _),
     do: [{"User-Agent", "NHL/#{Application.spec(:nerves_hub_link)[:vsn]}"} | headers]
+
+  defp close_conn(%Downloader{conn: nil}), do: :ok
+
+  defp close_conn(%Downloader{conn: conn}) do
+    {:ok, _} = Mint.HTTP.close(conn)
+    :ok
+  end
+
+  defp report_download_started(conn) do
+    downloader_network_interface = NetworkInterface.from_socket(Mint.HTTP.get_socket(conn))
+    NervesHubLink.send_update_status({:started, downloader_network_interface})
+  end
 end

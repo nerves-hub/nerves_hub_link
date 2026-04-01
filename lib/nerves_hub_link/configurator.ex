@@ -24,10 +24,11 @@ defmodule NervesHubLink.Configurator do
   alias __MODULE__.Config
   alias Nerves.Runtime.KV
   alias NervesHubLink.Backoff
+  alias NervesHubLink.UpdateManager.StreamingUpdater
 
   require Logger
 
-  @device_api_version "2.2.0"
+  @device_api_version "2.3.0"
   @console_version "2.0.0"
 
   defmodule Config do
@@ -46,18 +47,23 @@ defmodule NervesHubLink.Configurator do
               fwup_devpath: "/dev/mmcblk0",
               fwup_env: [],
               fwup_public_keys: [],
+              fwup_extra_options: [],
               fwup_task: "upgrade",
               heartbeat_interval_msec: 30_000,
               host: "localhost",
               nerves_key: [],
               params: %{},
+              rejoin_after: [5_000],
               remote_iex: false,
+              remote_iex_timeout: 5 * 60,
               request_archive_public_keys: false,
               request_fwup_public_keys: false,
               shared_secret: [],
               sni: nil,
               socket: [],
-              ssl: []
+              ssl: [],
+              tpm: [],
+              updater: StreamingUpdater
 
     @type t() :: %__MODULE__{
             archive_public_keys: [binary()],
@@ -76,13 +82,17 @@ defmodule NervesHubLink.Configurator do
             host: String.t(),
             nerves_key: any(),
             params: map(),
+            rejoin_after: integer() | [integer()],
             remote_iex: boolean(),
+            remote_iex_timeout: integer(),
             request_archive_public_keys: boolean(),
             request_fwup_public_keys: boolean(),
             shared_secret: [product_key: String.t(), product_secret: String.t()],
             sni: String.t(),
             socket: any(),
-            ssl: [:ssl.tls_client_option()]
+            ssl: [:ssl.tls_client_option()],
+            tpm: any(),
+            updater: NervesHubLink.UpdateManager.Updater.t()
           }
   end
 
@@ -109,6 +119,9 @@ defmodule NervesHubLink.Configurator do
 
       Code.ensure_loaded?(NervesKey) ->
         NervesHubLink.Configurator.NervesKey
+
+      Code.ensure_loaded?(TPM) ->
+        NervesHubLink.Configurator.TPM
 
       true ->
         NervesHubLink.Configurator.SharedSecret
@@ -157,10 +170,7 @@ defmodule NervesHubLink.Configurator do
       base.ssl
       |> Keyword.put_new(:verify, :verify_peer)
       |> Keyword.put_new(:versions, [:"tlsv1.2"])
-      |> Keyword.put_new(
-        :server_name_indication,
-        to_charlist(base.sni || base.device_api_sni || url.host)
-      )
+      |> update_server_name_indication(base)
 
     fwup_devpath = KV.get(@fwup_devpath)
 
@@ -171,6 +181,14 @@ defmodule NervesHubLink.Configurator do
       |> Map.put("console_version", @console_version)
 
     %{base | params: params, socket: socket, ssl: ssl, fwup_devpath: fwup_devpath}
+  end
+
+  defp update_server_name_indication(ssl, base) do
+    if base.sni || base.device_api_sni do
+      Keyword.put_new(ssl, :server_name_indication, to_charlist(base.sni || base.device_api_sni))
+    else
+      ssl
+    end
   end
 
   defp fwup_version() do

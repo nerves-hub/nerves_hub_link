@@ -2,14 +2,80 @@
 
 ## Unreleased
 
-* Added
-  * Add a client callback for when the device is connected (#312) (Thanks @amclain)
+Added
   * Add support for a new Logging extension
 
+## [2.11.1] - 2026-03-23
+
+* Fixed
+  * Archives can now be downloaded successfully again.
+
+## [2.11.0] - 2026-03-17
+
+* Added
+  * The network interface used by `NervesHubLink.Socket` is now reported to NervesHub on connect. The `NervesHubLink.Downloader` interface is also reported during downloads to identify whether the two components use different interfaces.
+
+## [2.10.2] - 2026-02-14
+
+* Changed
+  * Reverted change which changed the `:remote_iex_timeout` unit value in config to be specified in seconds again to retain backwards compatibility. If you didn't specify this config, the change had no effect.
+
+## [2.10.1] - 2026-02-09
+
+* Added
+  * Support restoring the private key when using TPM for authentication.
+  * Support separate SSL config for downloader.
+  * Allow additional fwup arguments to be passed from configuration. Allows using `--unsafe` for example.
+
+## [2.10.0] - 2026-01-08
+
+This release shouldn't affect your setup unless you are doing fairly unusual connection config. A bunch of dependencies were also updated of course.
+
+* Added
+  * Add a local shell extension for establishing an interactive shell separate from the iex console.
+  * Add logging that can help indicate clock issues for shared secret connections.
+  * Execute support scripts under a Task.Supervisor.
+  * Foundational support for multiple Sockets.
+
 * Updated
-  * Don't create duplicate Disconnected alarms
-  * Clear previous `CheckFailed` alarms before setting a new one
-  * Support the use of `:alarm_handler` for health reports, removing the `Alarmist` requirement
+  * Only set `:server_name_indication` if set in the config.
+  * Follow redirects returned during connection. This allows setting up custom domains to be able to switch NervesHub providers.
+
+## [2.9.0] - 2025-10-04
+
+* Added
+  * The way firmware updates are downloaded and installed has been improved to support recovery of downloads in the event of application crashes and device reboots. The default update strategy has been encapsulated in a new module called `NervesHubLink.UpdateManager.StreamingUpdater`, while the new optional caching updater strategy is implemented in `NervesHubLink.UpdateManager.CachingUpdater`. New update strategies can be added by implementing the `NervesHubLink.UpdateManager.Updater` behaviour. Please read the module documentation for more information.
+  * The firmware update progress messages sent from Link to Hub have been improved to include more detailed information about the update process, including if the update was ignored, requesting it be rescheduled, or if an error occurred. These messages are backwards compatible with older versions of NervesHub.
+  * You can now connect to NervesHub using your TPM module for key and cert storage. If your project uses the TPM Hex library we will automatically configure the websocket to use the TPM module for reading the key and cert. Please refer to the readme for more information on how to configure this feature.
+
+* Updated
+  * Alarms relating to disk mounts being almost (or completely) full can be ignored. Previously only `/` `:disk_almost_full` Alarms were ingored, but this can now be configured to include other mounts. Please refer to the Extensions guide for more information.
+  * How NervesHubLinks checks for network availability has been improved to reduce blocking of GenServer messages. Previously `:inet.gethostbyname/1` was used, but under certain circumstances calls would take over 5 seconds, which would block calls to check on the status of the connection. Using `:gen_tcp.connect/4` allows for specifying a timeout, reducing the potential for the blocking of message processing.
+
+## [2.8.1] - 2025-09-11
+
+* Added
+  * Send the firmwares validation status to NervesHub when the connection is established via an optional `Client.firmware_validated?/0` callback. A default implementation is provided, while supporting overriding with custom logic.
+  * Poll for firmware validation changes and send an update to NervesHub when the firmware is validated.
+  * Detect if a firmware revert has occurred and send this information to NervesHub when the connection is established. This is supported via an optional `Client.firmware_auto_revert_detected?/0` callback. A default implementation is provided, while supporting overriding with custom logic.
+  * Custom `Client`s can now be implemented using `use NervesHubLink.Client`, eliminating the need to implement all `Client` behavior callbacks.
+
+* Updated
+  * Support for Elixir 1.13.x has been removed
+
+## [2.8.0] - 2025-08-22
+
+* Added
+  * Add a client callback for when the device is connected (#312) (Thanks @amclain)
+  * Enable per-message WebSocket compression via Mint extensions (#318)
+
+* Updated
+  * Don't create duplicate Disconnected alarms (#317)
+  * Clear previous `CheckFailed` alarms before setting a new one (#317)
+  * Support the use of `:alarm_handler` for health reports, removing the `Alarmist` requirement (#317)
+
+* Fixed
+  * SSL: `cacerts` no longer override `cacertfile` (#321) (Thanks @D4no0)
 
 
 ## [2.7.3] - 2025-04-15

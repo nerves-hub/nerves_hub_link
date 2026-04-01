@@ -119,7 +119,7 @@ defmodule NervesHubLink.ArchiveManager do
   @impl GenServer
   def handle_info({:update_reschedule, response, verification_keys}, state) do
     {:noreply,
-     maybe_update_archive(response, verification_keys, %__MODULE__{
+     maybe_update_archive(response, verification_keys, %{
        state
        | update_reschedule_timer: nil
      })}
@@ -144,7 +144,7 @@ defmodule NervesHubLink.ArchiveManager do
     end
 
     {:noreply,
-     %__MODULE__{
+     %{
        state
        | archive_info: nil,
          file_path: nil,
@@ -160,7 +160,7 @@ defmodule NervesHubLink.ArchiveManager do
   end
 
   # Data from the downloader
-  def handle_info({:download, {:data, data}, _verification_keys}, state) do
+  def handle_info({:download, {:data, data, _percentage}, _verification_keys}, state) do
     :ok =
       File.open!(state.temp_file_path, [:append], fn fd ->
         IO.binwrite(fd, data)
@@ -185,14 +185,20 @@ defmodule NervesHubLink.ArchiveManager do
 
     case Client.archive_available(info) do
       :download ->
+        handler_fun = fn message ->
+          send(pid, {:download, message, verification_keys})
+
+          :ok
+        end
+
         {:ok, download} =
-          Downloader.start_download(info.url, &send(pid, {:download, &1, verification_keys}))
+          Downloader.start_download(info.url, handler_fun)
 
         _ = File.mkdir_p(directory)
         _ = File.rm_rf(temp_file_path)
         _ = File.touch(temp_file_path)
 
-        %__MODULE__{
+        %{
           state
           | archive_info: info,
             file_path: file_path,

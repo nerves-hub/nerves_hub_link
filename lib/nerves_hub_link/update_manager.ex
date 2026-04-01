@@ -17,42 +17,37 @@ defmodule NervesHubLink.UpdateManager do
   use GenServer
 
   alias NervesHubLink.Alarms
-  alias NervesHubLink.Downloader
+  alias NervesHubLink.Client
   alias NervesHubLink.FwupConfig
   alias NervesHubLink.Message.UpdateInfo
   alias NervesHubLink.UpdateManager
+  alias NervesHubLink.UpdateManager.Updater
 
   require Logger
 
-  @type status ::
-          :idle
-          | {:fwup_error, String.t()}
-          | :update_rescheduled
-          | {:updating, integer()}
+  @type status :: :idle | :updating
 
   defmodule State do
     @moduledoc false
 
     @type t :: %__MODULE__{
-            status: UpdateManager.status(),
-            update_reschedule_timer: nil | :timer.tref(),
-            download: nil | GenServer.server(),
-            fwup: nil | GenServer.server(),
             fwup_config: FwupConfig.t(),
-            update_info: nil | UpdateInfo.t()
+            status: UpdateManager.status(),
+            update_info: nil | UpdateInfo.t(),
+            updater: nil | Updater.t(),
+            updater_pid: nil | pid()
           }
 
-    defstruct status: :idle,
-              update_reschedule_timer: nil,
-              fwup: nil,
-              download: nil,
-              fwup_config: nil,
-              update_info: nil
+    defstruct fwup_config: nil,
+              status: :idle,
+              update_info: nil,
+              updater: nil,
+              updater_pid: nil
   end
 
   @doc """
   Must be called when an update payload is dispatched from
-  NervesHub. the map must contain a `"firmware_url"` key.
+  NervesHub. The map must contain a `"firmware_url"` key.
   """
   @spec apply_update(GenServer.server(), UpdateInfo.t(), list(String.t())) ::
           UpdateManager.status()
@@ -76,39 +71,39 @@ defmodule NervesHubLink.UpdateManager do
     GenServer.call(manager, :currently_downloading_uuid)
   end
 
-  # Private API for reporting download progress. This wraps a GenServer.call so
-  # that it can apply back pressure to the downloader if applying the update is
-  # slow.
-  defp report_download(manager, message) do
-    # 60 seconds is arbitrary, but currently matches the `fwup` library's
-    # default timeout. Having fwup take longer than 5 seconds to perform a
-    # write operation seems remote except for perhaps an exceptionally well
-    # compressed delta update. The consequences of crashing here because fwup
-    # doesn't have enough time are severe, though, since they prevent an
-    # update.
-    GenServer.call(manager, {:download, message}, 60_000)
+  @doc """
+  Change `Updater` used for the next firmware update.
+
+  `Updater`s orchestrate firmware downloads and installation.
+  """
+  @spec change_updater(GenServer.server(), Updater.t()) :: :ok
+  def change_updater(manager \\ __MODULE__, updater) do
+    GenServer.cast(manager, {:change_updater, updater})
   end
 
   @doc false
-  @spec child_spec(FwupConfig.t()) :: Supervisor.child_spec()
-  def child_spec(%FwupConfig{} = args) do
+  @spec child_spec({FwupConfig.t(), Updater.t()}) :: Supervisor.child_spec()
+  def child_spec({%FwupConfig{} = fwup_config, updater}) do
     %{
-      start: {__MODULE__, :start_link, [args, [name: __MODULE__]]},
+      start: {__MODULE__, :start_link, [{fwup_config, updater}, [name: __MODULE__]]},
       id: __MODULE__
     }
   end
 
   @doc false
-  @spec start_link(FwupConfig.t(), GenServer.options()) :: GenServer.on_start()
-  def start_link(%FwupConfig{} = args, opts \\ []) do
-    GenServer.start_link(__MODULE__, args, opts)
+  @spec start_link({FwupConfig.t(), Updater.t()}, GenServer.options()) :: GenServer.on_start()
+  def start_link({%FwupConfig{} = fwup_config, updater}, opts \\ []) do
+    GenServer.start_link(__MODULE__, [fwup_config, updater], opts)
   end
 
   @impl GenServer
-  def init(%FwupConfig{} = fwup_config) do
-    Alarms.clear_alarm(NervesHubLink.UpdateInProgress)
+  def init([%FwupConfig{} = fwup_config, updater]) do
     fwup_config = FwupConfig.validate!(fwup_config)
-    {:ok, %State{fwup_config: fwup_config}}
+
+    # listen for updaters dying
+    Process.flag(:trap_exit, true)
+
+    {:ok, %State{fwup_config: fwup_config, updater: updater}}
   end
 
   @impl GenServer
@@ -133,59 +128,69 @@ defmodule NervesHubLink.UpdateManager do
     {:reply, state.status, state}
   end
 
-  # messages from Downloader
-  def handle_call({:download, :complete}, _from, state) do
-    Logger.info("[NervesHubLink] Firmware Download complete")
-    {:reply, :ok, %State{state | download: nil}}
-  end
-
-  def handle_call({:download, {:error, reason}}, _from, state) do
-    Logger.error("[NervesHubLink] Nonfatal HTTP download error: #{inspect(reason)}")
-    {:reply, :ok, state}
-  end
-
-  # Data from the downloader is sent to fwup
-  def handle_call({:download, {:data, data}}, _from, state) do
-    _ = Fwup.Stream.send_chunk(state.fwup, data)
-    {:reply, :ok, state}
+  @impl GenServer
+  def handle_cast({:change_updater, updater}, state) do
+    {:noreply, %{state | updater: updater}}
   end
 
   @impl GenServer
-  def handle_info({:update_reschedule, response, fwup_public_keys}, state) do
-    {:noreply,
-     maybe_update_firmware(response, fwup_public_keys, %State{
-       state
-       | update_reschedule_timer: nil
-     })}
+  def handle_info(
+        {:EXIT, updater_pid, {:shutdown, :update_complete}},
+        %State{updater_pid: updater_pid} = state
+      ) do
+    Alarms.clear_alarm(NervesHubLink.UpdateInProgress)
+    Logger.info("[NervesHubLink:UpdateManager] Update completed successfully")
+    NervesHubLink.send_update_status(:completed)
+    Client.initiate_reboot()
+    {:noreply, %State{state | status: :idle, updater_pid: nil, update_info: nil}}
   end
 
-  # messages from FWUP
-  def handle_info({:fwup, message}, state) do
-    _ = state.fwup_config.handle_fwup_message.(message)
+  def handle_info(
+        {:EXIT, updater_pid, {:shutdown, {:error, reason}}},
+        %State{updater_pid: updater_pid} = state
+      ) do
+    Alarms.clear_alarm(NervesHubLink.UpdateInProgress)
+    Logger.error("[NervesHubLink:UpdateManager] Update failed with reason : #{inspect(reason)}")
+    NervesHubLink.send_update_status({:failed, "Update failed : #{inspect(reason)}"})
+    {:noreply, %State{state | status: :idle, updater_pid: nil, update_info: nil}}
+  end
 
-    case message do
-      {:ok, 0, _message} ->
-        Logger.info("[NervesHubLink] FWUP Finished")
-        Alarms.clear_alarm(NervesHubLink.UpdateInProgress)
-        {:noreply, %State{state | fwup: nil, update_info: nil, status: :idle}}
+  def handle_info(
+        {:EXIT, updater_pid, {:shutdown, {:download_error, reason}}},
+        %State{updater_pid: updater_pid} = state
+      ) do
+    Alarms.clear_alarm(NervesHubLink.UpdateInProgress)
+    Logger.error("[NervesHubLink:UpdateManager] Download failed with reason : #{inspect(reason)}")
+    NervesHubLink.send_update_status({:failed, "Download failed : #{inspect(reason)}"})
+    {:noreply, %State{state | status: :idle, updater_pid: nil, update_info: nil}}
+  end
 
-      {:progress, percent} ->
-        {:noreply, %State{state | status: {:updating, percent}}}
+  def handle_info(
+        {:EXIT, updater_pid, {:shutdown, {:fwup_error, reason}}},
+        %State{updater_pid: updater_pid} = state
+      ) do
+    Alarms.clear_alarm(NervesHubLink.UpdateInProgress)
+    Logger.error("[NervesHubLink:UpdateManager] FWUP failed with reason : #{inspect(reason)}")
+    NervesHubLink.send_update_status({:failed, "FWUP error : #{inspect(reason)}"})
+    {:noreply, %State{state | status: :idle, updater_pid: nil, update_info: nil}}
+  end
 
-      {:error, _, message} ->
-        Alarms.clear_alarm(NervesHubLink.UpdateInProgress)
-        {:noreply, %State{state | status: {:fwup_error, message}}}
+  def handle_info({:EXIT, _, _} = msg, state) do
+    Alarms.clear_alarm(NervesHubLink.UpdateInProgress)
 
-      _ ->
-        {:noreply, state}
-    end
+    Logger.error(
+      "[NervesHubLink:UpdateManager] Unexpected :EXIT : pid #{inspect(msg)}, state #{inspect(state)}"
+    )
+
+    NervesHubLink.send_update_status({:failed, "Unexpected error : #{inspect(msg)}"})
+    {:noreply, %{state | status: :idle, updater_pid: nil, update_info: nil}}
   end
 
   @spec maybe_update_firmware(UpdateInfo.t(), [binary()], State.t()) :: State.t()
   defp maybe_update_firmware(
          %UpdateInfo{} = _update_info,
          _fwup_public_keys,
-         %State{status: {:updating, _percent}} = state
+         %State{status: :updating} = state
        ) do
     # Received an update message from NervesHub, but we're already in progress.
     # It could be because the deployment/device was edited making a duplicate
@@ -197,70 +202,49 @@ defmodule NervesHubLink.UpdateManager do
   end
 
   defp maybe_update_firmware(%UpdateInfo{} = update_info, fwup_public_keys, %State{} = state) do
-    # Cancel an existing timer if it exists.
-    # This prevents rescheduled updates`
-    # from compounding.
-    state = maybe_cancel_timer(state)
+    NervesHubLink.send_update_status(:received)
 
-    # possibly offload update decision to an external module.
-    # This will allow application developers
-    # to control exactly when an update is applied.
-    # note: update_available is a behaviour function
-    case state.fwup_config.update_available.(update_info) do
+    case Client.update_available(update_info) do
       :apply ->
-        start_fwup_stream(update_info, fwup_public_keys, state)
+        Logger.info("[NervesHubLink:UpdateManager] Starting firmware update")
+
+        {:ok, updater_pid} =
+          state.updater.start_update(update_info, state.fwup_config, fwup_public_keys)
+
+        Alarms.set_alarm({NervesHubLink.UpdateInProgress, []})
+
+        %State{state | status: :updating, updater_pid: updater_pid, update_info: update_info}
 
       :ignore ->
+        NervesHubLink.send_update_status({:ignored, ""})
+        Logger.info("[NervesHubLink:UpdateManager] Ignoring firmware update")
+        state
+
+      {:ignore, reason} ->
+        NervesHubLink.send_update_status({:ignored, reason})
+        Logger.info("[NervesHubLink:UpdateManager] Ignoring firmware update : #{reason}")
         state
 
       {:reschedule, ms} ->
-        timer =
-          Process.send_after(self(), {:update_reschedule, update_info, fwup_public_keys}, ms)
+        mins = round(ms / 60_000)
+        delay_for = if(mins < 5, do: 5, else: mins)
+        NervesHubLink.send_update_status({:reschedule, delay_for})
 
-        Logger.info("[NervesHubLink] rescheduling firmware update in #{ms} milliseconds")
-        %{state | status: :update_rescheduled, update_reschedule_timer: timer}
+        Logger.info(
+          "[NervesHubLink:UpdateManager] Requesting Hub reschedule firmware update for #{delay_for} minutes"
+        )
+
+        state
+
+      {:reschedule, mins, reason} ->
+        delay_for = if(mins < 5, do: 5, else: mins) |> round()
+        NervesHubLink.send_update_status({:reschedule, delay_for, reason})
+
+        Logger.info(
+          "[NervesHubLink:UpdateManager] Requesting Hub reschedule firmware update for #{delay_for} minutes"
+        )
+
+        state
     end
-  end
-
-  defp maybe_update_firmware(_, _, state), do: state
-
-  defp maybe_cancel_timer(%{update_reschedule_timer: nil} = state), do: state
-
-  defp maybe_cancel_timer(%{update_reschedule_timer: timer} = state) do
-    _ = Process.cancel_timer(timer)
-
-    %{state | update_reschedule_timer: nil}
-  end
-
-  @spec start_fwup_stream(UpdateInfo.t(), [binary()], State.t()) :: State.t()
-  defp start_fwup_stream(%UpdateInfo{} = update_info, fwup_public_keys, state) do
-    pid = self()
-    fun = &report_download(pid, &1)
-    {:ok, download} = Downloader.start_download(update_info.firmware_url, fun)
-
-    {:ok, fwup} =
-      Fwup.stream(pid, fwup_args(state.fwup_config, fwup_public_keys),
-        fwup_env: state.fwup_config.fwup_env
-      )
-
-    Logger.info("[NervesHubLink] Downloading firmware: #{update_info.firmware_url}")
-    Alarms.set_alarm({NervesHubLink.UpdateInProgress, []})
-
-    %State{
-      state
-      | status: {:updating, 0},
-        download: download,
-        fwup: fwup,
-        update_info: update_info
-    }
-  end
-
-  @spec fwup_args(FwupConfig.t(), list(String.t())) :: [String.t()]
-  defp fwup_args(%FwupConfig{} = config, fwup_public_keys) do
-    args = ["--apply", "--no-unmount", "-d", config.fwup_devpath, "--task", config.fwup_task]
-
-    Enum.reduce(fwup_public_keys, args, fn public_key, args ->
-      args ++ ["--public-key", public_key]
-    end)
   end
 end
