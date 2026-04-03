@@ -51,6 +51,7 @@ defmodule NervesHubLink.Configurator do
               fwup_task: "upgrade",
               heartbeat_interval_msec: 30_000,
               host: "localhost",
+              identifier: nil,
               nerves_key: [],
               params: %{},
               rejoin_after: [5_000],
@@ -80,6 +81,7 @@ defmodule NervesHubLink.Configurator do
             fwup_task: String.t(),
             heartbeat_interval_msec: integer(),
             host: String.t(),
+            identifier: String.t() | nil,
             nerves_key: any(),
             params: map(),
             rejoin_after: integer() | [integer()],
@@ -180,7 +182,16 @@ defmodule NervesHubLink.Configurator do
       |> Map.put("device_api_version", @device_api_version)
       |> Map.put("console_version", @console_version)
 
-    %{base | params: params, socket: socket, ssl: ssl, fwup_devpath: fwup_devpath}
+    identifier = base.identifier || Nerves.Runtime.serial_number()
+
+    %{
+      base
+      | identifier: identifier,
+        params: params,
+        socket: socket,
+        ssl: ssl,
+        fwup_devpath: fwup_devpath
+    }
   end
 
   defp update_server_name_indication(ssl, base) do

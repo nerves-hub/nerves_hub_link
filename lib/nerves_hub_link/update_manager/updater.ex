@@ -76,7 +76,8 @@ defmodule NervesHubLink.UpdateManager.Updater do
   @callback start_update(
               NervesHubLink.Message.UpdateInfo.t(),
               NervesHubLink.FwupConfig.t(),
-              fwup_public_keys :: []
+              fwup_public_keys :: [],
+              identifier :: String.t()
             ) ::
               GenServer.on_start()
 
@@ -124,29 +125,31 @@ defmodule NervesHubLink.UpdateManager.Updater do
       require Logger
 
       @impl NervesHubLink.UpdateManager.Updater
-      def start_update(update_info, fwup_config, fwup_public_keys) do
-        start_link(update_info, fwup_config, fwup_public_keys)
+      def start_update(update_info, fwup_config, fwup_public_keys, identifier) do
+        start_link(update_info, fwup_config, fwup_public_keys, identifier)
       end
 
       @spec start_link(
               UpdateInfo.t(),
               FwupConfig.t(),
               fwup_public_keys :: [],
+              String.t(),
               GenServer.options()
             ) :: GenServer.on_start()
-      def start_link(update_info, fwup_config, fwup_public_keys, opts \\ []) do
+      def start_link(update_info, fwup_config, fwup_public_keys, identifier, opts \\ []) do
         GenServer.start_link(
           __MODULE__,
-          [update_info, fwup_config, fwup_public_keys],
+          [update_info, fwup_config, fwup_public_keys, identifier],
           opts
         )
       end
 
       @impl GenServer
-      def init([update_info, fwup_config, fwup_public_keys]) do
+      def init([update_info, fwup_config, fwup_public_keys, identifier]) do
         fwup_config = FwupConfig.validate!(fwup_config)
 
         pid = self()
+        socket_name = NervesHubLink.__process_name__(identifier, NervesHubLink.Socket)
 
         # Listen for downloader or fwup exits
         Process.flag(:trap_exit, true)
@@ -158,6 +161,7 @@ defmodule NervesHubLink.UpdateManager.Updater do
            fwup_config: fwup_config,
            fwup_public_keys: fwup_public_keys,
            update_info: update_info,
+           socket_name: socket_name,
            reporting_download_fun: &report_download(pid, &1),
            last_progress_message: nil
          }}
@@ -227,7 +231,7 @@ defmodule NervesHubLink.UpdateManager.Updater do
 
           {:progress, percent} ->
             if send_update?(state, percent) do
-              NervesHubLink.send_update_status({:updating, round(percent)})
+              NervesHubLink.send_update_status(state.socket_name, {:updating, round(percent)})
 
               state
               |> Map.put(:status, {:updating, round(percent)})
@@ -266,7 +270,7 @@ defmodule NervesHubLink.UpdateManager.Updater do
         GenServer.call(updater, {:downloader, message}, 60_000)
       end
 
-      defoverridable init: 1, handle_fwup_message: 2, cleanup: 1, log_prefix: 0
+      defoverridable start_update: 4, init: 1, handle_fwup_message: 2, cleanup: 1, log_prefix: 0
     end
   end
 end

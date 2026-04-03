@@ -21,7 +21,9 @@ defmodule NervesHubLink.UpdateManager.StreamingUpdater do
   @impl NervesHubLink.UpdateManager.Updater
   def start(state) do
     {:ok, download} =
-      Downloader.start_download(state.update_info.firmware_url, state.reporting_download_fun)
+      Downloader.start_download(state.update_info.firmware_url, state.reporting_download_fun,
+        socket_name: state.socket_name
+      )
 
     {:ok, fwup} =
       Fwup.stream(self(), fwup_args(state.fwup_config, state.fwup_public_keys),

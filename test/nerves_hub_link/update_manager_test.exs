@@ -41,9 +41,9 @@ defmodule NervesHubLink.UpdateManagerTest do
       fwup_config = %FwupConfig{fwup_devpath: devpath}
 
       Mox.expect(ClientMock, :update_available, fn _ -> :apply end)
-      Mox.expect(UpdaterMock, :start_update, fn _, _, _ -> {:ok, :ok} end)
+      Mox.expect(UpdaterMock, :start_update, fn _, _, _, _ -> {:ok, :ok} end)
 
-      {:ok, manager} = UpdateManager.start_link({fwup_config, updater})
+      {:ok, manager} = UpdateManager.start_link({"test-device", fwup_config, updater})
 
       Mox.allow(ClientMock, self(), manager)
       Mox.allow(UpdaterMock, self(), manager)
@@ -60,7 +60,7 @@ defmodule NervesHubLink.UpdateManagerTest do
         fwup_devpath: devpath
       }
 
-      {:ok, manager} = UpdateManager.start_link({fwup_config, updater})
+      {:ok, manager} = UpdateManager.start_link({"test-device", fwup_config, updater})
 
       Mox.allow(ClientMock, self(), manager)
 

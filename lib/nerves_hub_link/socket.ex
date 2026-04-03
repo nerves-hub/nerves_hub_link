@@ -40,7 +40,8 @@ defmodule NervesHubLink.Socket do
 
   @spec start_link(Configurator.Config.t(), GenServer.options()) :: GenServer.on_start()
   def start_link(config, opts \\ []) do
-    opts = Keyword.put_new(opts, :name, __MODULE__)
+    name = NervesHubLink.__process_name__(config.identifier, __MODULE__)
+    opts = Keyword.put_new(opts, :name, name)
     GenServer.start_link(__MODULE__, config, opts)
   end
 
@@ -164,7 +165,10 @@ defmodule NervesHubLink.Socket do
   def handle_connect(%{assigns: %{config: config}} = socket) do
     Logger.info("[NervesHubLink] connection to #{config.socket[:url].host} succeeded")
 
-    currently_downloading_uuid = UpdateManager.currently_downloading_uuid()
+    id = config.identifier
+
+    currently_downloading_uuid =
+      UpdateManager.currently_downloading_uuid(NervesHubLink.__process_name__(id, UpdateManager))
 
     device_join_params =
       socket.assigns.params
@@ -206,7 +210,8 @@ defmodule NervesHubLink.Socket do
   end
 
   def handle_join(@extensions_topic, extensions, socket) do
-    Extensions.attach(extensions)
+    id = socket.assigns.config.identifier
+    Extensions.attach(NervesHubLink.__process_name__(id, Extensions), extensions)
     Logger.debug("[#{inspect(__MODULE__)}] Joined Extensions channel")
     {:ok, socket}
   end
@@ -380,7 +385,7 @@ defmodule NervesHubLink.Socket do
     Logger.warning("[NervesHubLink] Reboot Request from NervesHub")
     _ = push(socket, @device_topic, "rebooting", %{})
     # TODO: Maybe allow delayed reboot
-    Nerves.Runtime.reboot()
+    Client.initiate_reboot()
     {:ok, socket}
   end
 
@@ -390,21 +395,48 @@ defmodule NervesHubLink.Socket do
   end
 
   def handle_message(@device_topic, "scripts/run", params, socket) do
+    id = socket.assigns.config.identifier
+    ssm = NervesHubLink.__process_name__(id, SupportScriptsManager)
+    socket_name = NervesHubLink.__process_name__(id, __MODULE__)
     # See related handle_info for pushing back the script result
-    :ok = SupportScriptsManager.start_task(params["ref"], params["text"], params["timeout"])
+    :ok =
+      SupportScriptsManager.start_task(
+        ssm,
+        params["ref"],
+        params["text"],
+        params["timeout"],
+        socket_name
+      )
+
     {:ok, socket}
   end
 
   def handle_message(@device_topic, "archive", params, socket) do
+    id = socket.assigns.config.identifier
     {:ok, info} = ArchiveInfo.parse(params)
-    _ = ArchiveManager.apply_archive(info, socket.assigns.config.archive_public_keys)
+
+    _ =
+      ArchiveManager.apply_archive(
+        NervesHubLink.__process_name__(id, ArchiveManager),
+        info,
+        socket.assigns.config.archive_public_keys
+      )
+
     {:ok, socket}
   end
 
   def handle_message(@device_topic, "update", update, socket) do
+    id = socket.assigns.config.identifier
+
     case UpdateInfo.parse(update) do
       {:ok, %UpdateInfo{} = info} ->
-        _ = UpdateManager.apply_update(info, socket.assigns.config.fwup_public_keys)
+        _ =
+          UpdateManager.apply_update(
+            NervesHubLink.__process_name__(id, UpdateManager),
+            info,
+            socket.assigns.config.fwup_public_keys
+          )
+
         {:ok, socket}
 
       error ->
@@ -417,8 +449,11 @@ defmodule NervesHubLink.Socket do
   end
 
   def handle_message(@device_topic, "extensions:get", _payload, socket) do
+    id = socket.assigns.config.identifier
+
     available_extensions =
-      for {name, %{version: ver}} <- Extensions.list(),
+      for {name, %{version: ver}} <-
+            Extensions.list(NervesHubLink.__process_name__(id, Extensions)),
           into: %{},
           do: {name, to_string(ver)}
 
@@ -485,7 +520,8 @@ defmodule NervesHubLink.Socket do
   end
 
   def handle_message(@extensions_topic, event, payload, socket) do
-    Extensions.handle_event(event, payload)
+    id = socket.assigns.config.identifier
+    Extensions.handle_event(NervesHubLink.__process_name__(id, Extensions), event, payload)
     {:ok, socket}
   end
 
@@ -638,7 +674,8 @@ defmodule NervesHubLink.Socket do
 
   @impl Slipstream
   def handle_reply(ref, {:error, "detach"}, socket) do
-    Extensions.detach(ref)
+    id = socket.assigns.config.identifier
+    Extensions.detach(NervesHubLink.__process_name__(id, Extensions), ref)
     {:ok, socket}
   end
 

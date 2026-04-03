@@ -71,17 +71,19 @@ defmodule NervesHubLink.ArchiveManager do
   end
 
   @doc false
-  @spec child_spec(map()) :: Supervisor.child_spec()
-  def child_spec(args) do
+  @spec child_spec({String.t(), map()}) :: Supervisor.child_spec()
+  def child_spec({identifier, args}) do
+    name = NervesHubLink.__process_name__(identifier, __MODULE__)
+
     %{
-      start: {__MODULE__, :start_link, [args, [name: __MODULE__]]},
-      id: __MODULE__
+      start: {__MODULE__, :start_link, [{identifier, args}, [name: name]]},
+      id: name
     }
   end
 
   @doc false
-  @spec start_link(map(), GenServer.options()) :: GenServer.on_start()
-  def start_link(args, opts \\ []) do
+  @spec start_link({String.t(), map()}, GenServer.options()) :: GenServer.on_start()
+  def start_link({_identifier, args}, opts \\ []) do
     GenServer.start_link(__MODULE__, args, opts)
   end
 

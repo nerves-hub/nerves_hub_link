@@ -52,27 +52,31 @@ defmodule NervesHubLink.Extensions do
   Also supports `:all` as an argument for cases NervesHubLink
   may want to detach all of them at once
   """
-  @spec detach(String.t() | [String.t()] | :all) :: :ok
-  def detach(extension) when is_binary(extension), do: detach([extension])
+  @spec detach(GenServer.server(), String.t() | [String.t()] | :all) :: :ok
+  def detach(server \\ __MODULE__, extension)
 
-  def detach(extensions) do
-    GenServer.cast(__MODULE__, {:detach, extensions})
+  def detach(server, extension) when is_binary(extension), do: detach(server, [extension])
+
+  def detach(server, extensions) do
+    GenServer.cast(server, {:detach, extensions})
   end
 
   @doc """
   Attach specified extensions
   """
-  @spec attach(String.t() | [String.t()] | :all) :: :ok
-  def attach(extension) when is_binary(extension), do: attach([extension])
+  @spec attach(GenServer.server(), String.t() | [String.t()] | :all) :: :ok
+  def attach(server \\ __MODULE__, extension)
 
-  def attach(extensions) when is_list(extensions) do
-    GenServer.cast(__MODULE__, {:attach, extensions})
+  def attach(server, extension) when is_binary(extension), do: attach(server, [extension])
+
+  def attach(server, extensions) when is_list(extensions) do
+    GenServer.cast(server, {:attach, extensions})
   end
 
   @doc """
   List extensions currently available
   """
-  @spec list() :: [
+  @spec list(GenServer.server()) :: [
           %{
             String.t() => %{
               attached?: boolean(),
@@ -82,21 +86,26 @@ defmodule NervesHubLink.Extensions do
             }
           }
         ]
-  def list(), do: GenServer.call(__MODULE__, :list)
+  def list(server \\ __MODULE__), do: GenServer.call(server, :list)
 
-  @spec handle_event(String.t(), map()) :: :ok
-  def handle_event(event, message) do
-    GenServer.cast(__MODULE__, {:handle_event, event, message})
+  @spec handle_event(GenServer.server(), String.t(), map()) :: :ok
+  def handle_event(server \\ __MODULE__, event, message) do
+    GenServer.cast(server, {:handle_event, event, message})
   end
 
-  @spec start_link(keyword()) :: GenServer.on_start()
-  def start_link(opts \\ []) do
-    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+  @spec start_link(String.t() | keyword()) :: GenServer.on_start()
+  def start_link(identifier) when is_binary(identifier) do
+    name = NervesHubLink.__process_name__(identifier, __MODULE__)
+    GenServer.start_link(__MODULE__, identifier, name: name)
+  end
+
+  def start_link(opts) when is_list(opts) do
+    GenServer.start_link(__MODULE__, nil, name: __MODULE__)
   end
 
   @impl GenServer
-  def init(_opts) do
-    {:ok, %{extensions: find_extensions()}}
+  def init(identifier) do
+    {:ok, %{identifier: identifier, extensions: find_extensions()}}
   end
 
   defp find_extensions() do
@@ -131,7 +140,8 @@ defmodule NervesHubLink.Extensions do
             do: event,
             else: "#{extension}:#{event}"
 
-        Socket.push_extensions_message(scoped_event, payload)
+        socket_name = socket_name(state)
+        Socket.push_extensions_message(socket_name, scoped_event, payload)
       else
         {:error, :detached}
       end
@@ -141,16 +151,19 @@ defmodule NervesHubLink.Extensions do
 
   @impl GenServer
   def handle_cast({:detach, extensions}, state) do
+    ext_sup = extensions_supervisor_name(state)
+    socket_name = socket_name(state)
+
     state =
       for {_, pid, _, [module]} <-
-            DynamicSupervisor.which_children(ExtensionsSupervisor),
+            DynamicSupervisor.which_children(ext_sup),
           {extension, %{attach_ref: ref, module: ^module}} <- state.extensions,
           extensions == :all or extension in extensions or ref in extensions,
           reduce: state do
         acc ->
           # Ignore since either :ok, or {:error, :not_found}
-          _ = DynamicSupervisor.terminate_child(ExtensionsSupervisor, pid)
-          _ = Socket.push_extensions_message("#{extension}:detached", %{})
+          _ = DynamicSupervisor.terminate_child(ext_sup, pid)
+          _ = Socket.push_extensions_message(socket_name, "#{extension}:detached", %{})
           put_in(acc.extensions[extension][:attached?], false)
       end
 
@@ -159,18 +172,24 @@ defmodule NervesHubLink.Extensions do
 
   def handle_cast({:attach, extensions}, state) do
     extensions = if extensions == :all, do: Map.keys(state.extensions), else: extensions
+    socket_name = socket_name(state)
 
     state =
       for extension <- extensions, reduce: state do
         acc ->
           with mod when not is_nil(mod) <- state.extensions[extension][:module],
-               :ok <- start_extension(mod),
-               {:ok, ref} <- Socket.push_extensions_message("#{extension}:attached", %{}) do
+               :ok <- start_extension(state, mod),
+               {:ok, ref} <-
+                 Socket.push_extensions_message(socket_name, "#{extension}:attached", %{}) do
             update_in(acc.extensions[extension], &%{&1 | attached?: true, attach_ref: ref})
           else
             error ->
               reason = extension_message_from_error(error)
-              _ = Socket.push_extensions_message("#{extension}:error", %{reason: reason})
+
+              _ =
+                Socket.push_extensions_message(socket_name, "#{extension}:error", %{
+                  reason: reason
+                })
 
               Logger.warning(
                 "[NervesHubLink.Extensions] failed to start #{extension}: #{inspect(error)}"
@@ -241,8 +260,9 @@ defmodule NervesHubLink.Extensions do
     {:noreply, state}
   end
 
-  defp start_extension(extension_module) do
-    result = DynamicSupervisor.start_child(ExtensionsSupervisor, extension_module)
+  defp start_extension(state, extension_module) do
+    ext_sup = extensions_supervisor_name(state)
+    result = DynamicSupervisor.start_child(ext_sup, extension_module)
 
     case result do
       {:ok, _pid} -> :ok
@@ -254,6 +274,14 @@ defmodule NervesHubLink.Extensions do
 
   defp extension_message_from_error(error),
     do: if(error, do: "start_failure", else: "unknown_extension")
+
+  defp socket_name(%{identifier: nil}), do: Socket
+  defp socket_name(%{identifier: id}), do: NervesHubLink.__process_name__(id, Socket)
+
+  defp extensions_supervisor_name(%{identifier: nil}), do: ExtensionsSupervisor
+
+  defp extensions_supervisor_name(%{identifier: id}),
+    do: NervesHubLink.__process_name__(id, ExtensionsSupervisor)
 
   defmacro __using__(opts) do
     name = opts[:name] || raise "Missing required extension arg: name"
@@ -279,7 +307,7 @@ defmodule NervesHubLink.Extensions do
       end
 
       @doc false
-      def start_link(opts) do
+      def start_link(opts \\ []) do
         GenServer.start_link(__MODULE__, opts, name: __MODULE__)
       end
 
@@ -287,8 +315,35 @@ defmodule NervesHubLink.Extensions do
       @spec push(String.t(), map()) ::
               {:ok, Slipstream.push_reference()} | {:error, reason :: :detached | term()}
       def push(event, payload) do
-        GenServer.call(NervesHubLink.Extensions, {:push, __name__(), event, payload})
+        extensions_server = __extensions_server__()
+        GenServer.call(extensions_server, {:push, __name__(), event, payload})
       end
+
+      defp __extensions_server__ do
+        with [sup | _] <- Process.get(:"$ancestors"),
+             name when is_atom(name) <- __registered_name__(sup),
+             true <- name != NervesHubLink.ExtensionsSupervisor do
+          # Ancestor is an identifier-scoped ExtensionsSupervisor.
+          # Derive the Extensions server name from the same identifier prefix.
+          prefix =
+            name
+            |> Atom.to_string()
+            |> String.replace_trailing("-ExtensionsSupervisor", "")
+
+          :"#{prefix}-Extensions"
+        else
+          _ -> NervesHubLink.Extensions
+        end
+      end
+
+      defp __registered_name__(pid) when is_pid(pid) do
+        case Process.info(pid, :registered_name) do
+          {:registered_name, name} when is_atom(name) -> name
+          _ -> nil
+        end
+      end
+
+      defp __registered_name__(name), do: name
 
       @impl GenServer
       def handle_info({:__extension_event__, event, payload}, state) do

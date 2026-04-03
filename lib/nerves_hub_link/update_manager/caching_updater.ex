@@ -62,7 +62,8 @@ defmodule NervesHubLink.UpdateManager.CachingUpdater do
 
     {:ok, download} =
       Downloader.start_download(firmware_url, state.reporting_download_fun,
-        resume_from_bytes: start_from
+        resume_from_bytes: start_from,
+        socket_name: state.socket_name
       )
 
     Logger.info(
@@ -83,7 +84,7 @@ defmodule NervesHubLink.UpdateManager.CachingUpdater do
 
   @impl NervesHubLink.UpdateManager.Updater
   def handle_downloader_message(:complete, state) do
-    NervesHubLink.send_update_status({:downloading, 100})
+    NervesHubLink.send_update_status(state.socket_name, {:downloading, 100})
 
     cleanup(state)
 
@@ -135,7 +136,7 @@ defmodule NervesHubLink.UpdateManager.CachingUpdater do
     percent = round(percent)
 
     if send_update?(state, percent) do
-      NervesHubLink.send_update_status({:downloading, percent})
+      NervesHubLink.send_update_status(state.socket_name, {:downloading, percent})
 
       state
       |> Map.put(:status, {:downloading, percent})

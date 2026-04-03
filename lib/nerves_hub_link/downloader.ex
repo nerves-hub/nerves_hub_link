@@ -52,6 +52,7 @@ defmodule NervesHubLink.Downloader do
             retry_number: 0,
             handler_fun: nil,
             retry_args: nil,
+            socket_name: nil,
             transport_opts: [],
             max_timeout: nil,
             resume_from_bytes: nil,
@@ -152,6 +153,7 @@ defmodule NervesHubLink.Downloader do
       reset(%Downloader{
         handler_fun: fun,
         retry_args: opts[:retry_config],
+        socket_name: opts[:socket_name],
         transport_opts: opts[:transport_opts],
         max_timeout: timer,
         uri: uri,
@@ -512,7 +514,7 @@ defmodule NervesHubLink.Downloader do
              transport_opts: transport_opts
            ),
          {:ok, conn, request_ref} <- Mint.HTTP.request(conn, "GET", path, request_headers, nil),
-         :ok <- report_download_started(conn) do
+         :ok <- report_download_started(conn, state.socket_name) do
       {:ok,
        %Downloader{
          state
@@ -571,8 +573,16 @@ defmodule NervesHubLink.Downloader do
     :ok
   end
 
-  defp report_download_started(conn) do
+  defp report_download_started(conn, socket_name) do
     downloader_network_interface = NetworkInterface.from_socket(Mint.HTTP.get_socket(conn))
-    NervesHubLink.send_update_status({:started, downloader_network_interface})
+
+    if socket_name do
+      NervesHubLink.Socket.send_update_status(
+        socket_name,
+        {:started, downloader_network_interface}
+      )
+    else
+      NervesHubLink.send_update_status({:started, downloader_network_interface})
+    end
   end
 end

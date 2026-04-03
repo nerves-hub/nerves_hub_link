@@ -33,14 +33,14 @@ defmodule NervesHubLink.Configurator.SharedSecret do
   Generate headers for Shared Secret Auth
   """
   @spec headers(Config.t()) :: [{String.t(), String.t()}]
-  def headers(%{shared_secret: shared_secret}) do
+  def headers(%{identifier: identifier, shared_secret: shared_secret}) do
     opts =
       (shared_secret || [])
       |> Keyword.put_new(:key_digest, :sha256)
       |> Keyword.put_new(:key_iterations, 1000)
       |> Keyword.put_new(:key_length, 32)
       |> Keyword.put_new(:signature_version, "NH1")
-      |> Keyword.put_new(:identifier, Nerves.Runtime.serial_number())
+      |> Keyword.put_new(:identifier, identifier)
       # Important to use os_time as system_time is not updated by Erlang as
       # quickly. See https://www.erlang.org/doc/apps/erts/time_correction#erlang-system-time
       |> Keyword.put(:signed_at, System.os_time(:second))
