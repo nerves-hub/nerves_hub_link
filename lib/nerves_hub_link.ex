@@ -21,6 +21,7 @@ defmodule NervesHubLink do
   """
 
   alias NervesHubLink.Socket
+  alias NervesHubLink.UpdateManager
 
   @type update_status ::
           :received
@@ -74,8 +75,8 @@ defmodule NervesHubLink do
   @doc """
   Current status of the update manager
   """
-  @spec status(GenServer.server()) :: NervesHubLink.UpdateManager.status()
-  defdelegate status(server \\ Socket), to: NervesHubLink.UpdateManager
+  @spec status(GenServer.server()) :: UpdateManager.status()
+  defdelegate status(server \\ UpdateManager), to: UpdateManager
 
   @doc """
   Restart the socket and device channel
