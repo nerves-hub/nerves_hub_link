@@ -31,13 +31,13 @@ defmodule NervesHubLink.NetworkInterface do
     address
   end
 
-  defp address_from_socket(socket) when is_port(socket) do
-    {:ok, {address, _}} = :inet.sockname(socket)
+  defp address_from_socket(socket) when is_tuple(socket) and elem(socket, 0) == :"$socket" do
+    {:ok, %{addr: address}} = :socket.sockname(socket)
     address
   end
 
-  defp address_from_socket(socket) when is_reference(socket) do
-    {:ok, %{addr: address}} = :socket.sockname(socket)
+  defp address_from_socket(socket) when is_port(socket) do
+    {:ok, {address, _}} = :inet.sockname(socket)
     address
   end
 
