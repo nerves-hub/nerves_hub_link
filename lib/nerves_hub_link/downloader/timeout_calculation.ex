@@ -15,7 +15,7 @@ defmodule NervesHubLink.Downloader.TimeoutCalculation do
   @spec calculate_worst_case_timeout(number_of_bytes, bits_per_second) :: non_neg_integer()
   def calculate_worst_case_timeout(content_length, speed) do
     # need to extract milliseconds based on a speed in seconds and number of bits
-    # set a max of 1 minute in case the data is smaller than the conceivably fastest speed
-    round(content_length * 8 / speed * 1000) |> max(60_000)
+    # set a minimum of 5 minutes in case the data is smaller than the conceivably fastest speed
+    round(content_length * 8 / speed * 1000) |> max(300_000)
   end
 end
