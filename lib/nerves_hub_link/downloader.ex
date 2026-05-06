@@ -248,11 +248,8 @@ defmodule NervesHubLink.Downloader do
   # schedules a message to be delivered based on retry args
   @spec reschedule_resume(t()) :: resume_rescheduled()
   defp reschedule_resume(%Downloader{retry_number: retry_number} = state) do
-    # cancel the worst_case_timeout if it was running
-    worst_case_timeout_remaining_ms =
-      if state.worst_case_timeout do
-        Process.cancel_timer(state.worst_case_timeout) || nil
-      end
+    # cancel the worst_case_timeout if it exists
+    _ = if state.worst_case_timeout, do: Process.cancel_timer(state.worst_case_timeout)
 
     timer = Process.send_after(self(), :resume, state.retry_args.time_between_retries)
 
@@ -261,26 +258,17 @@ defmodule NervesHubLink.Downloader do
       | request_ref: nil,
         retry_timeout: timer,
         retry_number: retry_number + 1,
-        worst_case_timeout_remaining_ms: worst_case_timeout_remaining_ms
+        worst_case_timeout_remaining_ms: nil
     }
   end
 
-  @spec schedule_worst_case_timer(t()) :: t()
-  # only calculate worst_case_timeout_remaining_ms if it's nil (i.e. not set)
-  defp schedule_worst_case_timer(%Downloader{worst_case_timeout_remaining_ms: nil} = downloader) do
+  defp schedule_worst_case_timer(downloader) do
     # decompose here because in the formatter doesn't like all this being in the head
     %Downloader{retry_args: retry_config, content_length: content_length} = downloader
     %RetryConfig{worst_case_download_speed: speed} = retry_config
     ms = TimeoutCalculation.calculate_worst_case_timeout(content_length, speed)
     timer = Process.send_after(self(), :worst_case_download_speed_timeout, ms)
-    %Downloader{downloader | worst_case_timeout: timer}
-  end
-
-  # worst_case_timeout_remaining_ms gets set if the timer gets canceled by reschedule_resume/1
-  # this is done so that the timer doesn't keep counting while not actively downloading data
-  defp schedule_worst_case_timer(%Downloader{worst_case_timeout_remaining_ms: ms} = downloader) do
-    timer = Process.send_after(self(), :worst_case_download_speed_timeout, ms)
-    %Downloader{downloader | worst_case_timeout: timer}
+    %{downloader | worst_case_timeout: timer}
   end
 
   defp handle_responses([response | rest], %Downloader{} = state) do
