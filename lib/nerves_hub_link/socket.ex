@@ -723,12 +723,27 @@ defmodule NervesHubLink.Socket do
     end
   end
 
-  defp mint_opts(config) do
-    if config.socket[:url].scheme == "wss" do
-      [protocols: [:http1], transport_opts: config.ssl]
-    else
-      [protocols: [:http1]]
-    end
+  @doc false
+  @spec mint_opts(Configurator.Config.t()) :: keyword()
+  def mint_opts(config) do
+    base =
+      if config.socket[:url].scheme == "wss" do
+        [protocols: [:http1], transport_opts: config.ssl]
+      else
+        [protocols: [:http1]]
+      end
+
+    merge_http_opts(base, config.socket[:http_opts] || [])
+  end
+
+  # Shallow-merge user-supplied opts on top of the base, but for :transport_opts
+  # specifically merge the nested keyword list so callers who only want to add
+  # e.g. a :timeout don't accidentally clobber our SSL config.
+  defp merge_http_opts(base, user_opts) do
+    Keyword.merge(base, user_opts, fn
+      :transport_opts, base_v, user_v -> Keyword.merge(base_v, user_v)
+      _key, _base_v, user_v -> user_v
+    end)
   end
 
   defp mint_extensions(config) do
