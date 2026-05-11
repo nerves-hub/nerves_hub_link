@@ -167,6 +167,26 @@ my_der_list = [<<213, 34, 234, 53, 83, 8, 2, ...>>]
 config :nerves_hub_link, downloader_ssl: [cacerts: my_der_list]
 ```
 
+## HTTP proxy
+
+Devices that have to reach NervesHub through an HTTP proxy can configure one for both the WebSocket connection and the firmware downloader. The option is passed through to `Mint.HTTP.connect/4` as `:proxy`, so any `Mint` proxy form is accepted:
+
+```elixir
+proxy = {:http, "proxy.example.com", 8080, []}
+
+config :nerves_hub_link,
+  socket: [http_opts: [proxy: proxy]],
+  downloader_http_opts: [proxy: proxy]
+```
+
+`http_opts` (under `:socket`) and `:downloader_http_opts` forward any extra options that `Mint.HTTP.connect/4` accepts — `:proxy_headers`, `:hostname`, etc. They merge on top of the SSL configuration described above, so you can combine them:
+
+```elixir
+config :nerves_hub_link,
+  ssl: [cacerts: my_der_list],
+  socket: [http_opts: [proxy: {:http, "proxy.example.com", 8080, []}]]
+```
+
 ## Verifying network availability
 
 `NervesHubLink` will attempt to verify that the network is available before initiating the first connection attempt. This is done by checking if the `NervesHub` host address (`config.host`) can be resolved. If the network isn't available then the check will be run again in 2 seconds.
