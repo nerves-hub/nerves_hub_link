@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.12.0] - 2026-05-11
+
+* Added
+  * HTTP options (including HTTP proxy) can now be passed through to `Mint.HTTP.connect/4` for both the WebSocket connection (`config :nerves_hub_link, socket: [http_opts: [...]]`) and the firmware downloader (`config :nerves_hub_link, downloader_http_opts: [...]`). The options are merged on top of the existing SSL config rather than replacing it. See the configuration guide for a proxy example.
+  * Support resolving the network interface from Erlang's new `:socket` based sockets (#418)
+  * `NervesHubLink.UpdateManager.CachingUpdater` now clears the cache directory when it sees a 404 during a partial-range download, allowing recovery from stale/invalid partial files (#411)
+  * The `NervesHubLink.Downloader` now detects when an HTTP request finishes with fewer bytes than the advertised `content-length` and surfaces `:downloaded_content_length_mismatch` so the updater can retry instead of treating the download as complete. A warning is also logged if the downloaded length exceeds the content length (#411)
+
+* Updated
+  * `NervesHubLink.status/0,1` now defaults to dispatching to `NervesHubLink.UpdateManager` (it previously defaulted to `Socket`, which doesn't implement the call) (#412)
+  * The minimum value for the downloader's worst-case timeout has been raised from 1 minute to 5 minutes so that small firmware/archive files aren't aborted prematurely on slower networks (#421)
+  * `NervesHubLink.NetworkInterface.from_socket/1` now matches sockets by shape instead of relying on exact tuple structure, and falls back gracefully (with a warning) for unknown socket types instead of raising (#410)
+  * When the connecting socket's network interface can't be determined yet, the retry now waits 60 seconds instead of 10 to avoid noisy polling (#410)
+  * Bumped `castore` to 1.0.18, `jason` to 1.4.5, `nerves_time` to 0.4.10, and dev/test deps `bandit` (1.11.0) and `credo` (1.7.18)
+
 ## [2.11.1] - 2026-03-23
 
 * Fixed
