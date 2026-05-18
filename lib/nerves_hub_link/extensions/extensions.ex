@@ -231,7 +231,7 @@ defmodule NervesHubLink.Extensions do
           nil
       end
 
-    if results == [] do
+    if is_nil(results) do
       # Event was unhandled. Maybe report it to NH?
       Logger.warning(
         "[NervesHubLink.Extensions] Unhandled event: #{inspect(event)} - #{inspect(payload)}"
