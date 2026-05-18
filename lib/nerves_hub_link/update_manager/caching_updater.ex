@@ -29,7 +29,6 @@ defmodule NervesHubLink.UpdateManager.CachingUpdater do
 
   alias NervesHubLink.Downloader
   alias NervesHubLink.FwupConfig
-  alias NervesHubLink.UpdateInfo
 
   require Logger
 
