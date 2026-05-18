@@ -302,6 +302,7 @@ defmodule NervesHubLink.Client do
   @spec handle_error(any()) :: :ok
   def handle_error(data) do
     _ = apply_wrap(mod(), :handle_error, [data])
+    :ok
   end
 
   @doc """
