@@ -21,7 +21,7 @@
     "youngblood",
 
     // Technical terms
-    "nolink",
+    "Geolocation",
     "backoffs",
     "bingenerate",
     "configurator",
@@ -29,12 +29,13 @@
     "disksup",
     "expty",
     "fwupdate",
-    "Geolocation",
     "geoip",
+    "getaddr",
     "getcap",
     "kbps",
     "maint",
     "nerveshub",
+    "nolink",
     "nvread",
     "privkey",
     "reconnections",

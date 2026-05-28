@@ -511,7 +511,7 @@ defmodule NervesHubLink.Downloader do
     with {:ok, conn} <-
            Mint.HTTP.connect(String.to_existing_atom(scheme), host, port, connect_opts),
          {:ok, conn, request_ref} <- Mint.HTTP.request(conn, "GET", path, request_headers, nil),
-         :ok <- report_download_started(conn) do
+         :ok <- NervesHubLink.send_update_status({:started, NetworkInterface.from_uri(uri)}) do
       {:ok,
        %Downloader{
          state
@@ -568,11 +568,6 @@ defmodule NervesHubLink.Downloader do
   defp close_conn(%Downloader{conn: conn}) do
     {:ok, _} = Mint.HTTP.close(conn)
     :ok
-  end
-
-  defp report_download_started(conn) do
-    downloader_network_interface = NetworkInterface.from_socket(Mint.HTTP.get_socket(conn))
-    NervesHubLink.send_update_status({:started, downloader_network_interface})
   end
 
   # Shallow-merge user-supplied opts on top of the base, but for :transport_opts

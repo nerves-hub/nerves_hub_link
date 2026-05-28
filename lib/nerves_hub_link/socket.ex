@@ -150,7 +150,8 @@ defmodule NervesHubLink.Socket do
       uri: config.socket[:url],
       rejoin_after_msec: List.flatten([config.rejoin_after]),
       reconnect_after_msec: config.socket[:reconnect_after_msec],
-      heartbeat_interval_msec: config.heartbeat_interval_msec
+      heartbeat_interval_msec: config.heartbeat_interval_msec,
+      test_mode?: Keyword.get(config.socket, :test_mode?, false)
     ]
 
     socket = connect!(socket, opts)
@@ -614,17 +615,17 @@ defmodule NervesHubLink.Socket do
   end
 
   def handle_info(:get_network_interface, socket) do
-    with pid when is_pid(pid) <- Slipstream.Socket.channel_pid(socket),
-         %{conn: conn} <- :sys.get_state(pid),
-         underlying_socket = Mint.HTTP.get_socket(conn),
-         interface when is_binary(interface) <- NetworkInterface.from_socket(underlying_socket) do
-      _ = push(socket, @device_topic, "report_network_interface", %{interface: interface})
-      {:noreply, assign(socket, network_interface: interface)}
-    else
-      result ->
-        Logger.warning(
-          "[NervesHubLink] Could not determine network interface: #{inspect(result)}"
-        )
+    case NetworkInterface.from_uri(socket.assigns.config.socket[:url]) do
+      interface when is_binary(interface) ->
+        _ =
+          if interface != socket.assigns[:network_interface] do
+            push(socket, @device_topic, "report_network_interface", %{interface: interface})
+          end
+
+        {:noreply, assign(socket, network_interface: interface)}
+
+      _ ->
+        Logger.warning("[NervesHubLink] Could not determine network interface, will retry in 60s")
 
         Process.send_after(self(), :get_network_interface, 60_000)
         {:noreply, socket}
