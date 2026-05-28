@@ -662,8 +662,13 @@ defmodule NervesHubLink.Socket do
         SharedSecret ->
           # TODO: I don't know when reconnect/1 actually gets validated. It could be that
           # the signature we create here will be too old before the headers are used
-          # in a connection attempt again
-          headers = SharedSecret.headers(socket.assigns.config)
+          # in a connection attempt again.
+          #
+          # When the failed upgrade response carried a `Date` header, sign
+          # with that time instead of the device clock — recovers devices
+          # whose RTC/NTP isn't trustworthy yet.
+          hint = SharedSecret.server_time_hint(reason)
+          headers = SharedSecret.headers(socket.assigns.config, hint)
           %{channel_config | headers: headers}
 
         _ ->
