@@ -389,7 +389,13 @@ defmodule NervesHubLink.Client do
   end
 
   defp default_firmware_auto_revert_check() do
-    active_slot = KV.get("nerves_fw_active")
+    active_slot =
+      if function_exported?(Nerves.Runtime, :firmware_slots, 0) do
+        %{active: active} = Nerves.Runtime.firmware_slots()
+        active
+      else
+        KV.get("nerves_fw_active")
+      end
 
     previous_slot =
       KV.get_all()
