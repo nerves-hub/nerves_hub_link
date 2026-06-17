@@ -1,8 +1,16 @@
+# SPDX-FileCopyrightText: 2026 Josh Kalderimis
+#
+# SPDX-License-Identifier: Apache-2.0
+#
 defmodule NervesHubLink.MsgPackSerializer do
+  @moduledoc """
+  A Msgpack based serializer for Phoenix Channels messages.
+  """
   @behaviour Slipstream.Serializer
 
   alias Slipstream.Message
 
+  @spec encode!(Message.t(), Keyword.t()) :: {:binary, binary()}
   def encode!(%Message{} = msg, _opts) do
     data = [msg.join_ref, msg.ref, msg.topic, msg.event, msg.payload]
 
@@ -11,6 +19,7 @@ defmodule NervesHubLink.MsgPackSerializer do
     {:binary, envelope}
   end
 
+  @spec decode!(binary(), Keyword.t()) :: Message.t()
   def decode!(binary, opts) do
     case Keyword.fetch!(opts, :opcode) do
       :binary ->
