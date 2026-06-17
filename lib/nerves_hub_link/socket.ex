@@ -143,14 +143,25 @@ defmodule NervesHubLink.Socket do
   def handle_continue(:connect, %{assigns: %{config: config}} = socket) do
     Logger.info("[NervesHubLink] connecting to #{config.socket[:url].host}")
 
+    {uri, serializer} =
+      case config.serializer do
+        :msgpack ->
+          uri = %{config.socket[:url] | query: URI.encode_query(%{vsn: "3.0.0"})}
+          {uri, NervesHubLink.MsgPackSerializer}
+
+        :json ->
+          {config.socket[:url], Slipstream.Serializer.PhoenixSocketV2Serializer}
+      end
+
     opts = [
       mint_opts: mint_opts(config),
       extensions: mint_extensions(config),
       headers: config.socket[:headers] || [],
-      uri: config.socket[:url],
+      uri: uri,
       rejoin_after_msec: List.flatten([config.rejoin_after]),
       reconnect_after_msec: config.socket[:reconnect_after_msec],
-      heartbeat_interval_msec: config.heartbeat_interval_msec
+      heartbeat_interval_msec: config.heartbeat_interval_msec,
+      serializer: serializer
     ]
 
     socket = connect!(socket, opts)
