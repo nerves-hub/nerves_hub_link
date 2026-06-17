@@ -162,6 +162,7 @@ defmodule NervesHubLink.MixProject do
       {:jason, "~> 1.0"},
       {:mint, "~> 1.2"},
       {:mox, "~> 1.0", only: :test},
+      {:msgpax, "~> 2.0"},
       {:nerves_key, "~> 1.0 or ~> 0.5", optional: true},
       {:vintage_net, "~> 0.13", optional: true},
       {:nerves_runtime, "~> 0.8"},

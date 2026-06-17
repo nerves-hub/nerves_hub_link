@@ -143,14 +143,25 @@ defmodule NervesHubLink.Socket do
   def handle_continue(:connect, %{assigns: %{config: config}} = socket) do
     Logger.info("[NervesHubLink] connecting to #{config.socket[:url].host}")
 
+    {uri, serializer} =
+      case config.serializer do
+        :msgpack ->
+          uri = %{config.socket[:url] | query: URI.encode_query(%{vsn: "3.0.0"})}
+          {uri, NervesHubLink.MsgPackSerializer}
+
+        :json ->
+          {config.socket[:url], Slipstream.Serializer.PhoenixSocketV2Serializer}
+      end
+
     opts = [
       mint_opts: mint_opts(config),
       extensions: mint_extensions(config),
       headers: config.socket[:headers] || [],
-      uri: config.socket[:url],
+      uri: uri,
       rejoin_after_msec: List.flatten([config.rejoin_after]),
       reconnect_after_msec: config.socket[:reconnect_after_msec],
-      heartbeat_interval_msec: config.heartbeat_interval_msec
+      heartbeat_interval_msec: config.heartbeat_interval_msec,
+      serializer: serializer
     ]
 
     socket = connect!(socket, opts)
@@ -781,9 +792,10 @@ defmodule NervesHubLink.Socket do
     end
   end
 
-  defp maybe_join_console(socket) do
-    if socket.assigns.remote_iex do
-      join(socket, @console_topic, socket.assigns.params)
+  defp maybe_join_console(%{assigns: assigns} = socket) do
+    if assigns.remote_iex do
+      params = Map.take(assigns.params, ["console_version", "device_api_version"])
+      join(socket, @console_topic, params)
     else
       socket
     end
