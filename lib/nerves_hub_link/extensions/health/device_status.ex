@@ -41,11 +41,12 @@ defmodule NervesHubLink.Extensions.Health.DeviceStatus do
   @spec new(Access.t()) :: t()
   def new(kv) do
     %__MODULE__{
-      timestamp: kv[:timestamp],
-      metadata: kv[:metadata],
-      alarms: kv[:alarms],
-      metrics: kv[:metrics],
-      checks: kv[:checks]
+      timestamp: kv[:timestamp] || DateTime.utc_now(),
+      metadata: kv[:metadata] || %{},
+      alarms: kv[:alarms] || %{},
+      metrics: kv[:metrics] || %{},
+      checks: kv[:checks] || %{},
+      connectivity: kv[:connectivity] || %{}
     }
   end
 end
