@@ -792,9 +792,10 @@ defmodule NervesHubLink.Socket do
     end
   end
 
-  defp maybe_join_console(socket) do
-    if socket.assigns.remote_iex do
-      join(socket, @console_topic, socket.assigns.params)
+  defp maybe_join_console(%{assigns: assigns} = socket) do
+    if assigns.remote_iex do
+      params = Map.take(assigns.params, ["console_version", "device_api_version"])
+      join(socket, @console_topic, params)
     else
       socket
     end
