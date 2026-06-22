@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+Added
+  * Add support for a new Logging extension
+
+
 ## [2.12.0] - 2026-05-11
 
 * Added
@@ -86,6 +92,7 @@ This release shouldn't affect your setup unless you are doing fairly unusual con
 
 * Fixed
   * SSL: `cacerts` no longer override `cacertfile` (#321) (Thanks @D4no0)
+
 
 ## [2.7.3] - 2025-04-15
 
