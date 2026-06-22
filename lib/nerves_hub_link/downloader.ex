@@ -53,6 +53,7 @@ defmodule NervesHubLink.Downloader do
             handler_fun: nil,
             retry_args: nil,
             transport_opts: [],
+            http_opts: [],
             max_timeout: nil,
             resume_from_bytes: nil,
             retry_timeout: nil,
@@ -81,6 +82,7 @@ defmodule NervesHubLink.Downloader do
           handler_fun: event_handler_fun,
           retry_args: retry_args(),
           transport_opts: keyword(),
+          http_opts: keyword(),
           max_timeout: timer(),
           retry_timeout: nil | timer(),
           worst_case_timeout: nil | timer(),
@@ -106,6 +108,7 @@ defmodule NervesHubLink.Downloader do
           {:resume_from_bytes, integer()}
           | {:retry_config, RetryConfig.t()}
           | {:downloader_ssl, keyword()}
+          | {:downloader_http_opts, keyword()}
   @type options :: [option()]
 
   @doc """
@@ -139,7 +142,14 @@ defmodule NervesHubLink.Downloader do
       opts[:downloader_ssl] ||
         Application.get_env(:nerves_hub_link, :downloader_ssl, [])
 
-    opts = Keyword.put(opts, :transport_opts, transport_opts)
+    http_opts =
+      opts[:downloader_http_opts] ||
+        Application.get_env(:nerves_hub_link, :downloader_http_opts, [])
+
+    opts =
+      opts
+      |> Keyword.put(:transport_opts, transport_opts)
+      |> Keyword.put(:http_opts, http_opts)
 
     GenServer.start_link(__MODULE__, [URI.parse(url), fun, opts])
   end
@@ -153,6 +163,7 @@ defmodule NervesHubLink.Downloader do
         handler_fun: fun,
         retry_args: opts[:retry_config],
         transport_opts: opts[:transport_opts],
+        http_opts: opts[:http_opts],
         max_timeout: timer,
         uri: uri,
         resume_from_bytes: opts[:resume_from_bytes]
@@ -248,11 +259,8 @@ defmodule NervesHubLink.Downloader do
   # schedules a message to be delivered based on retry args
   @spec reschedule_resume(t()) :: resume_rescheduled()
   defp reschedule_resume(%Downloader{retry_number: retry_number} = state) do
-    # cancel the worst_case_timeout if it was running
-    worst_case_timeout_remaining_ms =
-      if state.worst_case_timeout do
-        Process.cancel_timer(state.worst_case_timeout) || nil
-      end
+    # cancel the worst_case_timeout if it exists
+    _ = if state.worst_case_timeout, do: Process.cancel_timer(state.worst_case_timeout)
 
     timer = Process.send_after(self(), :resume, state.retry_args.time_between_retries)
 
@@ -261,26 +269,17 @@ defmodule NervesHubLink.Downloader do
       | request_ref: nil,
         retry_timeout: timer,
         retry_number: retry_number + 1,
-        worst_case_timeout_remaining_ms: worst_case_timeout_remaining_ms
+        worst_case_timeout_remaining_ms: nil
     }
   end
 
-  @spec schedule_worst_case_timer(t()) :: t()
-  # only calculate worst_case_timeout_remaining_ms if it's nil (i.e. not set)
-  defp schedule_worst_case_timer(%Downloader{worst_case_timeout_remaining_ms: nil} = downloader) do
+  defp schedule_worst_case_timer(downloader) do
     # decompose here because in the formatter doesn't like all this being in the head
     %Downloader{retry_args: retry_config, content_length: content_length} = downloader
     %RetryConfig{worst_case_download_speed: speed} = retry_config
     ms = TimeoutCalculation.calculate_worst_case_timeout(content_length, speed)
     timer = Process.send_after(self(), :worst_case_download_speed_timeout, ms)
-    %Downloader{downloader | worst_case_timeout: timer}
-  end
-
-  # worst_case_timeout_remaining_ms gets set if the timer gets canceled by reschedule_resume/1
-  # this is done so that the timer doesn't keep counting while not actively downloading data
-  defp schedule_worst_case_timer(%Downloader{worst_case_timeout_remaining_ms: ms} = downloader) do
-    timer = Process.send_after(self(), :worst_case_download_speed_timeout, ms)
-    %Downloader{downloader | worst_case_timeout: timer}
+    %{downloader | worst_case_timeout: timer}
   end
 
   defp handle_responses([response | rest], %Downloader{} = state) do
@@ -488,7 +487,7 @@ defmodule NervesHubLink.Downloader do
           | {:error, Mint.HTTP.t(), Mint.Types.error()}
   defp resume_download(
          %URI{scheme: scheme, host: host, port: port, path: path, query: query} = uri,
-         %Downloader{transport_opts: transport_opts} = state
+         %Downloader{transport_opts: transport_opts, http_opts: http_opts} = state
        )
        when scheme in ["https", "http"] do
     request_headers =
@@ -507,10 +506,10 @@ defmodule NervesHubLink.Downloader do
 
     close_conn(state)
 
+    connect_opts = merge_http_opts([transport_opts: transport_opts], http_opts)
+
     with {:ok, conn} <-
-           Mint.HTTP.connect(String.to_existing_atom(scheme), host, port,
-             transport_opts: transport_opts
-           ),
+           Mint.HTTP.connect(String.to_existing_atom(scheme), host, port, connect_opts),
          {:ok, conn, request_ref} <- Mint.HTTP.request(conn, "GET", path, request_headers, nil),
          :ok <- report_download_started(conn) do
       {:ok,
@@ -574,5 +573,17 @@ defmodule NervesHubLink.Downloader do
   defp report_download_started(conn) do
     downloader_network_interface = NetworkInterface.from_socket(Mint.HTTP.get_socket(conn))
     NervesHubLink.send_update_status({:started, downloader_network_interface})
+  end
+
+  # Shallow-merge user-supplied opts on top of the base, but for :transport_opts
+  # specifically merge the nested keyword list so callers who only want to add
+  # e.g. a :timeout don't accidentally clobber our SSL config.
+  @doc false
+  @spec merge_http_opts(keyword(), keyword()) :: keyword()
+  def merge_http_opts(base, user_opts) do
+    Keyword.merge(base, user_opts, fn
+      :transport_opts, base_v, user_v -> Keyword.merge(base_v, user_v)
+      _key, _base_v, user_v -> user_v
+    end)
   end
 end

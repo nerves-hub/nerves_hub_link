@@ -1,3 +1,4 @@
+# SPDX-FileCopyrightText: 2026 Josh Kalderimis
 # SPDX-FileCopyrightText: 2026 Nate Shoemaker
 #
 # SPDX-License-Identifier: Apache-2.0
@@ -13,27 +14,39 @@ defmodule NervesHubLink.NetworkInterface do
   Get the network interface from a Slipstream.Socket or Mint.HTTP struct. This is used to report the
   network interface being used for the connection to NervesHub and for firmware downloads.
   """
-  @spec from_socket(:ssl.socket() | :inet.socket() | Mint.Types.socket()) :: nil | binary()
+  @spec from_socket(:ssl.socket() | :inet.socket() | :socket.socket() | Mint.Types.socket()) ::
+          nil | binary()
   def from_socket(socket) do
     address_from_socket(socket)
     |> interface_from_address()
   rescue
     err ->
-      Logger.warning(
-        "[NervesHubLink] Error: could not retrieve network interface: #{inspect(err)}"
-      )
+      Logger.warning("[NervesHubLink] Could not retrieve network interface: #{inspect(err)}")
 
       nil
   end
 
-  defp address_from_socket({:sslsocket, _, _} = socket) do
+  defp address_from_socket(socket) when is_tuple(socket) and elem(socket, 0) == :sslsocket do
     {:ok, {address, _}} = :ssl.sockname(socket)
     address
   end
 
-  defp address_from_socket(socket) do
+  defp address_from_socket(socket) when is_tuple(socket) and elem(socket, 0) == :"$socket" do
+    {:ok, %{addr: address}} = :socket.sockname(socket)
+    address
+  end
+
+  defp address_from_socket(socket) when is_port(socket) do
     {:ok, {address, _}} = :inet.sockname(socket)
     address
+  end
+
+  defp address_from_socket(socket) do
+    Logger.warning(
+      "[NervesHubLink] Could not retrieve network interface from socket: #{inspect(socket)}"
+    )
+
+    nil
   end
 
   defp interface_from_address(address) do

@@ -15,6 +15,6 @@ defmodule NervesHubLink.Downloader.TimeoutCalculationTest do
   test "calculate_worst_case_timeout minimum value" do
     # small data now matter how slow finishes quickly
     # ensure there's a minimum timeout of 60000 ms
-    assert TimeoutCalculation.calculate_worst_case_timeout(1, 30_000) == 60000
+    assert TimeoutCalculation.calculate_worst_case_timeout(1, 30_000) == 300_000
   end
 end

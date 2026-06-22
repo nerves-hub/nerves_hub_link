@@ -40,7 +40,10 @@ config :nerves_runtime,
 
 config :nerves_time, :servers, []
 
+tmp_resolvconf = Path.join(System.tmp_dir!(), "null_resolvconf")
+File.touch!(tmp_resolvconf)
+
 config :vintage_net,
-  resolvconf: "/dev/null",
+  resolvconf: tmp_resolvconf,
   persistence: VintageNet.Persistence.Null,
   bin_ip: "false"

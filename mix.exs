@@ -1,7 +1,7 @@
 defmodule NervesHubLink.MixProject do
   use Mix.Project
 
-  @version "2.11.1"
+  @version "2.12.0"
   @description "Manage your Nerves fleet by connecting it to NervesHub"
   @source_url "https://github.com/nerves-hub/nerves_hub_link"
 
@@ -12,7 +12,7 @@ defmodule NervesHubLink.MixProject do
       description: @description,
       dialyzer: dialyzer(),
       docs: docs(),
-      elixir: "~> 1.14",
+      elixir: "~> 1.15",
       elixirc_paths: elixirc_paths(Mix.env()),
       package: package(),
       start_permanent: Mix.env() == :prod,
@@ -168,7 +168,7 @@ defmodule NervesHubLink.MixProject do
       {:nerves_time, "~> 0.4"},
       {:nimble_options, "~> 1.0"},
       {:plug_crypto, "~> 2.0"},
-      {:bandit, "~> 1.10.2", only: :test},
+      {:bandit, "~> 1.12.0", only: :test},
       {:slipstream, "~> 1.0 or ~> 0.8"},
       {:tpm, "~> 0.2.0", optional: true},
       {:whenwhere, "~> 0.1.2"},

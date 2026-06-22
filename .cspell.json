@@ -38,6 +38,7 @@
     "nvread",
     "privkey",
     "reconnections",
+    "strftime",
     "subkey",
     "vcgencmd",
     "whenwhere"

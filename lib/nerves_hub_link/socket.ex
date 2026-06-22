@@ -620,15 +620,15 @@ defmodule NervesHubLink.Socket do
          %{conn: conn} <- :sys.get_state(pid),
          underlying_socket = Mint.HTTP.get_socket(conn),
          interface when is_binary(interface) <- NetworkInterface.from_socket(underlying_socket) do
-      _ = report_network_interface(socket, interface)
+      _ = push(socket, @device_topic, "report_network_interface", %{interface: interface})
       {:noreply, assign(socket, network_interface: interface)}
     else
       result ->
         Logger.warning(
-          "[NervesHubLink] Error: could not determine network interface: #{inspect(result)}"
+          "[NervesHubLink] Could not determine network interface: #{inspect(result)}"
         )
 
-        Process.send_after(self(), :get_network_interface, 10_000)
+        Process.send_after(self(), :get_network_interface, 60_000)
         {:noreply, socket}
     end
   end
@@ -664,8 +664,13 @@ defmodule NervesHubLink.Socket do
         SharedSecret ->
           # TODO: I don't know when reconnect/1 actually gets validated. It could be that
           # the signature we create here will be too old before the headers are used
-          # in a connection attempt again
-          headers = SharedSecret.headers(socket.assigns.config)
+          # in a connection attempt again.
+          #
+          # When the failed upgrade response carried a `Date` header, sign
+          # with that time instead of the device clock — recovers devices
+          # whose RTC/NTP isn't trustworthy yet.
+          hint = SharedSecret.server_time_hint(reason)
+          headers = SharedSecret.headers(socket.assigns.config, hint)
           %{channel_config | headers: headers}
 
         _ ->
@@ -725,12 +730,27 @@ defmodule NervesHubLink.Socket do
     end
   end
 
-  defp mint_opts(config) do
-    if config.socket[:url].scheme == "wss" do
-      [protocols: [:http1], transport_opts: config.ssl]
-    else
-      [protocols: [:http1]]
-    end
+  @doc false
+  @spec mint_opts(Configurator.Config.t()) :: keyword()
+  def mint_opts(config) do
+    base =
+      if config.socket[:url].scheme == "wss" do
+        [protocols: [:http1], transport_opts: config.ssl]
+      else
+        [protocols: [:http1]]
+      end
+
+    merge_http_opts(base, config.socket[:http_opts] || [])
+  end
+
+  # Shallow-merge user-supplied opts on top of the base, but for :transport_opts
+  # specifically merge the nested keyword list so callers who only want to add
+  # e.g. a :timeout don't accidentally clobber our SSL config.
+  defp merge_http_opts(base, user_opts) do
+    Keyword.merge(base, user_opts, fn
+      :transport_opts, base_v, user_v -> Keyword.merge(base_v, user_v)
+      _key, _base_v, user_v -> user_v
+    end)
   end
 
   defp mint_extensions(config) do
@@ -804,9 +824,5 @@ defmodule NervesHubLink.Socket do
   defp maybe_cancel_timer(pid) do
     _ = Process.cancel_timer(pid)
     :ok
-  end
-
-  defp report_network_interface(socket, interface) do
-    push(socket, @device_topic, "report_network_interface", %{interface: interface})
   end
 end
