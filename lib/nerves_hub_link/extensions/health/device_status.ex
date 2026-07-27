@@ -8,13 +8,8 @@ defmodule NervesHubLink.Extensions.Health.DeviceStatus do
   Structure for device status.
   """
 
-  @derive Jason.Encoder
-  defstruct timestamp: DateTime.utc_now(),
-            metadata: %{},
-            alarms: %{},
-            metrics: %{},
-            checks: %{},
-            connectivity: %{}
+  @derive [Jason.Encoder, Msgpax.Packer]
+  defstruct [:timestamp, :metadata, :alarms, :metrics, :checks, :connectivity]
 
   @type alarm_id() :: String.t()
   @type alarm_description() :: String.t()
@@ -46,11 +41,12 @@ defmodule NervesHubLink.Extensions.Health.DeviceStatus do
   @spec new(Access.t()) :: t()
   def new(kv) do
     %__MODULE__{
-      timestamp: kv[:timestamp],
-      metadata: kv[:metadata],
-      alarms: kv[:alarms],
-      metrics: kv[:metrics],
-      checks: kv[:checks]
+      timestamp: kv[:timestamp] || DateTime.utc_now(),
+      metadata: kv[:metadata] || %{},
+      alarms: kv[:alarms] || %{},
+      metrics: kv[:metrics] || %{},
+      checks: kv[:checks] || %{},
+      connectivity: kv[:connectivity] || %{}
     }
   end
 end
