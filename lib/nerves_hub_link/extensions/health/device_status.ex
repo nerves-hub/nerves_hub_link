@@ -9,7 +9,7 @@ defmodule NervesHubLink.Extensions.Health.DeviceStatus do
   """
 
   @derive Jason.Encoder
-  defstruct timestamp: DateTime.utc_now(),
+  defstruct timestamp: DateTime.from_gregorian_seconds(0),
             metadata: %{},
             alarms: %{},
             metrics: %{},
