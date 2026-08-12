@@ -25,46 +25,53 @@ if Code.ensure_loaded?(Msgpax) do
     Your NervesHub server must support Msgpack for this to work. If it doesn't,
     the device will fail to connect.
     """
+
     @behaviour Slipstream.Serializer
 
     alias Slipstream.Message
+    alias Slipstream.Serializer
 
+    @impl Slipstream.Serializer
     @spec encode!(Message.t(), Keyword.t()) :: {:binary, binary()}
-    def encode!(%Message{} = msg, _opts) do
-      data = [msg.join_ref, msg.ref, msg.topic, msg.event, msg.payload]
+    def encode!(%Message{} = message, _opts) do
+      envelope = [message.join_ref, message.ref, message.topic, message.event, message.payload]
 
-      {:ok, envelope} = Msgpax.pack(data, iodata: false)
+      case Msgpax.pack(envelope, iodata: false) do
+        {:ok, packed} ->
+          {:binary, packed}
 
-      {:binary, envelope}
+        {:error, reason} ->
+          raise Serializer.EncodeError,
+            message: "could not encode #{inspect(message.event)}: #{inspect(reason)}"
+      end
     end
 
+    @impl Slipstream.Serializer
     @spec decode!(binary(), Keyword.t()) :: Message.t()
     def decode!(binary, opts) do
-      case Keyword.fetch!(opts, :opcode) do
-        :binary ->
-          {:ok, envelope} = Msgpax.unpack(binary)
+      # Anything the server sends could be malformed, and a serializer that
+      # raises something other than a DecodeError takes the connection down with
+      # it - Slipstream only rescues DecodeError.
+      with :binary <- Keyword.fetch!(opts, :opcode),
+           {:ok, [join_ref, ref, topic, event, payload]} <- Msgpax.unpack(binary) do
+        %Message{
+          join_ref: to_ref_string(join_ref),
+          ref: to_ref_string(ref),
+          topic: topic,
+          event: event,
+          payload: payload
+        }
+      else
+        opcode when is_atom(opcode) ->
+          raise Serializer.DecodeError,
+            message: "expected a binary frame, got a #{inspect(opcode)} frame"
 
-          [join_ref, ref, topic, event, payload] = envelope
+        {:ok, other} ->
+          raise Serializer.DecodeError,
+            message: "expected a five element envelope, got: #{inspect(other)}"
 
-          case event do
-            "phx_reply" ->
-              %Message{
-                topic: topic,
-                event: "phx_reply",
-                payload: payload,
-                ref: to_ref_string(ref),
-                join_ref: to_ref_string(join_ref)
-              }
-
-            _ ->
-              %Message{
-                join_ref: to_ref_string(join_ref),
-                ref: to_ref_string(ref),
-                topic: topic,
-                event: event,
-                payload: payload
-              }
-          end
+        {:error, reason} ->
+          raise Serializer.DecodeError, message: "could not decode frame: #{inspect(reason)}"
       end
     end
 
