@@ -26,10 +26,11 @@ defmodule NervesHubLink.Extensions do
 
   require Logger
 
+  # `NervesHubLink.Extensions.Logging` is deliberately absent while it is in
+  # early release. See `guides/extensions.md` for how to opt in.
   @default_extension_modules [
                                NervesHubLink.Extensions.Geo,
-                               NervesHubLink.Extensions.Health,
-                               NervesHubLink.Extensions.Logging
+                               NervesHubLink.Extensions.Health
                              ] ++
                                if(Code.ensure_loaded?(ExPTY),
                                  do: [NervesHubLink.Extensions.LocalShell],

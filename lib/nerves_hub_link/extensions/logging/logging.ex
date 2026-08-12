@@ -8,11 +8,23 @@ defmodule NervesHubLink.Extensions.Logging do
 
   Send logs to NervesHub for easy debugging.
 
-  Like every extension, this one only sends anything once NervesHub asks the
-  device to attach it.
+  This extension is in early release and is off by default. To turn it on, name
+  it in `extension_modules`, along with the other extensions you want — the list
+  replaces the defaults rather than adding to them:
 
-  Every log line is a message over the socket, so by default only `:info` and
-  above are sent. Devices on metered connections will want to raise that:
+      config :nerves_hub_link,
+        extension_modules: [
+          NervesHubLink.Extensions.Geo,
+          NervesHubLink.Extensions.Health,
+          NervesHubLink.Extensions.LocalShell,
+          NervesHubLink.Extensions.Logging
+        ]
+
+  Like every extension, it sends nothing until NervesHub asks the device to
+  attach it.
+
+  Every log line is a message over the socket, so only `:info` and above are sent
+  by default. Devices on metered connections will want to raise that:
 
       config :nerves_hub_link,
         logging: [level: :warning]

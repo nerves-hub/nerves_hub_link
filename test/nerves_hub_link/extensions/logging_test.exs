@@ -40,17 +40,20 @@ defmodule NervesHubLink.Extensions.LoggingTest do
   @handler_id :nerves_hub_link_logger_extension_handler
 
   setup do
-    previous = Application.get_env(:nerves_hub_link, :logging)
+    previous_logging = Application.get_env(:nerves_hub_link, :logging)
+    previous_modules = Application.get_env(:nerves_hub_link, :extension_modules)
 
     on_exit(fn ->
-      if previous do
-        Application.put_env(:nerves_hub_link, :logging, previous)
-      else
-        Application.delete_env(:nerves_hub_link, :logging)
-      end
+      restore(:logging, previous_logging)
+      restore(:extension_modules, previous_modules)
 
       _ = :logger.remove_handler(@handler_id)
     end)
+
+    # The extension is opt-in, so it has to be named to be available at all
+    Application.put_env(:nerves_hub_link, :extension_modules, [
+      NervesHubLink.Extensions.Logging
+    ])
 
     _ = start_supervised!({SocketStub, self()})
     _ = start_supervised!({DynamicSupervisor, name: NervesHubLink.ExtensionsSupervisor})
@@ -159,4 +162,7 @@ defmodule NervesHubLink.Extensions.LoggingTest do
     assert_receive {:pushed, "extensions", "logging:attached", %{}}
     :ok
   end
+
+  defp restore(key, nil), do: Application.delete_env(:nerves_hub_link, key)
+  defp restore(key, value), do: Application.put_env(:nerves_hub_link, key, value)
 end

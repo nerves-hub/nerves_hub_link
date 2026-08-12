@@ -2,7 +2,7 @@
 
 Extensions are pieces of non-critical functionality going over the NervesHub WebSocket. They are separated out under the Extensions mechanism so that the client can happily ignore anything extension-related in service of keeping firmware updates healthy. That is always the top priority.
 
-There are currently three extensions:
+There are currently four extensions:
 
 - [**Geo**](#geo) provides hooks to send a device's GeoIP information.
 - [**Health**](#health) reports device metrics, alarms, metadata and similar.
@@ -139,7 +139,25 @@ To use this extension, you need to include the [`ExPTY`](https://hex.pm/packages
 
 The Logging extension is responsible for sending logs to the NervesHub platform.
 
-Every log line is a message over the socket, so by default only `:info` and above are sent. Devices on metered connections will want to raise that:
+It is in early release and is off by default. To turn it on, name it in `extension_modules`:
+
+```elixir
+config :nerves_hub_link,
+  extension_modules: [
+    NervesHubLink.Extensions.Geo,
+    NervesHubLink.Extensions.Health,
+    NervesHubLink.Extensions.LocalShell,
+    NervesHubLink.Extensions.Logging
+  ]
+```
+
+> #### This list replaces the defaults {: .warning}
+>
+> `extension_modules` replaces the default list rather than adding to it, so every extension you want has to be named, not just the one you are adding. `NervesHubLink.Extensions.LocalShell` is only in the default list when [`ExPTY`](https://hex.pm/packages/expty) is available — leave it out of your list if you don't depend on it.
+
+Enabling it here only makes the extension available. Like every extension, it sends nothing until NervesHub asks the device to attach it, which you control in your Device and Product settings.
+
+Every log line is a message over the socket, so only `:info` and above are sent by default. Devices on metered connections will want to raise that:
 
 ```elixir
 config :nerves_hub_link,
@@ -147,19 +165,3 @@ config :nerves_hub_link,
 ```
 
 Any [Logger level](https://hexdocs.pm/logger/Logger.html#t:level/0) is accepted, as is `:all` to send everything the `Logger` level allows through.
-
-You can disable the extension by explicitly defining the `extension_modules` option and excluding the `NervesHubLink.Extensions.Logging` module from the list:
-
-```elixir
-config :nerves_hub_link,
-  extension_modules: [
-    NervesHubLink.Extensions.Geo,
-    NervesHubLink.Extensions.Health,
-    NervesHubLink.Extensions.LocalShell
-    # NervesHubLink.Extensions.Logging
-  ]
-```
-
-> #### This list replaces the defaults {: .warning}
->
-> `extension_modules` replaces the default list rather than adding to it, so every extension you still want has to be named. `NervesHubLink.Extensions.LocalShell` is only in the default list when [`ExPTY`](https://hex.pm/packages/expty) is available — leave it out of your list if you don't depend on it.
