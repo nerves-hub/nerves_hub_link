@@ -163,6 +163,27 @@ defmodule NervesHubLink.ExtensionsTest do
     end
   end
 
+  describe "requests that don't name extensions" do
+    test "attaching something that isn't a list of names is ignored" do
+      assert Extensions.attach(%{"health" => "0.0.1"}) == :ok
+
+      # Round-trip a call to be sure the request above was seen
+      assert is_map(Extensions.list())
+      assert Process.alive?(Process.whereis(Extensions))
+      refute_receive {:pushed, "extensions", _event, _payload}, 100
+    end
+
+    test "detaching something that isn't a list of names leaves attachments alone" do
+      :ok = Extensions.attach("reporter")
+      assert_receive {:pushed, "extensions", "reporter:attached", %{}}
+
+      assert Extensions.detach(%{"reporter" => "1.2.3"}) == :ok
+
+      refute_receive {:pushed, "extensions", "reporter:detached", %{}}, 100
+      assert {:ok, _ref} = Reporter.push("report", %{})
+    end
+  end
+
   describe "an extension that hasn't attached" do
     test "cannot push messages" do
       _ = start_supervised!(Reporter)

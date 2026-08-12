@@ -55,9 +55,11 @@ defmodule NervesHubLink.Extensions do
   @spec detach(String.t() | [String.t()] | :all) :: :ok
   def detach(extension) when is_binary(extension), do: detach([extension])
 
-  def detach(extensions) do
+  def detach(extensions) when is_list(extensions) or extensions == :all do
     GenServer.cast(__MODULE__, {:detach, extensions})
   end
+
+  def detach(extensions), do: ignore_unusable_request("detach", extensions)
 
   @doc """
   Attach specified extensions
@@ -67,6 +69,20 @@ defmodule NervesHubLink.Extensions do
 
   def attach(extensions) when is_list(extensions) or extensions == :all do
     GenServer.cast(__MODULE__, {:attach, extensions})
+  end
+
+  def attach(extensions), do: ignore_unusable_request("attach", extensions)
+
+  # Extensions carry non-critical functionality and must not disrupt the rest of
+  # the socket, so a request naming something other than extensions - notably a
+  # join reply that isn't the list of names expected here - is logged and
+  # dropped rather than raised back at the caller.
+  defp ignore_unusable_request(action, extensions) do
+    Logger.warning(
+      "[NervesHubLink.Extensions] ignoring request to #{action} #{inspect(extensions)}"
+    )
+
+    :ok
   end
 
   @doc """

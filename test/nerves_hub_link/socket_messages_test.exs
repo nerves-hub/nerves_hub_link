@@ -146,12 +146,23 @@ defmodule NervesHubLink.SocketMessagesTest do
     test "an extensions:get message asks to join the extensions topic", %{socket: socket} do
       push(socket, @device_topic, "extensions:get", %{})
 
-      # Replying `:error` because a successful reply hands the reply payload to
-      # `Extensions.attach/1`, which expects a list of extension names
       assert_join("extensions", available_extensions, :error)
 
       assert is_map(available_extensions)
       assert Map.has_key?(available_extensions, "health")
+    end
+
+    test "a join reply that doesn't name extensions doesn't take the socket down", %{
+      socket: socket
+    } do
+      push(socket, @device_topic, "extensions:get", %{})
+
+      # An `:ok` reply carries `%{}`, which is not the list of extension names
+      # the attach path is expecting
+      assert_join("extensions", _available_extensions, :ok)
+
+      assert NervesHubLink.socket_connected?(socket)
+      assert Process.alive?(socket)
     end
 
     test "an unknown message is ignored", %{socket: socket} do
