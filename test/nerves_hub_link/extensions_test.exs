@@ -113,6 +113,14 @@ defmodule NervesHubLink.ExtensionsTest do
       assert_receive {:pushed, "extensions", "broken:error", %{reason: "start_failure"}}
     end
 
+    test "attaching everything attaches each known extension" do
+      :ok = Extensions.attach(:all)
+
+      assert_receive {:pushed, "extensions", "reporter:attached", %{}}
+      # `broken` can't start, so it reports an error rather than attaching
+      assert_receive {:pushed, "extensions", "broken:error", %{reason: "start_failure"}}
+    end
+
     test "an extension that fails to start doesn't stop the others attaching" do
       :ok = Extensions.attach(["broken", "reporter"])
 

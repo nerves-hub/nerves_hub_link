@@ -65,7 +65,7 @@ defmodule NervesHubLink.Extensions do
   @spec attach(String.t() | [String.t()] | :all) :: :ok
   def attach(extension) when is_binary(extension), do: attach([extension])
 
-  def attach(extensions) when is_list(extensions) do
+  def attach(extensions) when is_list(extensions) or extensions == :all do
     GenServer.cast(__MODULE__, {:attach, extensions})
   end
 
