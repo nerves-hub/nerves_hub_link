@@ -150,7 +150,10 @@ defmodule NervesHubLink.Socket do
       uri: config.socket[:url],
       rejoin_after_msec: List.flatten([config.rejoin_after]),
       reconnect_after_msec: config.socket[:reconnect_after_msec],
-      heartbeat_interval_msec: config.heartbeat_interval_msec
+      heartbeat_interval_msec: config.heartbeat_interval_msec,
+      # Lets tests drive this client with `Slipstream.SocketTest` instead of
+      # opening a real connection.
+      test_mode?: config.socket[:test_mode?] == true
     ]
 
     socket = connect!(socket, opts)
