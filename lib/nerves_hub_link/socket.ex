@@ -36,6 +36,10 @@ defmodule NervesHubLink.Socket do
 
   @firmware_validation_check_interval :timer.seconds(10)
 
+  # How long to wait on the connection process when working out which network
+  # interface is in use. Short, because nothing depends on the answer.
+  @connection_state_timeout 500
+
   @max_redirects 2
 
   @spec start_link(Configurator.Config.t(), GenServer.options()) :: GenServer.on_start()
@@ -617,13 +621,11 @@ defmodule NervesHubLink.Socket do
   end
 
   def handle_info(:get_network_interface, socket) do
-    with pid when is_pid(pid) <- Slipstream.Socket.channel_pid(socket),
-         %{conn: conn} <- :sys.get_state(pid),
-         underlying_socket = Mint.HTTP.get_socket(conn),
-         interface when is_binary(interface) <- NetworkInterface.from_socket(underlying_socket) do
-      _ = push(socket, @device_topic, "report_network_interface", %{interface: interface})
-      {:noreply, assign(socket, network_interface: interface)}
-    else
+    case network_interface(socket) do
+      interface when is_binary(interface) ->
+        _ = push(socket, @device_topic, "report_network_interface", %{interface: interface})
+        {:noreply, assign(socket, network_interface: interface)}
+
       result ->
         Logger.warning(
           "[NervesHubLink] Could not determine network interface: #{inspect(result)}"
@@ -721,6 +723,20 @@ defmodule NervesHubLink.Socket do
   @impl Slipstream
   def terminate(_reason, socket) do
     disconnect(socket)
+  end
+
+  # The connection process is inspected with `:sys.get_state/2` rather than
+  # asked, so everything here has to be treated as best-effort: a connection
+  # process that is busy or gone, or that holds a state shape this code doesn't
+  # know, must not take this socket down with it. Reporting the interface
+  # is informational, losing the connection over it is not a trade worth making.
+  defp network_interface(socket) do
+    with pid when is_pid(pid) <- Slipstream.Socket.channel_pid(socket),
+         %{conn: conn} <- :sys.get_state(pid, @connection_state_timeout) do
+      NetworkInterface.from_socket(Mint.HTTP.get_socket(conn))
+    end
+  catch
+    kind, reason -> {kind, reason}
   end
 
   defp alarm_if_firmware_auto_reverted() do

@@ -361,6 +361,39 @@ defmodule NervesHubLink.SocketMessagesTest do
     end
   end
 
+  describe "reporting the network interface" do
+    # Joining the device topic makes the client inspect the connection process
+    # with `:sys.get_state/2`. Under test that process is this one, which
+    # doesn't speak the sys protocol - the same position the client is in when
+    # the real connection process is busy or has died.
+
+    test "a connection process that never answers doesn't take the socket down", %{socket: socket} do
+      assert_join(@device_topic, _params, :ok)
+
+      # Take the probe out of the mailbox and leave it unanswered, so the client
+      # is definitely waiting on it
+      assert_receive {:system, _from, _request}, 1_000
+
+      # This call queues behind the probe, so it only returns once the client
+      # has given up on it
+      assert NervesHubLink.socket_connected?(socket)
+      assert Process.alive?(socket)
+    end
+
+    test "an unexpected answer doesn't take the socket down", %{socket: socket} do
+      assert_join(@device_topic, _params, :ok)
+
+      receive do
+        {:system, from, _request} -> GenServer.reply(from, :not_a_valid_sys_reply)
+      after
+        1_000 -> flunk("expected the client to ask for the connection state")
+      end
+
+      assert NervesHubLink.socket_connected?(socket)
+      assert Process.alive?(socket)
+    end
+  end
+
   describe "disconnecting" do
     test "the client is told about the error and the alarm is raised", %{socket: socket} do
       disconnect(socket, :heartbeat_timeout)
