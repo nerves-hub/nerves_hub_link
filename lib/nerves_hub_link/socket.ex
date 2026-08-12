@@ -387,7 +387,7 @@ defmodule NervesHubLink.Socket do
     Logger.warning("[NervesHubLink] Reboot Request from NervesHub")
     _ = push(socket, @device_topic, "rebooting", %{})
     # TODO: Maybe allow delayed reboot
-    Nerves.Runtime.reboot()
+    Client.initiate_reboot()
     {:ok, socket}
   end
 

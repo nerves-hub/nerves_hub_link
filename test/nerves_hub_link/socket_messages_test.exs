@@ -361,6 +361,24 @@ defmodule NervesHubLink.SocketMessagesTest do
     end
   end
 
+  describe "a reboot request" do
+    setup :join_device_topic
+
+    test "tells NervesHub and reboots through the client", %{socket: socket} do
+      test_pid = self()
+
+      stub(ClientMock, :reboot, fn ->
+        send(test_pid, :reboot)
+        :ok
+      end)
+
+      push(socket, @device_topic, "reboot", %{})
+
+      assert_push(@device_topic, "rebooting", %{})
+      assert_receive :reboot
+    end
+  end
+
   describe "reporting the network interface" do
     # Joining the device topic makes the client inspect the connection process
     # with `:sys.get_state/2`. Under test that process is this one, which
