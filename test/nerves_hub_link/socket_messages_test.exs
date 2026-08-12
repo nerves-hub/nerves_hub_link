@@ -390,6 +390,35 @@ defmodule NervesHubLink.SocketMessagesTest do
     end
   end
 
+  describe "joining topics" do
+    @describetag socket_config: [
+                   remote_iex: true,
+                   params: %{
+                     "console_version" => "2.0.0",
+                     "device_api_version" => "2.3.0",
+                     "nerves_fw_uuid" => "8a8b902c-d1a9-58aa-6111-04ab57c2f2a8",
+                     "nerves_fw_version" => "1.0.0",
+                     "serial_number" => "test-device"
+                   }
+                 ]
+
+    test "the device join describes the device and its firmware" do
+      assert_join(@device_topic, params, :error)
+
+      assert params["device_api_version"] == "2.3.0"
+      assert params["nerves_fw_uuid"] == "8a8b902c-d1a9-58aa-6111-04ab57c2f2a8"
+      assert params["serial_number"] == "test-device"
+      assert params["currently_downloading_uuid"] == nil
+      assert %{"firmware_validated" => true} = params["meta"]
+    end
+
+    test "the console join carries only the protocol versions" do
+      assert_join(@console_topic, params, :error)
+
+      assert params == %{"console_version" => "2.0.0", "device_api_version" => "2.3.0"}
+    end
+  end
+
   describe "reporting the network interface" do
     # Joining the device topic makes the client inspect the connection process
     # with `:sys.get_state/2`. Under test that process is this one, which
