@@ -36,4 +36,10 @@ defmodule NervesHubLink.Support.SocketStub do
     send(test_pid, {:socket_cast, message})
     {:noreply, test_pid}
   end
+
+  @impl GenServer
+  def handle_call({:push, topic, event, payload}, _from, test_pid) do
+    send(test_pid, {:pushed, topic, event, payload})
+    {:reply, {:ok, make_ref()}, test_pid}
+  end
 end
