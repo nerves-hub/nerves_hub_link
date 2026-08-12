@@ -24,8 +24,6 @@ defmodule NervesHubLink.Extensions.Logging do
 
   alias NervesHubLink.Extensions.Logging.LoggerHandler
 
-  require Logger
-
   @handler_id :nerves_hub_link_logger_extension_handler
 
   @default_level :info
