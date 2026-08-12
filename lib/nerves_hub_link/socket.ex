@@ -143,15 +143,7 @@ defmodule NervesHubLink.Socket do
   def handle_continue(:connect, %{assigns: %{config: config}} = socket) do
     Logger.info("[NervesHubLink] connecting to #{config.socket[:url].host}")
 
-    {uri, serializer} =
-      case config.serializer do
-        :msgpack ->
-          uri = %{config.socket[:url] | query: URI.encode_query(%{vsn: "3.0.0"})}
-          {uri, NervesHubLink.MsgPackSerializer}
-
-        :json ->
-          {config.socket[:url], Slipstream.Serializer.PhoenixSocketV2Serializer}
-      end
+    {uri, serializer} = serializer_for(config)
 
     opts = [
       mint_opts: mint_opts(config),
@@ -729,6 +721,36 @@ defmodule NervesHubLink.Socket do
   @impl Slipstream
   def terminate(_reason, socket) do
     disconnect(socket)
+  end
+
+  # Falling back to JSON rather than raising: a serializer the device can't use
+  # is a configuration mistake, and refusing to connect over it would leave the
+  # device unreachable, including for the update that would fix the mistake.
+  defp serializer_for(%{serializer: :msgpack} = config) do
+    if Code.ensure_loaded?(NervesHubLink.MsgPackSerializer) do
+      uri = %{config.socket[:url] | query: URI.encode_query(%{vsn: "3.0.0"})}
+      {uri, NervesHubLink.MsgPackSerializer}
+    else
+      Logger.error(
+        "[NervesHubLink] the :msgpack serializer needs the :msgpax dependency, using JSON instead"
+      )
+
+      json_serializer(config)
+    end
+  end
+
+  defp serializer_for(%{serializer: :json} = config), do: json_serializer(config)
+
+  defp serializer_for(config) do
+    Logger.error(
+      "[NervesHubLink] unknown serializer #{inspect(config.serializer)}, using JSON instead"
+    )
+
+    json_serializer(config)
+  end
+
+  defp json_serializer(config) do
+    {config.socket[:url], Slipstream.Serializer.PhoenixSocketV2Serializer}
   end
 
   defp alarm_if_firmware_auto_reverted() do

@@ -59,7 +59,7 @@ defmodule NervesHubLink.Configurator do
               request_archive_public_keys: false,
               request_fwup_public_keys: false,
               shared_secret: [],
-              serializer: :msgpack,
+              serializer: :json,
               sni: nil,
               socket: [],
               ssl: [],

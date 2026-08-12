@@ -8,7 +8,13 @@ defmodule NervesHubLink.Extensions.Health.DeviceStatus do
   Structure for device status.
   """
 
-  @derive [Jason.Encoder, Msgpax.Packer]
+  # Msgpax is optional, so only derive its protocol when it's actually available
+  if Code.ensure_loaded?(Msgpax.Packer) do
+    @derive [Jason.Encoder, Msgpax.Packer]
+  else
+    @derive Jason.Encoder
+  end
+
   defstruct [:timestamp, :metadata, :alarms, :metrics, :checks, :connectivity]
 
   @type alarm_id() :: String.t()
