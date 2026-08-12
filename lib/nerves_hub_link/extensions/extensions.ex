@@ -133,11 +133,7 @@ defmodule NervesHubLink.Extensions do
             do: event,
             else: "#{extension}:#{event}"
 
-        if Socket.check_connection(:extensions) do
-          Socket.push_extensions_message(scoped_event, payload)
-        else
-          {:ok, :disconnected}
-        end
+        push_to_socket(scoped_event, payload)
       else
         {:error, :detached}
       end
@@ -246,6 +242,17 @@ defmodule NervesHubLink.Extensions do
     end
 
     {:noreply, state}
+  end
+
+  # The socket reports an unjoined topic itself, so there's no need to ask it
+  # separately whether it is connected - that only doubles the round trips and
+  # leaves a window between the answer and the push. The socket isn't running at
+  # all when `connect: false`, which a push has to survive rather than take this
+  # process down with it.
+  defp push_to_socket(event, payload) do
+    Socket.push_extensions_message(event, payload)
+  catch
+    :exit, {:noproc, _} -> {:error, :socket_not_running}
   end
 
   defp start_extension(extension_module) do
