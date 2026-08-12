@@ -223,31 +223,32 @@ defmodule NervesHubLink.Extensions do
   end
 
   def handle_cast({:handle_event, event, payload}, state) do
-    results =
+    delivered? =
       case String.split(event, ":", parts: 2) do
         [extension, event] ->
           case state.extensions[extension] do
             %{module: module} ->
               try do
-                send(module, {:__extension_event__, event, payload})
+                _ = send(module, {:__extension_event__, event, payload})
+                true
               rescue
                 error ->
                   Logger.error(
                     "[NervesHubLink.Extensions] Error handling event `#{inspect(event)}` with payload `#{inspect(payload)}`: #{inspect(error)}"
                   )
 
-                  nil
+                  false
               end
 
             _ ->
-              nil
+              false
           end
 
         _ ->
-          nil
+          false
       end
 
-    if results == [] do
+    if not delivered? do
       # Event was unhandled. Maybe report it to NH?
       Logger.warning(
         "[NervesHubLink.Extensions] Unhandled event: #{inspect(event)} - #{inspect(payload)}"

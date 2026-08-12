@@ -61,7 +61,7 @@ defmodule NervesHubLink.Extensions.Health.MetricSet.CPU do
   defp cpu_util() do
     case :cpu_sup.util([]) do
       {:all, usage, _, _} ->
-        %{cpu_usage_percent: usage}
+        %{cpu_usage_percent: Float.round(usage, 2)}
 
       _ ->
         %{}

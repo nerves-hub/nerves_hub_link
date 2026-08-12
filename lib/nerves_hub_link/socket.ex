@@ -147,14 +147,17 @@ defmodule NervesHubLink.Socket do
   def handle_continue(:connect, %{assigns: %{config: config}} = socket) do
     Logger.info("[NervesHubLink] connecting to #{config.socket[:url].host}")
 
+    {uri, serializer} = serializer_for(config)
+
     opts = [
       mint_opts: mint_opts(config),
       extensions: mint_extensions(config),
       headers: config.socket[:headers] || [],
-      uri: config.socket[:url],
+      uri: uri,
       rejoin_after_msec: List.flatten([config.rejoin_after]),
       reconnect_after_msec: config.socket[:reconnect_after_msec],
       heartbeat_interval_msec: config.heartbeat_interval_msec,
+      serializer: serializer,
       # Lets tests drive this client with `Slipstream.SocketTest` instead of
       # opening a real connection.
       test_mode?: config.socket[:test_mode?] == true
@@ -737,6 +740,36 @@ defmodule NervesHubLink.Socket do
     end
   catch
     kind, reason -> {kind, reason}
+  end
+
+  # Falling back to JSON rather than raising: a serializer the device can't use
+  # is a configuration mistake, and refusing to connect over it would leave the
+  # device unreachable, including for the update that would fix the mistake.
+  defp serializer_for(%{serializer: :msgpack} = config) do
+    if Code.ensure_loaded?(NervesHubLink.MsgPackSerializer) do
+      uri = %{config.socket[:url] | query: URI.encode_query(%{vsn: "3.0.0"})}
+      {uri, NervesHubLink.MsgPackSerializer}
+    else
+      Logger.error(
+        "[NervesHubLink] the :msgpack serializer needs the :msgpax dependency, using JSON instead"
+      )
+
+      json_serializer(config)
+    end
+  end
+
+  defp serializer_for(%{serializer: :json} = config), do: json_serializer(config)
+
+  defp serializer_for(config) do
+    Logger.error(
+      "[NervesHubLink] unknown serializer #{inspect(config.serializer)}, using JSON instead"
+    )
+
+    json_serializer(config)
+  end
+
+  defp json_serializer(config) do
+    {config.socket[:url], Slipstream.Serializer.PhoenixSocketV2Serializer}
   end
 
   defp alarm_if_firmware_auto_reverted() do

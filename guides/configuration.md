@@ -187,6 +187,34 @@ config :nerves_hub_link,
   socket: [http_opts: [proxy: {:http, "proxy.example.com", 8080, []}]]
 ```
 
+## Message serialization
+
+Messages between the device and NervesHub are encoded as JSON by default. Devices on metered or low bandwidth connections can use [Msgpack](https://msgpack.org) instead, which encodes the same messages in fewer bytes and uses less memory doing it.
+
+Msgpack needs the [`msgpax`](https://hex.pm/packages/msgpax) library, which is an optional dependency:
+
+```elixir
+def deps() do
+  [
+    {:msgpax, "~> 2.0"}
+  ]
+end
+```
+
+and then:
+
+```elixir
+config :nerves_hub_link, serializer: :msgpack
+```
+
+> #### Your server has to support it too {: .warning}
+>
+> The device requests the Msgpack protocol when it connects. A NervesHub server that doesn't support it will reject the connection, and a device that can't connect can't be sent the firmware that would change this setting back. Confirm your server supports Msgpack before rolling this out to a fleet.
+
+If `:msgpax` is missing, or the configured serializer isn't one it knows, the device logs an error and connects with JSON rather than dropping off the network.
+
+Note that the two formats don't put identical bytes on the wire for every value. Most notably, Msgpack carries timestamps — such as the one in a health report — as its own extension type, where JSON sends an ISO 8601 string.
+
 ## Verifying network availability
 
 `NervesHubLink` will attempt to verify that the network is available before initiating the first connection attempt. This is done by checking if the `NervesHub` host address (`config.host`) can be resolved. If the network isn't available then the check will be run again in 2 seconds.
