@@ -833,9 +833,14 @@ defmodule NervesHubLink.Socket do
     end
   end
 
+  # The console only needs to know which protocol versions it is talking to.
+  # The rest of the join params describe the device and its firmware, and the
+  # device channel has already sent them.
+  @console_join_params ["console_version", "device_api_version"]
+
   defp maybe_join_console(socket) do
     if socket.assigns.remote_iex do
-      join(socket, @console_topic, socket.assigns.params)
+      join(socket, @console_topic, Map.take(socket.assigns.params, @console_join_params))
     else
       socket
     end
