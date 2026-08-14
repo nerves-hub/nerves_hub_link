@@ -36,6 +36,10 @@ defmodule NervesHubLink.Socket do
 
   @firmware_validation_check_interval :timer.seconds(10)
 
+  # How long to wait on the connection process when working out which network
+  # interface is in use. Short, because nothing depends on the answer.
+  @connection_state_timeout 500
+
   @max_redirects 2
 
   @spec start_link(Configurator.Config.t(), GenServer.options()) :: GenServer.on_start()
@@ -153,7 +157,10 @@ defmodule NervesHubLink.Socket do
       rejoin_after_msec: List.flatten([config.rejoin_after]),
       reconnect_after_msec: config.socket[:reconnect_after_msec],
       heartbeat_interval_msec: config.heartbeat_interval_msec,
-      serializer: serializer
+      serializer: serializer,
+      # Lets tests drive this client with `Slipstream.SocketTest` instead of
+      # opening a real connection.
+      test_mode?: config.socket[:test_mode?] == true
     ]
 
     socket = connect!(socket, opts)
@@ -383,7 +390,7 @@ defmodule NervesHubLink.Socket do
     Logger.warning("[NervesHubLink] Reboot Request from NervesHub")
     _ = push(socket, @device_topic, "rebooting", %{})
     # TODO: Maybe allow delayed reboot
-    Nerves.Runtime.reboot()
+    Client.initiate_reboot()
     {:ok, socket}
   end
 
@@ -617,13 +624,11 @@ defmodule NervesHubLink.Socket do
   end
 
   def handle_info(:get_network_interface, socket) do
-    with pid when is_pid(pid) <- Slipstream.Socket.channel_pid(socket),
-         %{conn: conn} <- :sys.get_state(pid),
-         underlying_socket = Mint.HTTP.get_socket(conn),
-         interface when is_binary(interface) <- NetworkInterface.from_socket(underlying_socket) do
-      _ = push(socket, @device_topic, "report_network_interface", %{interface: interface})
-      {:noreply, assign(socket, network_interface: interface)}
-    else
+    case network_interface(socket) do
+      interface when is_binary(interface) ->
+        _ = push(socket, @device_topic, "report_network_interface", %{interface: interface})
+        {:noreply, assign(socket, network_interface: interface)}
+
       result ->
         Logger.warning(
           "[NervesHubLink] Could not determine network interface: #{inspect(result)}"
@@ -723,6 +728,20 @@ defmodule NervesHubLink.Socket do
     disconnect(socket)
   end
 
+  # The connection process is inspected with `:sys.get_state/2` rather than
+  # asked, so everything here has to be treated as best-effort: a connection
+  # process that is busy or gone, or that holds a state shape this code doesn't
+  # know, must not take this socket down with it. Reporting the interface
+  # is informational, losing the connection over it is not a trade worth making.
+  defp network_interface(socket) do
+    with pid when is_pid(pid) <- Slipstream.Socket.channel_pid(socket),
+         %{conn: conn} <- :sys.get_state(pid, @connection_state_timeout) do
+      NetworkInterface.from_socket(Mint.HTTP.get_socket(conn))
+    end
+  catch
+    kind, reason -> {kind, reason}
+  end
+
   # Falling back to JSON rather than raising: a serializer the device can't use
   # is a configuration mistake, and refusing to connect over it would leave the
   # device unreachable, including for the update that would fix the mistake.
@@ -814,9 +833,14 @@ defmodule NervesHubLink.Socket do
     end
   end
 
+  # The console only needs to know which protocol versions it is talking to.
+  # The rest of the join params describe the device and its firmware, and the
+  # device channel has already sent them.
+  @console_join_params ["console_version", "device_api_version"]
+
   defp maybe_join_console(socket) do
     if socket.assigns.remote_iex do
-      join(socket, @console_topic, socket.assigns.params)
+      join(socket, @console_topic, Map.take(socket.assigns.params, @console_join_params))
     else
       socket
     end
