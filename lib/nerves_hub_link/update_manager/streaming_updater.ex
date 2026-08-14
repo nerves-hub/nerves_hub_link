@@ -14,7 +14,6 @@ defmodule NervesHubLink.UpdateManager.StreamingUpdater do
 
   alias NervesHubLink.Downloader
   alias NervesHubLink.FwupConfig
-  alias NervesHubLink.UpdateInfo
 
   require Logger
 

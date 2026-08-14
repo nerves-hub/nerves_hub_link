@@ -29,7 +29,6 @@ defmodule NervesHubLink.UpdateManager.CachingUpdater do
 
   alias NervesHubLink.Downloader
   alias NervesHubLink.FwupConfig
-  alias NervesHubLink.UpdateInfo
 
   require Logger
 
@@ -229,8 +228,6 @@ defmodule NervesHubLink.UpdateManager.CachingUpdater do
   def log_prefix(), do: "NervesHubLink:CachingUpdater"
 
   defp settings() do
-    Application.get_env(:nerves_hub_link, CachingUpdater,
-      cache_dir: "/data/nerves_hub_link/firmware"
-    )
+    Application.get_env(:nerves_hub_link, __MODULE__, cache_dir: "/data/nerves_hub_link/firmware")
   end
 end
