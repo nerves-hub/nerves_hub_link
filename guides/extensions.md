@@ -186,7 +186,7 @@ Note which value goes where. The **endpoint id** is the identifier: it is the ke
 A device can run two iroh endpoints — a remote console, plus whatever the application itself uses iroh for — each with its own key. Both are `iroh`, so name the `instance` to tell them apart:
 
 ```elixir
-{:ok, %{service: "iroh", instance: "myapp_sync", identifier: key, details: %{}}}
+{:ok, %{service: "iroh", instance: "app_sync", identifier: key, details: %{}}}
 ```
 
 Omit it and NervesHub treats the identity as that service's only endpoint, which is what you want for a singleton like Tailscale. `iroh_console` reports itself as `iroh_console`, so an endpoint of your own only needs a name that isn't that.
