@@ -27,7 +27,8 @@ defmodule NervesHubLink.Extensions do
 
   @default_extension_modules [
                                NervesHubLink.Extensions.Health,
-                               NervesHubLink.Extensions.Geo
+                               NervesHubLink.Extensions.Geo,
+                               NervesHubLink.Extensions.ExternalIdentity
                              ] ++
                                if(Code.ensure_loaded?(ExPTY),
                                  do: [NervesHubLink.Extensions.LocalShell],
