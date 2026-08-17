@@ -1,5 +1,6 @@
 # SPDX-FileCopyrightText: 2024 Jon Carstens
 # SPDX-FileCopyrightText: 2024 Lars Wikman
+# SPDX-FileCopyrightText: 2025 Josh Kalderimis
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -25,9 +26,11 @@ defmodule NervesHubLink.Extensions do
 
   require Logger
 
+  # `NervesHubLink.Extensions.Logging` is deliberately absent while it is in
+  # early release. See `guides/extensions.md` for how to opt in.
   @default_extension_modules [
-                               NervesHubLink.Extensions.Health,
-                               NervesHubLink.Extensions.Geo
+                               NervesHubLink.Extensions.Geo,
+                               NervesHubLink.Extensions.Health
                              ] ++
                                if(Code.ensure_loaded?(ExPTY),
                                  do: [NervesHubLink.Extensions.LocalShell],
@@ -147,7 +150,7 @@ defmodule NervesHubLink.Extensions do
             do: event,
             else: "#{extension}:#{event}"
 
-        Socket.push_extensions_message(scoped_event, payload)
+        push_to_socket(scoped_event, payload)
       else
         {:error, :detached}
       end
@@ -256,6 +259,17 @@ defmodule NervesHubLink.Extensions do
     end
 
     {:noreply, state}
+  end
+
+  # The socket reports an unjoined topic itself, so there's no need to ask it
+  # separately whether it is connected - that only doubles the round trips and
+  # leaves a window between the answer and the push. The socket isn't running at
+  # all when `connect: false`, which a push has to survive rather than take this
+  # process down with it.
+  defp push_to_socket(event, payload) do
+    Socket.push_extensions_message(event, payload)
+  catch
+    :exit, {:noproc, _} -> {:error, :socket_not_running}
   end
 
   defp start_extension(extension_module) do

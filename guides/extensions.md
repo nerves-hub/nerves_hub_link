@@ -1,12 +1,13 @@
-# Extensions: Health and Geo
+# Extensions: Geo, Health, and Logging
 
 Extensions are pieces of non-critical functionality going over the NervesHub WebSocket. They are separated out under the Extensions mechanism so that the client can happily ignore anything extension-related in service of keeping firmware updates healthy. That is always the top priority.
 
-There are two extensions currently:
+There are currently four extensions:
 
 - [**Geo**](#geo) provides hooks to send a device's GeoIP information.
 - [**Health**](#health) reports device metrics, alarms, metadata and similar.
 - [**Local Shell**](#local-shell) gives NervesHub the ability to expose an interactive shell in the UI.
+- [**Logging**](#logging) provides the ability to send and store logs on NervesHub.
 
 Your NervesHub server controls enabling and disabling extensions to allow you to switch them off if they impact operations.
 
@@ -47,7 +48,7 @@ to include all the metric sets you want to use. If you want to include the full 
 
 eg.
 
-```
+```elixir
 config :nerves_hub_link,
   health: [
     metric_sets: [
@@ -60,7 +61,7 @@ config :nerves_hub_link,
 
 If you only want to use some of the default metrics, you can specify them explicitly:
 
-```
+```elixir
 config :nerves_hub_link,
   health: [
     metric_sets: [
@@ -73,7 +74,7 @@ config :nerves_hub_link,
 
 And if you don't want to use any metric sets, you can set the `metric_sets` option to an empty list.
 
-```
+```elixir
 config :nerves_hub_link,
   health: [
     metric_sets: []
@@ -82,7 +83,7 @@ config :nerves_hub_link,
 
 If you want to add custom metadata to the default health report, you can specify it with:
 
-```
+```elixir
 config :nerves_hub_link,
   health: [
     # metadata is added with a key and MFA
@@ -95,7 +96,7 @@ config :nerves_hub_link,
 
 Or you can implement a completely custom reporting module by implementing `NervesHubLink.Extensions.Health.Report` and configuring it:
 
-```
+```elixir
 config :nerves_hub_link,
   health: [
     report: CatCounter.MyHealthReport
@@ -133,3 +134,34 @@ Provides an interactive local shell for NervesHub to connect to. This is useful 
 This extension is enabled by default, but must also be enabled in your Device and Product settings on your NervesHub platform.
 
 To use this extension, you need to include the [`ExPTY`](https://hex.pm/packages/expty) library in your project's dependencies.
+
+## Logging
+
+The Logging extension is responsible for sending logs to the NervesHub platform.
+
+It is in early release and is off by default. To turn it on, name it in `extension_modules`:
+
+```elixir
+config :nerves_hub_link,
+  extension_modules: [
+    NervesHubLink.Extensions.Geo,
+    NervesHubLink.Extensions.Health,
+    NervesHubLink.Extensions.LocalShell,
+    NervesHubLink.Extensions.Logging
+  ]
+```
+
+> #### This list replaces the defaults {: .warning}
+>
+> `extension_modules` replaces the default list rather than adding to it, so every extension you want has to be named, not just the one you are adding. `NervesHubLink.Extensions.LocalShell` is only in the default list when [`ExPTY`](https://hex.pm/packages/expty) is available — leave it out of your list if you don't depend on it.
+
+Enabling it here only makes the extension available. Like every extension, it sends nothing until NervesHub asks the device to attach it, which you control in your Device and Product settings.
+
+Every log line is a message over the socket, so only `:info` and above are sent by default. Devices on metered connections will want to raise that:
+
+```elixir
+config :nerves_hub_link,
+  logging: [level: :warning]
+```
+
+Any [Logger level](https://hexdocs.pm/logger/Logger.html#t:level/0) is accepted, as is `:all` to send everything the `Logger` level allows through.
