@@ -2,9 +2,9 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-defmodule NervesHubLink.Extensions.ExternalIdentity do
+defmodule NervesHubLink.Extensions.NetworkIdentity do
   @moduledoc """
-  The External Identity Extension.
+  The Network Identity Extension.
 
   Reports the identities this device holds on networks NervesHub does not run —
   an iroh endpoint id, a NetBird or Tailscale peer key, a WireGuard public key —
@@ -13,10 +13,10 @@ defmodule NervesHubLink.Extensions.ExternalIdentity do
 
   Nothing is reported unless you configure at least one provider, because
   NervesHubLink cannot discover these on its own. See
-  `NervesHubLink.Extensions.ExternalIdentity.Provider`.
+  `NervesHubLink.Extensions.NetworkIdentity.Provider`.
 
       config :nerves_hub_link,
-        external_identity: [providers: [MyApp.IrohIdentity]]
+        network_identity: [providers: [MyApp.IrohIdentity]]
 
   Unlike `NervesHubLink.Extensions.Health` and
   `NervesHubLink.Extensions.Geo` there is no interval: an identity is long-lived,
@@ -25,19 +25,19 @@ defmodule NervesHubLink.Extensions.ExternalIdentity do
   IP — call `send_report/0` to announce it.
   """
 
-  use NervesHubLink.Extensions, name: "external_identity", version: "0.0.1"
+  use NervesHubLink.Extensions, name: "network_identity", version: "0.0.1"
 
   require Logger
 
   @doc """
-  Report this device's external identities to NervesHub now.
+  Report this device's network identities to NervesHub now.
 
   Only needed when something changed mid-connection; NervesHub asks for a report
   on its own when the extension attaches.
 
   ## Examples
 
-      iex> NervesHubLink.Extensions.ExternalIdentity.send_report()
+      iex> NervesHubLink.Extensions.NetworkIdentity.send_report()
       :ok
 
   """
@@ -83,7 +83,7 @@ defmodule NervesHubLink.Extensions.ExternalIdentity do
       # The server only asks when an operator has switched this on, so being
       # asked with nothing configured is worth saying out loud.
       Logger.warning(
-        "[#{inspect(__MODULE__)}] NervesHub asked for external identities but no providers are configured"
+        "[#{inspect(__MODULE__)}] NervesHub asked for network identities but no providers are configured"
       )
     end
 
@@ -190,7 +190,7 @@ defmodule NervesHubLink.Extensions.ExternalIdentity do
   @spec providers() :: [module()]
   defp providers() do
     :nerves_hub_link
-    |> Application.get_env(:external_identity, [])
+    |> Application.get_env(:network_identity, [])
     |> Keyword.get(:providers, [])
     |> List.wrap()
   end

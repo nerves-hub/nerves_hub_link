@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-defmodule NervesHubLink.Extensions.ExternalIdentity.Provider do
+defmodule NervesHubLink.Extensions.NetworkIdentity.Provider do
   @moduledoc """
   Behaviour for reporting an identity this device holds on another network.
 
@@ -17,7 +17,7 @@ defmodule NervesHubLink.Extensions.ExternalIdentity.Provider do
   ## Writing one
 
       defmodule MyApp.IrohIdentity do
-        @behaviour NervesHubLink.Extensions.ExternalIdentity.Provider
+        @behaviour NervesHubLink.Extensions.NetworkIdentity.Provider
 
         @impl true
         def identity() do
@@ -39,7 +39,7 @@ defmodule NervesHubLink.Extensions.ExternalIdentity.Provider do
   And then:
 
       config :nerves_hub_link,
-        external_identity: [providers: [MyApp.IrohIdentity]]
+        network_identity: [providers: [MyApp.IrohIdentity]]
 
   ## Returning `:unavailable` rather than an error
 

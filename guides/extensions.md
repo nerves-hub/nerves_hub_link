@@ -7,7 +7,7 @@ There are four extensions currently:
 - [**Geo**](#geo) provides hooks to send a device's GeoIP information.
 - [**Health**](#health) reports device metrics, alarms, metadata and similar.
 - [**Local Shell**](#local-shell) gives NervesHub the ability to expose an interactive shell in the UI.
-- [**External Identity**](#external-identity) reports the device's identity on networks NervesHub doesn't run, such as iroh or NetBird.
+- [**Network Identity**](#external-identity) reports the device's identity on networks NervesHub doesn't run, such as iroh or NetBird.
 
 Your NervesHub server controls enabling and disabling extensions to allow you to switch them off if they impact operations.
 
@@ -135,7 +135,7 @@ This extension is enabled by default, but must also be enabled in your Device an
 
 To use this extension, you need to include the [`ExPTY`](https://hex.pm/packages/expty) library in your project's dependencies.
 
-## External Identity
+## Network Identity
 
 Devices increasingly reach the outside world over something other than their NervesHub socket — an iroh endpoint, a NetBird or Tailscale peer, a plain WireGuard interface. Each of those networks names the device by a long-lived public key, and that key is what you need in order to reach it by any route other than NervesHub.
 
@@ -145,7 +145,7 @@ There is no default provider, and there can't be one: NervesHubLink has no way t
 
 ```elixir
 config :nerves_hub_link,
-  external_identity: [
+  network_identity: [
     providers: [MyApp.IrohIdentity]
   ]
 ```
@@ -154,11 +154,11 @@ One provider reports one service. A device on both iroh and NetBird configures t
 
 ### Writing a provider
 
-Implement `NervesHubLink.Extensions.ExternalIdentity.Provider`, which is a single `identity/0` callback. For a device running [`iroh_console`](https://hex.pm/packages/iroh_console):
+Implement `NervesHubLink.Extensions.NetworkIdentity.Provider`, which is a single `identity/0` callback. For a device running [`iroh_console`](https://hex.pm/packages/iroh_console):
 
 ```elixir
 defmodule MyApp.IrohIdentity do
-  @behaviour NervesHubLink.Extensions.ExternalIdentity.Provider
+  @behaviour NervesHubLink.Extensions.NetworkIdentity.Provider
 
   @impl true
   def identity() do
@@ -199,7 +199,7 @@ The same shape works for anything else. A NetBird provider is really just parsin
 
 ```elixir
 defmodule MyApp.NetBirdIdentity do
-  @behaviour NervesHubLink.Extensions.ExternalIdentity.Provider
+  @behaviour NervesHubLink.Extensions.NetworkIdentity.Provider
 
   @impl true
   def identity() do
@@ -242,13 +242,13 @@ Keep `details` small — NervesHub rejects a payload over 4KB once encoded — a
 NervesHub asks once per connection, because an identity is long-lived and polling for it would be noise. If something changes while the device stays connected, announce it yourself:
 
 ```elixir
-NervesHubLink.Extensions.ExternalIdentity.send_report()
+NervesHubLink.Extensions.NetworkIdentity.send_report()
 ```
 
 To see what your providers currently return without sending anything, which is the quickest way to work out why a device isn't showing what you expect:
 
 ```elixir
-NervesHubLink.Extensions.ExternalIdentity.identities()
+NervesHubLink.Extensions.NetworkIdentity.identities()
 ```
 
 Like every extension, this must also be enabled in your Product and Device settings on your NervesHub platform.
