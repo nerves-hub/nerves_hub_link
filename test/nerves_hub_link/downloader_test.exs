@@ -31,6 +31,9 @@ defmodule NervesHubLink.DownloaderTest do
 
   @failure_url "http://localhost:#{Utils.unique_port_number()}/this_should_fail"
 
+  # the size of the file `ResumedRangePlug` is asked to serve
+  @served_bytes 4096
+
   test "max_disconnects" do
     test_pid = self()
     handler_fun = &send(test_pid, &1)
@@ -355,7 +358,12 @@ defmodule NervesHubLink.DownloaderTest do
 
   describe "resuming a download that already skipped part of the file" do
     setup do
-      {:ok, _plug, port} = Utils.supervise_plug(ResumedRangePlug, test_pid: self())
+      {:ok, _plug, port} =
+        Utils.supervise_plug(ResumedRangePlug,
+          test_pid: self(),
+          content_length: @served_bytes
+        )
+
       {:ok, [url: "http://localhost:#{port}/test"]}
     end
 
@@ -368,8 +376,8 @@ defmodule NervesHubLink.DownloaderTest do
         :ok
       end
 
-      resume_from = div(ResumedRangePlug.content_length(), 4)
-      remaining = ResumedRangePlug.content_length() - resume_from
+      resume_from = div(@served_bytes, 4)
+      remaining = @served_bytes - resume_from
 
       {:ok, _download} =
         Downloader.start_download(url, handler_fun,
