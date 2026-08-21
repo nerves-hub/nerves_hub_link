@@ -7,7 +7,7 @@ There are four extensions currently:
 - [**Geo**](#geo) provides hooks to send a device's GeoIP information.
 - [**Health**](#health) reports device metrics, alarms, metadata and similar.
 - [**Local Shell**](#local-shell) gives NervesHub the ability to expose an interactive shell in the UI.
-- [**Network Identity**](#external-identity) reports the device's identity on networks NervesHub doesn't run, such as iroh or NetBird.
+- [**Network Identity**](#network-identity) reports the device's identity on networks NervesHub doesn't run, such as iroh or NetBird.
 
 Your NervesHub server controls enabling and disabling extensions to allow you to switch them off if they impact operations.
 
@@ -179,8 +179,11 @@ defmodule MyApp.IrohIdentity do
 
   @impl true
   def identity() do
+    # One addr/1 call, so the id and the ticket describe the same moment.
+    # IrohConsole.Server.ticket/1 reads the address again, so asking for both
+    # can pair an id with a ticket built after a relay change.
     with {:ok, addr} <- IrohConsole.Server.addr(),
-         {:ok, ticket} <- IrohConsole.Server.ticket() do
+         {:ok, ticket} <- IrohBeam.EndpointTicket.new(addr) do
       {:ok,
        %{
          service: "iroh",
@@ -254,15 +257,9 @@ Currently `iroh`, `netbird`, `tailscale` and `wireguard`. Anything else is disca
 
 Keep `details` small — NervesHub rejects a payload over 4KB once encoded — and never put a secret in it. This is an identity record, and it's visible to anyone who can view the device.
 
-### Reporting
+### Checking what your providers return
 
-NervesHub asks once per connection, because an identity is long-lived and polling for it would be noise. If something changes while the device stays connected, announce it yourself:
-
-```elixir
-NervesHubLink.Extensions.NetworkIdentity.send_report()
-```
-
-To see what your providers currently return without sending anything, which is the quickest way to work out why a device isn't showing what you expect:
+To see what they currently answer without sending anything, which is the quickest way to work out why a device isn't showing what you expect:
 
 ```elixir
 NervesHubLink.Extensions.NetworkIdentity.identities()
