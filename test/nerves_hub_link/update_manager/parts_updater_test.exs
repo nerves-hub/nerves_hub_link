@@ -208,7 +208,7 @@ defmodule NervesHubLink.UpdateManager.PartsUpdaterTest do
 
       # one request, so no part had to be downloaded a second time
       assert :counters.get(counter, 1) == 1
-      assert requested_ranges() == [{@part_size, 750}]
+      assert requested_ranges() == [{@part_size, last_byte(context)}]
     end
 
     test "skips the download entirely when every part is already on disk", context do
@@ -239,8 +239,15 @@ defmodule NervesHubLink.UpdateManager.PartsUpdaterTest do
 
       # 8 parts over 4 connections is two parts each, and the last range runs to
       # the end of the file rather than to a part boundary
+      assert part_count(context) == 8
       assert :counters.get(counter, 1) == 4
-      assert requested_ranges() == [{0, 199}, {200, 399}, {400, 599}, {600, 750}]
+
+      assert requested_ranges() == [
+               {0, 199},
+               {200, 399},
+               {400, 599},
+               {600, last_byte(context)}
+             ]
 
       assert parts_on_disk(context) == expected_parts(context)
     end
@@ -261,8 +268,15 @@ defmodule NervesHubLink.UpdateManager.PartsUpdaterTest do
 
       # four parts left to fetch and four connections to fetch them with, none of
       # which asks for anything that was already verified
+      assert part_count(context) == 8
       assert :counters.get(counter, 1) == 4
-      assert requested_ranges() == [{200, 299}, {300, 399}, {600, 699}, {700, 750}]
+
+      assert requested_ranges() == [
+               {200, 299},
+               {300, 399},
+               {600, 699},
+               {700, last_byte(context)}
+             ]
 
       assert parts_on_disk(context) == expected_parts(context)
     end
@@ -370,6 +384,11 @@ defmodule NervesHubLink.UpdateManager.PartsUpdaterTest do
   end
 
   defp expected_parts(context), do: split(context.firmware, @part_size)
+
+  # The size of a signed firmware depends on the version of fwup that built it,
+  # so the end of the file is worked out from the firmware the test is actually
+  # serving rather than written down.
+  defp last_byte(context), do: byte_size(context.firmware) - 1
 
   defp part_count(context), do: length(expected_parts(context))
 
