@@ -202,6 +202,25 @@ defmodule NervesHubLink.UpdateManager do
   end
 
   defp maybe_update_firmware(%UpdateInfo{} = update_info, fwup_public_keys, %State{} = state) do
+    if FwupConfig.signing_keys_available?(fwup_public_keys) do
+      update_firmware(update_info, fwup_public_keys, state)
+    else
+      # Without a public key `fwup` applies the firmware without checking its
+      # signature, so refuse the update rather than install an unverified image.
+      Logger.error(
+        "[NervesHubLink:UpdateManager] Refusing firmware update : no public keys are available to verify the firmware signature"
+      )
+
+      NervesHubLink.send_update_status(
+        {:failed, "Refusing unverified firmware : no public keys available"}
+      )
+
+      state
+    end
+  end
+
+  @spec update_firmware(UpdateInfo.t(), [binary()], State.t()) :: State.t()
+  defp update_firmware(%UpdateInfo{} = update_info, fwup_public_keys, %State{} = state) do
     NervesHubLink.send_update_status(:received)
 
     case Client.update_available(update_info) do
