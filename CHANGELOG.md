@@ -1,5 +1,19 @@
 # Changelog
 
+## [Unreleased]
+
+* Added
+  * `NervesHubLink.UpdateManager.PartsUpdater`, a new update strategy that downloads firmware to disk one part at a time and checks each part against the `partials_checksums` NervesHub sends in the update payload. A part that fails is downloaded again without discarding the parts before it, and a device that restarts mid-update resumes from the last part it verified rather than trusting the size of a partial file. The verified parts are streamed into `fwup` in order, so the firmware never needs to be on disk twice. It can also fetch several parts at once - set `max_concurrent_parts` above `1` to divide the parts still needed into that many contiguous ranges, each downloaded over its own connection. See the [configuration guide](guides/configuration.md#choosing-how-firmware-is-downloaded-and-applied) for how the update strategies compare.
+  * `NervesHubLink.Message.UpdateInfo` now carries the `size`, `checksum` and `partials_checksums` that NervesHub sends alongside the firmware URL. They were previously dropped while parsing the update payload.
+  * `NervesHubLink.Downloader` accepts a `:range_end` option, which pairs with `:resume_from_bytes` to download one slice of a file rather than everything from an offset onwards.
+  * `NervesHubLink.Downloader` accepts a `:label` option, which is added to every line it logs. `NervesHubLink.UpdateManager.PartsUpdater` labels each of its downloads with the parts it is fetching, so the log can be followed when more than one is running.
+  * `NervesHubLink.UpdateManager.Updater` has a new optional `c:NervesHubLink.UpdateManager.Updater.handle_message/2` callback for messages an updater sends itself, and for exits that aren't from the download in `state.download`. Updaters built on the base module get an implementation that logs and carries on.
+
+* Fixed
+  * `NervesHubLink.Downloader` no longer writes credentials to the log. Firmware URLs are signed, so the query string is one, and it was written out when resuming a download or following a redirect. It was also reported, along with anything configured as SSL options or proxy headers, in the crash report OTP writes when a download stops abnormally. The rest of the state is still reported, since that is what makes the report worth reading.
+  * A download resumed from a partial file (`resume_from_bytes`) asked for the wrong byte range after a disconnect, because the retry offset was calculated relative to the interrupted request instead of the file. The bytes that came back were then appended in the wrong place, silently corrupting the firmware. This affected `NervesHubLink.UpdateManager.CachingUpdater` whenever a resumed download was interrupted a second time.
+  * `NervesHubLink.UpdateManager.Updater` ignored the `{:stop, reason, state}` return that `c:NervesHubLink.UpdateManager.Updater.handle_downloader_message/2` documents, crashing the updater with a `CaseClauseError` instead of stopping it.
+
 ## [2.12.0] - 2026-05-11
 
 * Added

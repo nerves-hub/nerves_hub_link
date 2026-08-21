@@ -56,6 +56,8 @@ defmodule NervesHubLink.Downloader do
             http_opts: [],
             max_timeout: nil,
             resume_from_bytes: nil,
+            range_end: nil,
+            label: nil,
             retry_timeout: nil,
             worst_case_timeout: nil,
             worst_case_timeout_remaining_ms: nil
@@ -78,6 +80,8 @@ defmodule NervesHubLink.Downloader do
           content_length: non_neg_integer(),
           downloaded_length: non_neg_integer(),
           resume_from_bytes: nil | non_neg_integer(),
+          range_end: nil | non_neg_integer(),
+          label: nil | String.t(),
           retry_number: non_neg_integer(),
           handler_fun: event_handler_fun,
           retry_args: retry_args(),
@@ -106,6 +110,8 @@ defmodule NervesHubLink.Downloader do
 
   @type option ::
           {:resume_from_bytes, integer()}
+          | {:range_end, integer()}
+          | {:label, String.t()}
           | {:retry_config, RetryConfig.t()}
           | {:downloader_ssl, keyword()}
           | {:downloader_http_opts, keyword()}
@@ -113,6 +119,15 @@ defmodule NervesHubLink.Downloader do
 
   @doc """
   Begins downloading a file at `url` handled by `fun`.
+
+  Pass `:resume_from_bytes` to start part way into the file, and `:range_end`
+  (the offset of the last byte wanted, counting from the start of the file) to
+  stop before the end of it. Together they fetch one slice of a file, which is
+  what lets several downloads share a file without overlapping.
+
+  When several downloads are running at once, pass `:label` to say which is
+  which. It is added to every log line this process writes, which are otherwise
+  impossible to tell apart.
 
   # Example
 
@@ -166,7 +181,9 @@ defmodule NervesHubLink.Downloader do
         http_opts: opts[:http_opts],
         max_timeout: timer,
         uri: uri,
-        resume_from_bytes: opts[:resume_from_bytes]
+        resume_from_bytes: opts[:resume_from_bytes],
+        range_end: opts[:range_end],
+        label: opts[:label]
       })
 
     send(self(), :resume)
@@ -179,14 +196,14 @@ defmodule NervesHubLink.Downloader do
   # it is a extreme condition where regardless of download attempts,
   # idle timeouts etc, this entire process has lived for TOO long.
   def handle_info(:max_timeout, %Downloader{} = state) do
-    Logger.debug("[NervesHubLink.Downloader] Max timeout reached")
+    Logger.debug("#{log_prefix(state)} Max timeout reached")
     {:stop, :max_timeout_reached, state}
   end
 
   # Handle the worst case download speed timeout.
   # Please refer to `retry_config.ex` for more information on how this is calculated.
   def handle_info(:worst_case_download_speed_timeout, %Downloader{} = state) do
-    Logger.debug("[NervesHubLink.Downloader] Worst case download speed timeout reached")
+    Logger.debug("#{log_prefix(state)} Worst case download speed timeout reached")
     {:stop, :worst_case_download_speed_reached, state}
   end
 
@@ -196,7 +213,7 @@ defmodule NervesHubLink.Downloader do
   def handle_info(:timeout, %Downloader{handler_fun: handler} = state) do
     close_conn(state)
     _ = handler.({:error, :idle_timeout})
-    Logger.debug("[NervesHubLink.Downloader] Idle timeout reached")
+    Logger.debug("#{log_prefix(state)} Idle timeout reached")
     state = reschedule_resume(state)
     {:noreply, %{state | conn: nil}}
   end
@@ -210,7 +227,7 @@ defmodule NervesHubLink.Downloader do
           retry_args: %RetryConfig{max_disconnects: retry_number}
         } = state
       ) do
-    Logger.debug("[NervesHubLink.Downloader] Max disconnects reached")
+    Logger.debug("#{log_prefix(state)} Max disconnects reached")
     {:stop, :max_disconnects_reached, state}
   end
 
@@ -241,7 +258,7 @@ defmodule NervesHubLink.Downloader do
 
       :unknown ->
         Logger.warning(
-          "[NervesHubLink.Downloader] Mint didn't recognize the message : #{inspect(message)}"
+          "#{log_prefix(state)} Mint didn't recognize the message : #{inspect(message)}"
         )
 
         {:noreply, state}
@@ -250,7 +267,7 @@ defmodule NervesHubLink.Downloader do
 
   def handle_info(message, state) do
     Logger.warning(
-      "[NervesHubLink.Downloader] Unhandled message in `handle_info` : #{inspect(message)}"
+      "#{log_prefix(state)} Unhandled message in `handle_info` : #{inspect(message)}"
     )
 
     {:noreply, state}
@@ -353,7 +370,7 @@ defmodule NervesHubLink.Downloader do
       )
       when status >= 300 and status < 400 do
     location = URI.merge(state.uri, fetch_location(headers))
-    Logger.info("[NervesHubLink] Redirecting to #{location}")
+    Logger.info("#{log_prefix(state)} Redirecting to #{uri_without_query(location)}")
 
     state = reset(state)
 
@@ -383,7 +400,7 @@ defmodule NervesHubLink.Downloader do
       ) do
     case fetch_accept_ranges(headers) do
       accept_ranges when accept_ranges in ["none", nil] ->
-        Logger.error("[NervesHubLink] HTTP Server does not support the Range header")
+        Logger.error("#{log_prefix(state)} HTTP Server does not support the Range header")
 
       _ ->
         :ok
@@ -428,7 +445,7 @@ defmodule NervesHubLink.Downloader do
         } = state
       ) do
     Logger.debug(
-      "[NervesHubLink.Downloader] Download completed (downloaded_length and content_length match: #{total})"
+      "#{log_prefix(state)} Download completed (downloaded_length and content_length match: #{total})"
     )
 
     %{state | completed: true}
@@ -448,7 +465,7 @@ defmodule NervesHubLink.Downloader do
       )
       when downloaded_length > content_length do
     Logger.warning(
-      "[NervesHubLink.Downloader] Download completed, but downloaded length is greater than content length (downloaded_length: #{downloaded_length} | content_length: #{content_length})"
+      "#{log_prefix(state)} Download completed, but downloaded length is greater than content length (downloaded_length: #{downloaded_length} | content_length: #{content_length})"
     )
 
     %{state | completed: true}
@@ -461,7 +478,7 @@ defmodule NervesHubLink.Downloader do
   # https://github.com/elixir-mint/mint/blob/0bfcc869b53b83989c24ba681d66d0a447b5a1c3/lib/mint/http1.ex#L524
   def handle_response({:done, request_ref}, %Downloader{request_ref: request_ref} = state) do
     Logger.warning(
-      "[NervesHubLink.Downloader] Download completed, but content length and download length mismatch detected (downloaded_length: #{state.downloaded_length} | content_length: #{state.content_length})"
+      "#{log_prefix(state)} Download completed, but content length and download length mismatch detected (downloaded_length: #{state.downloaded_length} | content_length: #{state.content_length})"
     )
 
     {:error, :downloaded_content_length_mismatch, state}
@@ -501,7 +518,9 @@ defmodule NervesHubLink.Downloader do
     path = if query, do: "#{path}?#{query}", else: path
 
     if state.retry_number > 0 do
-      Logger.info("[NervesHubLink] Resuming download attempt number #{state.retry_number} #{uri}")
+      Logger.info(
+        "#{log_prefix(state)} Resuming download attempt number #{state.retry_number} #{uri_without_query(uri)}"
+      )
     end
 
     close_conn(state)
@@ -544,17 +563,39 @@ defmodule NervesHubLink.Downloader do
   @spec add_range_header(Mint.Types.headers(), t()) :: Mint.Types.headers()
   defp add_range_header(headers, state)
 
-  defp add_range_header(headers, %Downloader{resume_from_bytes: r, content_length: 0})
-       when not is_nil(r) and r > 0 do
-    [{"Range", "bytes=#{r}-"} | headers]
+  # Only part of the file was asked for, so where it ends is already known and
+  # doesn't depend on what the server says.
+  defp add_range_header(headers, %Downloader{range_end: range_end} = state)
+       when is_integer(range_end) do
+    [{"Range", "bytes=#{next_byte(state)}-#{range_end}"} | headers]
   end
 
-  defp add_range_header(headers, %Downloader{content_length: 0}), do: headers
-
-  defp add_range_header(headers, %Downloader{downloaded_length: r, content_length: total})
-       when total > 0 do
-    [{"Range", "bytes=#{r}-#{total}"} | headers]
+  # No response has been seen yet, so the total size of the file isn't known and
+  # the request is left open ended.
+  defp add_range_header(headers, %Downloader{content_length: 0} = state) do
+    case next_byte(state) do
+      0 -> headers
+      offset -> [{"Range", "bytes=#{offset}-"} | headers]
+    end
   end
+
+  defp add_range_header(headers, %Downloader{content_length: content_length} = state) do
+    [{"Range", "bytes=#{next_byte(state)}-#{resume_from(state) + content_length}"} | headers]
+  end
+
+  # `downloaded_length` and `content_length` only count the part of the file
+  # this download is responsible for, so both have to be shifted back by
+  # `resume_from_bytes` to become offsets into the file being downloaded.
+  # Without that, a download resumed from a partial file would ask for the wrong
+  # range after a disconnect and silently stitch together the wrong bytes.
+  @spec next_byte(t()) :: non_neg_integer()
+  defp next_byte(%Downloader{downloaded_length: downloaded_length} = state) do
+    resume_from(state) + downloaded_length
+  end
+
+  @spec resume_from(t()) :: non_neg_integer()
+  defp resume_from(%Downloader{resume_from_bytes: nil}), do: 0
+  defp resume_from(%Downloader{resume_from_bytes: resume_from_bytes}), do: resume_from_bytes
 
   @spec add_retry_number_header(Mint.Types.headers(), t()) :: Mint.Types.headers()
   defp add_retry_number_header(headers, %Downloader{retry_number: retry_number}),
@@ -562,6 +603,69 @@ defmodule NervesHubLink.Downloader do
 
   defp add_user_agent_header(headers, _),
     do: [{"User-Agent", "NHL/#{Application.spec(:nerves_hub_link)[:vsn]}"} | headers]
+
+  # OTP writes the whole state to the crash report when this process stops
+  # abnormally, which for a download means the signed firmware URL and whatever
+  # was configured as SSL options - including a private key. `format_status/1`
+  # takes those out while leaving the rest, which is what makes the report worth
+  # reading, alone.
+  #
+  # OTP has called `format_status/1` since 25, so every supported release uses
+  # it, but `GenServer` only started declaring it as a callback in Elixir 1.17.
+  # Annotating it before that warns that the callback is unknown, and leaving
+  # the annotation off after it warns that it is missing.
+  if Version.match?(System.version(), ">= 1.17.0") do
+    @impl GenServer
+  end
+
+  @spec format_status(map()) :: map()
+  def format_status(%{state: state} = status), do: %{status | state: redact(state)}
+  def format_status(status), do: status
+
+  # SSL and HTTP options are passed through to Mint, so what is in them is up to
+  # whoever configured them. These are the keys that hold a secret.
+  @redacted_opts [:key, :password, :proxy_headers]
+
+  @spec redact(t() | term()) :: t() | term()
+  defp redact(%Downloader{} = state) do
+    %Downloader{
+      state
+      | uri: redact_uri(state.uri),
+        transport_opts: redact_opts(state.transport_opts),
+        http_opts: redact_opts(state.http_opts)
+    }
+  end
+
+  defp redact(state), do: state
+
+  defp redact_uri(%URI{query: nil} = uri), do: uri
+  defp redact_uri(%URI{} = uri), do: %URI{uri | query: "[REDACTED]"}
+  defp redact_uri(uri), do: uri
+
+  defp redact_opts(opts) when is_list(opts) do
+    Enum.map(opts, fn
+      {key, _value} when key in @redacted_opts -> {key, "[REDACTED]"}
+      {key, value} when is_list(value) -> {key, redact_opts(value)}
+      other -> other
+    end)
+  end
+
+  defp redact_opts(opts), do: opts
+
+  # A label tells apart the log lines of downloads running at the same time,
+  # which are otherwise indistinguishable.
+  @spec log_prefix(t()) :: String.t()
+  defp log_prefix(%Downloader{label: nil}), do: "[NervesHubLink.Downloader]"
+  defp log_prefix(%Downloader{label: label}), do: "[NervesHubLink.Downloader #{label}]"
+
+  # Firmware URLs are signed, so the query string is a credential and has no
+  # business being written to the log.
+  @spec uri_without_query(URI.t()) :: String.t()
+  defp uri_without_query(uri) do
+    uri
+    |> URI.to_string()
+    |> String.replace(~r/\?.*/, "?...")
+  end
 
   defp close_conn(%Downloader{conn: nil}), do: :ok
 

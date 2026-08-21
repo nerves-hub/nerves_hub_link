@@ -90,6 +90,38 @@ defmodule NervesHubLink.SocketMessagesTest do
       assert_receive {:start_update, %UpdateInfo{} = update_info, ["configured fwup key"]}
       assert URI.to_string(update_info.firmware_url) == @firmware_url
       assert update_info.firmware_meta.uuid == @uuid
+
+      # a server too old to describe the firmware file itself
+      assert update_info.size == nil
+      assert update_info.checksum == nil
+      assert update_info.partials_checksums == []
+    end
+
+    test "an update message carries the size and checksums of the firmware file",
+         %{socket: socket} do
+      test_pid = self()
+
+      expect(UpdaterMock, :start_update, fn update_info, _fwup_config, _fwup_public_keys ->
+        send(test_pid, {:start_update, update_info})
+        {:ok, spawn(fn -> Process.sleep(:infinity) end)}
+      end)
+
+      payload =
+        update_payload()
+        |> Map.put("size", 2_097_152)
+        |> Map.put("checksum", String.duplicate("A", 64))
+        |> Map.put("partials_checksums", [String.duplicate("B", 64), String.duplicate("C", 64)])
+
+      push(socket, @device_topic, "update", payload)
+
+      assert_receive {:start_update, %UpdateInfo{} = update_info}
+      assert update_info.size == 2_097_152
+      assert update_info.checksum == String.duplicate("A", 64)
+
+      assert update_info.partials_checksums == [
+               String.duplicate("B", 64),
+               String.duplicate("C", 64)
+             ]
     end
 
     test "an update message that can not be parsed is ignored", %{socket: socket} do
