@@ -45,6 +45,55 @@ config :nerves_hub_link, :retry_config,
 
 For more information about the configuration options, see the `NervesHubLink.Downloader.RetryConfig` module.
 
+## Choosing how firmware is downloaded and applied
+
+`NervesHubLink` ships three update strategies. Each one downloads the firmware
+and hands it to `fwup`, but they differ in what they do with the bytes on the
+way through, and therefore in what an interrupted update costs.
+
+| Strategy | Firmware on disk | Survives a restart | Verifies the download |
+| --- | --- | --- | --- |
+| `NervesHubLink.UpdateManager.StreamingUpdater` (default) | none | no | `fwup` signature check only |
+| `NervesHubLink.UpdateManager.CachingUpdater` | the whole file | resumes from the size of the partial file | `fwup` signature check only |
+| `NervesHubLink.UpdateManager.PartsUpdater` | one file per part | resumes from the last verified part | every part, as it arrives |
+
+The default streams straight into `fwup`, which needs no spare storage but
+starts again from nothing whenever a download is interrupted.
+
+`CachingUpdater` keeps the download so it can be resumed, and trusts the size of
+what it already has. A part that was half written when the power went out is
+treated as good and only shows up much later as an `fwup` error.
+
+`PartsUpdater` checks each part against the checksums NervesHub sends in the
+update payload, so a part that arrives corrupted is downloaded again on the
+spot, and a device that restarts mid-update keeps the parts it had already
+verified. This is the one to pick for devices on slow or unreliable connections.
+It needs a NervesHub server new enough to send `partials_checksums`; older
+servers fall back to a single unverified download with a warning.
+
+```elixir
+config :nerves_hub_link,
+  updater: NervesHubLink.UpdateManager.PartsUpdater
+
+config :nerves_hub_link, NervesHubLink.UpdateManager.PartsUpdater,
+  cache_dir: "/data/nerves_hub_link/firmware",
+  part_size: 1_048_576,
+  max_part_attempts: 3,
+  max_concurrent_parts: 1
+```
+
+`PartsUpdater` can also download from several connections at once. Raising
+`:max_concurrent_parts` divides the parts still needed into that many contiguous
+ranges and fetches each one separately, which helps on links where a single
+connection can't fill the available bandwidth, such as high latency satellite or
+cellular. It costs a connection per range on the device *and* on whatever is
+serving the firmware, multiplied by every device in a deployment, so it stays at
+`1` unless you raise it.
+
+See `NervesHubLink.UpdateManager.PartsUpdater` and
+`NervesHubLink.UpdateManager.CachingUpdater` for the options each one takes, and
+`NervesHubLink.UpdateManager.Updater` for writing your own.
+
 ## Conditionally applying updates
 
 It's not always appropriate to apply a firmware update immediately. Custom logic can be added to the device by

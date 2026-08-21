@@ -110,6 +110,7 @@ defmodule NervesHubLink.MixProject do
           NervesHubLink.UpdateManager.State,
           NervesHubLink.UpdateManager.Updater,
           NervesHubLink.UpdateManager.CachingUpdater,
+          NervesHubLink.UpdateManager.PartsUpdater,
           NervesHubLink.UpdateManager.StreamingUpdater,
           NervesHubLink.ArchiveManager,
           NervesHubLink.Downloader,

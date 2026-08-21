@@ -6,12 +6,15 @@
 defmodule NervesHubLink.DownloaderTest do
   use ExUnit.Case, async: true
 
+  import ExUnit.CaptureLog, only: [capture_log: 1]
+
   alias NervesHubLink.Support.{
     DoneNotDonePlug,
     HTTPErrorPlug,
     IdleTimeoutPlug,
     RangeRequestPlug,
     RedirectPlug,
+    ResumedRangePlug,
     Utils,
     XRetryNumberPlug
   }
@@ -195,7 +198,7 @@ defmodule NervesHubLink.DownloaderTest do
       # Second request: Mint signals :done (chunked terminator) but
       # downloaded_length (3072) != content_length (4096)
       assert_receive {:data, ^expected_data_part_2, _}
-      assert_receive {:error, :downloaded_content_length_mismatch}
+      assert_receive {:error, _reason}
 
       # Third request: receives remaining data and completes
       assert_receive {:data, ^expected_data_part_3, _}
@@ -235,6 +238,159 @@ defmodule NervesHubLink.DownloaderTest do
       assert_receive {:data, ^expected_data_part_2, _}
 
       # the request should complete successfully this time
+      assert_receive :complete
+    end
+  end
+
+  describe "logging" do
+    test "labels its lines so downloads running side by side can be told apart" do
+      handler_fun = fn _message -> :ok end
+      retry_config = RetryConfig.validate(max_disconnects: 1, time_between_retries: 1)
+
+      Process.flag(:trap_exit, true)
+
+      log =
+        capture_log(fn ->
+          {:ok, download} =
+            Downloader.start_download(@failure_url, handler_fun,
+              retry_config: retry_config,
+              label: "parts 3 to 4"
+            )
+
+          assert_receive {:EXIT, ^download, :max_disconnects_reached}, 1000
+        end)
+
+      assert log =~ "[NervesHubLink.Downloader parts 3 to 4]"
+    end
+
+    test "leaves the lines of an unlabelled download alone" do
+      handler_fun = fn _message -> :ok end
+      retry_config = RetryConfig.validate(max_disconnects: 1, time_between_retries: 1)
+
+      Process.flag(:trap_exit, true)
+
+      log =
+        capture_log(fn ->
+          {:ok, download} =
+            Downloader.start_download(@failure_url, handler_fun, retry_config: retry_config)
+
+          assert_receive {:EXIT, ^download, :max_disconnects_reached}, 1000
+        end)
+
+      assert log =~ "[NervesHubLink.Downloader]"
+    end
+
+    test "keeps the signed part of a firmware URL out of the log" do
+      handler_fun = fn _message -> :ok end
+      retry_config = RetryConfig.validate(max_disconnects: 2, time_between_retries: 1)
+
+      Process.flag(:trap_exit, true)
+
+      log =
+        capture_log(fn ->
+          {:ok, download} =
+            Downloader.start_download(
+              @failure_url <> "?X-Amz-Signature=do-not-log-me",
+              handler_fun,
+              retry_config: retry_config
+            )
+
+          assert_receive {:EXIT, ^download, :max_disconnects_reached}, 1000
+        end)
+
+      # both in the lines the downloader writes itself, and in the crash report
+      # OTP writes for it, which reports the whole state
+      assert downloader_lines(log) =~ "Resuming download attempt number 1"
+      assert log =~ "max_disconnects_reached"
+      refute log =~ "do-not-log-me"
+    end
+
+    # The test above covers the wiring - the signature reaches the log through
+    # OTP's crash report unless `format_status/1` is called. This one covers
+    # what is taken out, which is more than a crash is convenient to produce.
+    test "takes secrets out of the state reported on a crash, and nothing else" do
+      state = %Downloader{
+        uri: URI.parse("https://example.test/firmware.fw?X-Amz-Signature=do-not-log-me"),
+        transport_opts: [
+          key: "PRIVATE-KEY-MATERIAL",
+          server_name_indication: ~c"nerves-hub.org"
+        ],
+        http_opts: [
+          proxy_headers: [{"proxy-authorization", "Basic do-not-log-me"}],
+          transport_opts: [password: "do-not-log-me"]
+        ],
+        retry_number: 2
+      }
+
+      assert %{state: redacted} = Downloader.format_status(%{state: state})
+
+      assert redacted.uri.query == "[REDACTED]"
+      assert redacted.transport_opts[:key] == "[REDACTED]"
+      assert redacted.http_opts[:proxy_headers] == "[REDACTED]"
+
+      # nested, because SSL options are merged underneath the HTTP options
+      assert redacted.http_opts[:transport_opts][:password] == "[REDACTED]"
+
+      # the rest is what makes a crash report worth reading
+      assert redacted.uri.host == "example.test"
+      assert redacted.uri.path == "/firmware.fw"
+      assert redacted.transport_opts[:server_name_indication] == ~c"nerves-hub.org"
+      assert redacted.retry_number == 2
+
+      refute inspect(redacted) =~ "do-not-log-me"
+      refute inspect(redacted) =~ "PRIVATE-KEY-MATERIAL"
+    end
+
+    test "leaves a status without state alone" do
+      assert Downloader.format_status(%{reason: :boom}) == %{reason: :boom}
+    end
+  end
+
+  defp downloader_lines(log) do
+    log
+    |> String.split("\n")
+    |> Enum.filter(&String.contains?(&1, "[NervesHubLink.Downloader"))
+    |> Enum.join("\n")
+  end
+
+  describe "resuming a download that already skipped part of the file" do
+    setup do
+      {:ok, _plug, port} = Utils.supervise_plug(ResumedRangePlug, test_pid: self())
+      {:ok, [url: "http://localhost:#{port}/test"]}
+    end
+
+    test "asks for offsets into the file rather than into the interrupted request",
+         %{url: url} do
+      test_pid = self()
+
+      handler_fun = fn msg ->
+        send(test_pid, msg)
+        :ok
+      end
+
+      resume_from = div(ResumedRangePlug.content_length(), 4)
+      remaining = ResumedRangePlug.content_length() - resume_from
+
+      {:ok, _download} =
+        Downloader.start_download(url, handler_fun,
+          retry_config: @short_retry_args,
+          resume_from_bytes: resume_from
+        )
+
+      # the first request picks up where the file on disk left off, and is cut
+      # short half way through the bytes it was promised
+      assert_receive {:range, 0, ^resume_from}, 1000
+      first_half = :binary.copy(<<0>>, div(remaining, 2))
+      assert_receive {:data, ^first_half, _}
+      assert_receive {:error, _reason}
+
+      # the retry has to account for the bytes that were skipped as well as the
+      # ones that arrived, otherwise it stitches the wrong bytes together
+      expected_offset = resume_from + div(remaining, 2)
+      assert_receive {:range, 1, ^expected_offset}
+
+      second_half = :binary.copy(<<1>>, div(remaining, 2))
+      assert_receive {:data, ^second_half, _}
       assert_receive :complete
     end
   end

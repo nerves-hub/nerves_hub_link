@@ -18,6 +18,7 @@ defmodule NervesHubLink.UpdateManager.Updater do
   - `c:start/1`: Callback to setup, prepare, and trigger the download.
   - `c:handle_downloader_message/2`: Process messages from the `NervesHubLink.Downloader`.
   - `c:handle_fwup_message/2`: Process messages received from the `Fwup` library
+  - `c:handle_message/2`: Process any other message sent to the updater process.
   - `c:cleanup/1`: Perform any necessary cleanup.
 
   To simplify the implementation of these callbacks, you can use the provided
@@ -100,6 +101,26 @@ defmodule NervesHubLink.UpdateManager.Updater do
               {:ok, new_state :: term()} | {:stop, reason :: term(), new_state :: term()}
 
   @doc """
+  Process any other message sent to the updater process.
+
+  This is how an updater picks up messages it sends itself, which is useful for
+  work that shouldn't happen inside a `c:handle_downloader_message/2` callback -
+  the `NervesHubLink.Downloader` blocks while that callback runs, and gives up
+  on the updater if it takes too long.
+
+  Exits that aren't from the download in `state.download` arrive here as
+  `{:EXIT, pid, reason}`, which is how an updater running more than one
+  download at a time finds out that one of them stopped.
+
+  Optional. Updaters built on this module get an implementation that logs and
+  carries on.
+  """
+  @callback handle_message(message :: term(), state :: term()) ::
+              {:ok, new_state :: term()} | {:stop, reason :: term(), new_state :: term()}
+
+  @optional_callbacks handle_message: 2
+
+  @doc """
   Run any cleanup that might need to take place
   """
   @callback cleanup(state :: term()) :: :ok
@@ -108,6 +129,27 @@ defmodule NervesHubLink.UpdateManager.Updater do
   A little hook to allow for customization of the logging prefix
   """
   @callback log_prefix() :: String.t()
+
+  @doc false
+  @spec __downloader_reply__(
+          {:ok, state}
+          | {:error, reason :: term(), state}
+          | {:stop, reason :: term(), state}
+        ) ::
+          {:reply, :ok, state}
+          | {:reply, {:error, reason :: term()}, state}
+          | {:stop, reason :: term(), {:error, reason :: term()}, state}
+        when state: term()
+  def __downloader_reply__({:ok, state}), do: {:reply, :ok, state}
+  def __downloader_reply__({:error, reason, state}), do: {:reply, {:error, reason}, state}
+  def __downloader_reply__({:stop, reason, state}), do: {:stop, reason, {:error, reason}, state}
+
+  @doc false
+  @spec __noreply__({:ok, state} | {:stop, reason :: term(), state}) ::
+          {:noreply, state} | {:stop, reason :: term(), state}
+        when state: term()
+  def __noreply__({:ok, state}), do: {:noreply, state}
+  def __noreply__({:stop, _reason, _state} = stop), do: stop
 
   defmacro __using__(_opts) do
     # credo:disable-for-next-line Credo.Check.Refactor.LongQuoteBlocks
@@ -170,10 +212,8 @@ defmodule NervesHubLink.UpdateManager.Updater do
       end
 
       def handle_info({:fwup, message}, state) do
-        case handle_fwup_message(message, state) do
-          {:ok, state} -> {:noreply, state}
-          {:stop, _reason, _state} = result -> result
-        end
+        # credo:disable-for-next-line Credo.Check.Design.AliasUsage
+        NervesHubLink.UpdateManager.Updater.__noreply__(handle_fwup_message(message, state))
       end
 
       def handle_info({:EXIT, download_pid, :normal}, %{download: download_pid} = state) do
@@ -187,23 +227,17 @@ defmodule NervesHubLink.UpdateManager.Updater do
         {:stop, {:shutdown, {:download_error, reason}}, state}
       end
 
-      def handle_info({:EXIT, _, _} = msg, state) do
-        Logger.info(
-          "[#{log_prefix()}] :EXIT received (#{inspect(msg)}), state: #{inspect(state)}"
-        )
-
-        {:noreply, state}
+      def handle_info(message, state) do
+        # credo:disable-for-next-line Credo.Check.Design.AliasUsage
+        NervesHubLink.UpdateManager.Updater.__noreply__(handle_message(message, state))
       end
 
       @impl GenServer
       def handle_call({:downloader, message}, _from, state) do
-        case handle_downloader_message(message, state) do
-          {:ok, state} ->
-            {:reply, :ok, state}
-
-          {:error, reason, state} ->
-            {:reply, {:error, reason}, state}
-        end
+        # credo:disable-for-next-line Credo.Check.Design.AliasUsage
+        NervesHubLink.UpdateManager.Updater.__downloader_reply__(
+          handle_downloader_message(message, state)
+        )
       end
 
       @impl GenServer
@@ -246,6 +280,20 @@ defmodule NervesHubLink.UpdateManager.Updater do
       end
 
       @impl NervesHubLink.UpdateManager.Updater
+      def handle_message({:EXIT, _, _} = message, state) do
+        Logger.info(
+          "[#{log_prefix()}] :EXIT received (#{inspect(message)}), state: #{inspect(state)}"
+        )
+
+        {:ok, state}
+      end
+
+      def handle_message(message, state) do
+        Logger.info("[#{log_prefix()}] Unhandled message : #{inspect(message)}")
+        {:ok, state}
+      end
+
+      @impl NervesHubLink.UpdateManager.Updater
       def log_prefix(), do: "NervesHubLink:Updater"
 
       def send_update?(%{last_progress_message: nil}, _percent), do: true
@@ -266,7 +314,11 @@ defmodule NervesHubLink.UpdateManager.Updater do
         GenServer.call(updater, {:downloader, message}, 60_000)
       end
 
-      defoverridable init: 1, handle_fwup_message: 2, cleanup: 1, log_prefix: 0
+      defoverridable init: 1,
+                     handle_fwup_message: 2,
+                     handle_message: 2,
+                     cleanup: 1,
+                     log_prefix: 0
     end
   end
 end
