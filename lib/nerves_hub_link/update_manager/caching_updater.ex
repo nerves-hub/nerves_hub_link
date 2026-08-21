@@ -111,9 +111,17 @@ defmodule NervesHubLink.UpdateManager.CachingUpdater do
      })}
   end
 
-  def handle_downloader_message({:error, {:http_error, 404}}, state) do
+  # The `Downloader` wraps HTTP status errors in a `Mint.HTTPError` before
+  # handing them to the updater, so this has to match the struct and not a bare
+  # `{:http_error, status}` tuple.
+  #
+  # A 404 or a 416 (Range Not Satisfiable) in response to a range request is
+  # usually a sign that the partial we're resuming from no longer matches the
+  # object being served, so the cache is dropped to allow a clean retry.
+  def handle_downloader_message({:error, %Mint.HTTPError{reason: {:http_error, status}}}, state)
+      when status in [404, 416] do
     Logger.error(
-      "[#{log_prefix()}] 404 error. This could be related to incorrect ranges. Cleaning up any partials which may exist."
+      "[#{log_prefix()}] #{status} error. This could be related to incorrect ranges. Cleaning up any partials which may exist."
     )
 
     settings()[:cache_dir]

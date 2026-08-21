@@ -47,6 +47,11 @@ defmodule NervesHubLink.UpdateManagerTest do
 
   @update_alarm NervesHubLink.UpdateInProgress
 
+  # The updater is faked in these tests, so this key never verifies anything.
+  # It only needs to be present, because `UpdateManager` refuses an update when
+  # no public key is available to check the firmware signature.
+  @public_keys ["dGVzdC1wdWJsaWMta2V5"]
+
   setup :set_mox_global
   setup :verify_on_exit!
   setup :reset_update_alarm
@@ -83,7 +88,7 @@ defmodule NervesHubLink.UpdateManagerTest do
 
       {:ok, manager} = UpdateManager.start_link({fwup_config, updater})
 
-      assert UpdateManager.apply_update(manager, update_payload, []) == :updating
+      assert UpdateManager.apply_update(manager, update_payload, @public_keys) == :updating
 
       assert GenServer.stop(manager) == :ok
     end
@@ -97,9 +102,55 @@ defmodule NervesHubLink.UpdateManagerTest do
 
       {:ok, manager} = UpdateManager.start_link({fwup_config, updater})
 
-      assert UpdateManager.apply_update(manager, update_payload, []) == :idle
+      assert UpdateManager.apply_update(manager, update_payload, @public_keys) == :idle
 
       assert GenServer.stop(manager) == :ok
+    end
+  end
+
+  describe "refusing firmware that cannot be verified" do
+    setup [:stub_client, :watch_socket]
+
+    test "an update is refused when no public keys are available", context do
+      manager = start_manager()
+
+      assert UpdateManager.apply_update(manager, context.update_info, []) == :idle
+      assert_receive {:update_status, {:failed, reason}}
+      assert reason =~ "Refusing unverified firmware"
+    end
+
+    test "a refused update is never offered to the client", context do
+      # `fwup` skips signature checking entirely when it is given no public key,
+      # so the update has to be dropped before the client can answer `:apply`.
+      manager = start_manager()
+
+      assert UpdateManager.apply_update(manager, context.update_info, []) == :idle
+      refute_receive {:update_status, :received}
+    end
+
+    test "a refused update does not raise the update alarm", context do
+      manager = start_manager()
+
+      assert UpdateManager.apply_update(manager, context.update_info, []) == :idle
+      refute alarm_set?(@update_alarm)
+    end
+
+    test "keys that are not binaries do not count as public keys", context do
+      manager = start_manager()
+
+      assert UpdateManager.apply_update(manager, context.update_info, [nil, :key]) == :idle
+      assert_receive {:update_status, {:failed, reason}}
+      assert reason =~ "Refusing unverified firmware"
+    end
+
+    test "the manager stays usable after refusing an update", context do
+      stub(ClientMock, :update_available, fn _ -> :apply end)
+      stub(UpdaterMock, :start_update, fn _, _, _ -> {:ok, spawn(fn -> :ok end)} end)
+
+      manager = start_manager()
+
+      assert UpdateManager.apply_update(manager, context.update_info, []) == :idle
+      assert UpdateManager.apply_update(manager, context.update_info, @public_keys) == :updating
     end
   end
 
@@ -111,7 +162,7 @@ defmodule NervesHubLink.UpdateManagerTest do
 
       manager = start_manager()
 
-      assert UpdateManager.apply_update(manager, context.update_info, []) == :idle
+      assert UpdateManager.apply_update(manager, context.update_info, @public_keys) == :idle
       assert_receive {:update_status, {:ignored, ""}}
       refute alarm_set?(@update_alarm)
     end
@@ -121,7 +172,7 @@ defmodule NervesHubLink.UpdateManagerTest do
 
       manager = start_manager()
 
-      assert UpdateManager.apply_update(manager, context.update_info, []) == :idle
+      assert UpdateManager.apply_update(manager, context.update_info, @public_keys) == :idle
       assert_receive {:update_status, {:ignored, "on battery"}}
     end
 
@@ -130,7 +181,7 @@ defmodule NervesHubLink.UpdateManagerTest do
 
       manager = start_manager()
 
-      assert UpdateManager.apply_update(manager, context.update_info, []) == :idle
+      assert UpdateManager.apply_update(manager, context.update_info, @public_keys) == :idle
       assert_receive {:update_status, {:reschedule, 10}}
     end
 
@@ -139,7 +190,7 @@ defmodule NervesHubLink.UpdateManagerTest do
 
       manager = start_manager()
 
-      assert UpdateManager.apply_update(manager, context.update_info, []) == :idle
+      assert UpdateManager.apply_update(manager, context.update_info, @public_keys) == :idle
       assert_receive {:update_status, {:reschedule, 5}}
     end
   end
@@ -163,7 +214,8 @@ defmodule NervesHubLink.UpdateManagerTest do
     test "a duplicate update message doesn't restart the update", context do
       # start_update/1 is stubbed to be called exactly once, so a second call
       # would be an unexpected call and fail verification on exit
-      assert UpdateManager.apply_update(context.manager, context.update_info, []) == :updating
+      assert UpdateManager.apply_update(context.manager, context.update_info, @public_keys) ==
+               :updating
 
       assert UpdateManager.currently_downloading_uuid(context.manager) ==
                context.update_info.firmware_meta.uuid
@@ -246,7 +298,7 @@ defmodule NervesHubLink.UpdateManagerTest do
 
       # UpdaterMock has no expectations, so an update started by it would fail
       # verification. Only AlternateUpdater should be asked to start the update.
-      assert UpdateManager.apply_update(manager, context.update_info, []) == :updating
+      assert UpdateManager.apply_update(manager, context.update_info, @public_keys) == :updating
     end
   end
 
@@ -281,7 +333,7 @@ defmodule NervesHubLink.UpdateManagerTest do
 
     update_info = update_info()
 
-    assert UpdateManager.apply_update(manager, update_info, []) == :updating
+    assert UpdateManager.apply_update(manager, update_info, @public_keys) == :updating
 
     # Confirms the precondition for the tests that assert the alarm is cleared
     assert alarm_eventually_set?(@update_alarm)

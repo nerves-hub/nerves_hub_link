@@ -23,10 +23,6 @@ defmodule NervesHubLink.MixProject do
 
   def application do
     [
-      env: [
-        host: nil,
-        fwup_public_keys: []
-      ],
       extra_applications: [:logger, :iex, :inets, :sasl, :os_mon],
       mod: {NervesHubLink.Application, []}
     ]
