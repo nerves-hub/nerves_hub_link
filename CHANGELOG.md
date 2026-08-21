@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.13.0] - 2026-08-21
+
+* Added
+  * A new Network Identity extension reports the identities a device holds on networks NervesHub doesn't run — an iroh endpoint id, a NetBird or Tailscale peer key, a WireGuard public key — so an operator can see them on the device page and reach the device by a route other than its NervesHub socket. Nothing is reported until you configure at least one provider (`config :nerves_hub_link, network_identity: [providers: [MyApp.IrohIdentity]]`); after the initial report the device polls its providers and sends only what changed. See `NervesHubLink.Extensions.NetworkIdentity` and the extensions guide (#460)
+  * Messages between the device and NervesHub can now be encoded as [Msgpack](https://msgpack.org) instead of JSON, which uses fewer bytes on the wire and less memory encoding them. It requires the optional `msgpax` dependency and a server that supports it: `config :nerves_hub_link, serializer: :msgpack`. If `msgpax` is missing, or the configured serializer isn't recognised, the device logs an error and connects with JSON rather than dropping off the network. See the configuration guide (#443)
+  * Shared Secret authentication now recovers from a wrong device clock. Signing assumes the device is within ~90 seconds of the server, which new devices often aren't on first boot. When a connection fails, the `Date` header from the response is used as the signing time on the next attempt, and the device clock takes over again once it has caught up past that hint
+  * `Nerves.Runtime.firmware_slots/0` is used for the auto-revert check when the installed `nerves_runtime` provides it, falling back to reading `nerves_fw_active` from the KV store otherwise (#442)
+
+* Updated
+  * Joining the console channel now sends only `console_version` and `device_api_version`. The rest of the join params describe the device and its firmware, which the device channel has already sent (#454)
+  * The minimum supported Elixir version is now 1.15, and CI covers up to Elixir 1.20.3 on OTP 29 (#432, #456)
+
+* Fixed
+  * `NervesHubLink.UpdateManager.CachingUpdater` now reads the documented `cache_dir` config instead of always using the default directory (#452)
+  * The default `DeviceStatus` timestamp is no longer evaluated at compile time, which had baked a build timestamp into the module and prevented reproducible builds (#451)
+
 ## [2.12.0] - 2026-05-11
 
 * Added
