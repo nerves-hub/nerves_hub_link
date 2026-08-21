@@ -8,7 +8,7 @@ defmodule NervesHubLink.UpdateManager.CachingUpdaterTest do
   alias NervesHubLink.ClientMock
   alias NervesHubLink.FwupConfig
   alias NervesHubLink.Message.{FirmwareMetadata, UpdateInfo}
-  alias NervesHubLink.Support.{FWUPStreamPlug, Utils}
+  alias NervesHubLink.Support.{FWUPStreamPlug, HTTPErrorPlug, Utils}
   alias NervesHubLink.UpdateManager.CachingUpdater
 
   setup do
@@ -85,5 +85,42 @@ defmodule NervesHubLink.UpdateManager.CachingUpdaterTest do
 
     # `FWUPStreamPlug` serves firmware whose `upgrade` task writes this payload
     assert File.read!(ctx.devpath) =~ "Hello, world!"
+  end
+
+  # `NervesHubLink.Downloader` reports HTTP status errors as
+  # `{:error, %Mint.HTTPError{reason: {:http_error, status}}}`. `CachingUpdater`
+  # used to match on a bare `{:error, {:http_error, 404}}` tuple, so the clause
+  # never ran and a stale partial could leave a device unable to ever update.
+  for status <- [404, 416] do
+    test "the cache directory is cleared when a resumed download is rejected with a #{status}",
+         ctx do
+      status = unquote(status)
+
+      Process.flag(:trap_exit, true)
+
+      {:ok, _plug, port} = Utils.supervise_plug(HTTPErrorPlug, status: status)
+
+      update_info = %UpdateInfo{
+        firmware_url: URI.parse("http://localhost:#{port}/test.fw"),
+        firmware_meta: %FirmwareMetadata{}
+      }
+
+      # a stale partial from an earlier attempt. `start/1` keeps this file (it
+      # only clears the *other* files in the cache) and resumes from it, which
+      # is what gets the range request rejected.
+      partial = Path.join(ctx.cache_dir, "test.fw.partial")
+      :ok = File.mkdir_p(ctx.cache_dir)
+      :ok = File.write(partial, "stale partial contents")
+
+      fwup_config = %FwupConfig{fwup_devpath: ctx.devpath, fwup_task: "upgrade"}
+
+      {:ok, updater} = CachingUpdater.start_link(update_info, fwup_config, [])
+
+      assert_receive {:EXIT, ^updater, {:shutdown, {:download_error, {:http_error, ^status}}}},
+                     5_000
+
+      refute File.exists?(partial)
+      assert File.ls!(ctx.cache_dir) == []
+    end
   end
 end

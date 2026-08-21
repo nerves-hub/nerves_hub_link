@@ -9,12 +9,17 @@ defmodule NervesHubLink.Support.HTTPErrorPlug do
 
   import Plug.Conn
 
+  alias Plug.Conn.Status
+
+  @default_status 416
+
   @impl Plug
   def init(options), do: options
 
   @impl Plug
-  def call(conn, _opts) do
-    conn
-    |> send_resp(416, "Range Not Satisfiable")
+  def call(conn, opts) do
+    status = Keyword.get(opts, :status, @default_status)
+
+    send_resp(conn, status, Status.reason_phrase(status))
   end
 end
