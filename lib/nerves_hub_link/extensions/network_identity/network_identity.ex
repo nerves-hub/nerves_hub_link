@@ -181,7 +181,7 @@ defmodule NervesHubLink.Extensions.NetworkIdentity do
     end
   end
 
-  # One push carrying however many identities. The server upserts each one on
+  # One push carrying however many identities. The server records each one on
   # its own, so a partial list is a partial update and never a replacement —
   # which is what makes sending only the changed ones safe.
   defp deliver(identities) when map_size(identities) == 0, do: :ok

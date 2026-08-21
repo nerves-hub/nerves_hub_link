@@ -349,7 +349,7 @@ defmodule NervesHubLink.Extensions.NetworkIdentityTest do
 
       assert log =~ "no providers are configured"
 
-      # And nothing goes over the wire. An empty list upserts nothing server
+      # And nothing goes over the wire. An empty list changes nothing server
       # side, so pushing one was only ever traffic.
       refute_receive {:pushed, "extensions", "network_identity:report", _payload}, 200
     end
