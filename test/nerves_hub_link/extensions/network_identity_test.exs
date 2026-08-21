@@ -17,6 +17,28 @@ defmodule NervesHubLink.Extensions.NetworkIdentityTest.IrohProvider do
   end
 end
 
+defmodule NervesHubLink.Extensions.NetworkIdentityTest.MutableProvider do
+  @moduledoc false
+  @behaviour NervesHubLink.Extensions.NetworkIdentity.Provider
+
+  # Reads its answer from application env so a test can move the device to a
+  # different relay between polls, which is the whole case being covered.
+  @impl NervesHubLink.Extensions.NetworkIdentity.Provider
+  def identity() do
+    Application.get_env(:nerves_hub_link, :test_mutable_identity, :unavailable)
+  end
+
+  @spec set(NervesHubLink.Extensions.NetworkIdentity.Provider.response()) :: :ok
+  def set(identity) do
+    Application.put_env(:nerves_hub_link, :test_mutable_identity, identity)
+  end
+
+  @spec relay(String.t()) :: :ok
+  def relay(url) do
+    set({:ok, %{service: "iroh", identifier: "stable-endpoint-id", details: %{"relay" => url}}})
+  end
+end
+
 defmodule NervesHubLink.Extensions.NetworkIdentityTest.NetBirdProvider do
   @moduledoc false
   @behaviour NervesHubLink.Extensions.NetworkIdentity.Provider
@@ -112,6 +134,7 @@ defmodule NervesHubLink.Extensions.NetworkIdentityTest do
   alias NervesHubLink.Extensions.NetworkIdentityTest.ConsoleInstanceProvider
   alias NervesHubLink.Extensions.NetworkIdentityTest.ErroringProvider
   alias NervesHubLink.Extensions.NetworkIdentityTest.IrohProvider
+  alias NervesHubLink.Extensions.NetworkIdentityTest.MutableProvider
   alias NervesHubLink.Extensions.NetworkIdentityTest.NetBirdProvider
   alias NervesHubLink.Extensions.NetworkIdentityTest.RaisingProvider
   alias NervesHubLink.Extensions.NetworkIdentityTest.StringKeyedProvider
@@ -121,6 +144,8 @@ defmodule NervesHubLink.Extensions.NetworkIdentityTest do
     previous = Application.get_env(:nerves_hub_link, :network_identity)
 
     on_exit(fn ->
+      Application.delete_env(:nerves_hub_link, :test_mutable_identity)
+
       if previous do
         Application.put_env(:nerves_hub_link, :network_identity, previous)
       else
@@ -275,13 +300,43 @@ defmodule NervesHubLink.Extensions.NetworkIdentityTest do
       assert [%{service: "iroh", identifier: "e13b8a4c9f2d"}] = payload.identities
     end
 
-    test "send_report/0 announces without being asked" do
+    test "send_identities/0 announces without being asked" do
       put_providers([NetBirdProvider])
 
-      assert NetworkIdentity.send_report() == :ok
+      assert NetworkIdentity.send_identities() == :ok
 
       assert_receive {:pushed, "extensions", "network_identity:report", payload}, 1_000
       assert [%{service: "netbird"}] = payload.identities
+    end
+
+    test "answering a request sends everything, changed or not" do
+      # A server that has just asked may be a different one, or the same one
+      # having forgotten. Either way it is not holding what our cache says.
+      put_providers([IrohProvider])
+
+      send(NetworkIdentity, {:__extension_event__, "request", %{}})
+      assert_receive {:pushed, "extensions", "network_identity:report", _first}, 1_000
+
+      send(NetworkIdentity, {:__extension_event__, "request", %{}})
+      assert_receive {:pushed, "extensions", "network_identity:report", payload}, 1_000
+      assert [%{identifier: "e13b8a4c9f2d"}] = payload.identities
+    end
+
+    test "send_identity/1 sends just that provider's" do
+      put_providers([IrohProvider, NetBirdProvider])
+
+      assert NetworkIdentity.send_identity(NetBirdProvider) == :ok
+
+      assert_receive {:pushed, "extensions", "network_identity:report", payload}, 1_000
+      assert [%{service: "netbird"}] = payload.identities
+    end
+
+    test "send_identity/1 says no when the provider has nothing to report" do
+      put_providers([UnavailableProvider])
+
+      assert NetworkIdentity.send_identity(UnavailableProvider) == :error
+
+      refute_receive {:pushed, "extensions", "network_identity:report", _payload}, 200
     end
 
     test "being asked with no providers configured says so out loud" do
@@ -289,11 +344,147 @@ defmodule NervesHubLink.Extensions.NetworkIdentityTest do
       # provider list almost certainly means a half-finished setup.
       log =
         capture_log(fn ->
-          assert NetworkIdentity.send_report() == :ok
+          assert NetworkIdentity.send_identities() == :ok
         end)
 
       assert log =~ "no providers are configured"
-      assert_receive {:pushed, "extensions", "network_identity:report", %{identities: []}}, 1_000
+
+      # And nothing goes over the wire. An empty list upserts nothing server
+      # side, so pushing one was only ever traffic.
+      refute_receive {:pushed, "extensions", "network_identity:report", _payload}, 200
+    end
+  end
+
+  describe "polling for changes" do
+    setup do
+      _ = start_supervised!({NervesHubLink.Support.SocketStub, self()})
+      _ = start_supervised!({DynamicSupervisor, name: NervesHubLink.ExtensionsSupervisor})
+      _ = start_supervised!(NervesHubLink.Extensions)
+
+      :ok = NervesHubLink.Extensions.attach(["network_identity"])
+      wait_for_process(NetworkIdentity)
+
+      :ok
+    end
+
+    # The interval is minutes, so the poll is driven by hand. What is being
+    # tested is the comparison, not Process.send_after.
+    defp poll(), do: send(NetworkIdentity, :poll)
+
+    test "the first poll sends what it finds" do
+      put_providers([MutableProvider])
+      MutableProvider.relay("https://eu.relay.example.com")
+
+      poll()
+
+      assert_receive {:pushed, "extensions", "network_identity:report", payload}, 1_000
+      assert [%{identifier: "stable-endpoint-id"}] = payload.identities
+    end
+
+    test "a poll that finds nothing new sends nothing" do
+      # The point of the cache. Without it every interval is a write on the
+      # server for data that has not moved.
+      put_providers([MutableProvider])
+      MutableProvider.relay("https://eu.relay.example.com")
+
+      poll()
+      assert_receive {:pushed, "extensions", "network_identity:report", _payload}, 1_000
+
+      poll()
+      refute_receive {:pushed, "extensions", "network_identity:report", _payload}, 200
+    end
+
+    test "a changed relay is sent even though the key has not changed" do
+      put_providers([MutableProvider])
+      MutableProvider.relay("https://eu.relay.example.com")
+
+      poll()
+      assert_receive {:pushed, "extensions", "network_identity:report", _payload}, 1_000
+
+      MutableProvider.relay("https://asia.relay.example.com")
+      poll()
+
+      assert_receive {:pushed, "extensions", "network_identity:report", payload}, 1_000
+      assert [%{identifier: "stable-endpoint-id", details: details}] = payload.identities
+      assert details == %{"relay" => "https://asia.relay.example.com"}
+    end
+
+    test "only the provider that moved is sent" do
+      put_providers([IrohProvider, MutableProvider])
+      MutableProvider.relay("https://eu.relay.example.com")
+
+      poll()
+      assert_receive {:pushed, "extensions", "network_identity:report", first}, 1_000
+      assert length(first.identities) == 2
+
+      MutableProvider.relay("https://asia.relay.example.com")
+      poll()
+
+      assert_receive {:pushed, "extensions", "network_identity:report", payload}, 1_000
+      assert [%{identifier: "stable-endpoint-id"}] = payload.identities
+    end
+
+    test "a provider that goes quiet is re-sent when it comes back" do
+      put_providers([MutableProvider])
+      MutableProvider.relay("https://eu.relay.example.com")
+
+      poll()
+      assert_receive {:pushed, "extensions", "network_identity:report", _payload}, 1_000
+
+      # Nothing is sent for a provider that stops answering — there is no way to
+      # retract an identity — but it must not be remembered as delivered, or its
+      # return with the same value would go unnoticed.
+      MutableProvider.set(:unavailable)
+      poll()
+      refute_receive {:pushed, "extensions", "network_identity:report", _payload}, 200
+
+      MutableProvider.relay("https://eu.relay.example.com")
+      poll()
+
+      assert_receive {:pushed, "extensions", "network_identity:report", payload}, 1_000
+      assert [%{identifier: "stable-endpoint-id"}] = payload.identities
+    end
+
+    test "send_identity/1 stops the next poll repeating it" do
+      put_providers([MutableProvider])
+      MutableProvider.relay("https://eu.relay.example.com")
+
+      assert NetworkIdentity.send_identity(MutableProvider) == :ok
+      assert_receive {:pushed, "extensions", "network_identity:report", _payload}, 1_000
+
+      poll()
+
+      refute_receive {:pushed, "extensions", "network_identity:report", _payload}, 200
+    end
+  end
+
+  describe "interval/0" do
+    test "defaults to five minutes" do
+      assert NetworkIdentity.interval() == 5 * 60_000
+    end
+
+    test "is taken from config when set" do
+      Application.put_env(:nerves_hub_link, :network_identity,
+        providers: [],
+        interval_minutes: 30
+      )
+
+      assert NetworkIdentity.interval() == 30 * 60_000
+    end
+
+    test "zero turns polling off" do
+      Application.put_env(:nerves_hub_link, :network_identity, providers: [], interval_minutes: 0)
+
+      assert NetworkIdentity.interval() == nil
+    end
+
+    test "an unusable value turns polling off rather than crashing the extension" do
+      Application.put_env(:nerves_hub_link, :network_identity,
+        providers: [],
+        interval_minutes: "5"
+      )
+
+      assert NetworkIdentity.interval() == nil
     end
   end
 

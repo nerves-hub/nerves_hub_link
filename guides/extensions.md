@@ -146,11 +146,28 @@ There is no default provider, and there can't be one: NervesHubLink has no way t
 ```elixir
 config :nerves_hub_link,
   network_identity: [
-    providers: [MyApp.IrohIdentity]
+    providers: [MyApp.IrohIdentity],
+    interval_minutes: 5
   ]
 ```
 
 One provider reports one service. A device on both iroh and NetBird configures two.
+
+### When identities are sent
+
+NervesHub asks for all of them once, when the extension attaches. After that the device asks its own providers every `interval_minutes` and sends only what changed.
+
+The key itself doesn't move — that's what makes it an identity. What changes is everything a provider puts beside it: a device that switches relay keeps its endpoint id and changes the address anyone would reach it on. A stale address is worse than no address when it's the only route to the device.
+
+Nothing goes over the wire when nothing has changed, so the interval costs one local call per provider and no traffic. Set `interval_minutes: 0` to turn the poll off and send only on connect.
+
+A provider that already knows the moment its identity changed doesn't have to wait for the poll:
+
+```elixir
+NervesHubLink.Extensions.NetworkIdentity.send_identity(MyApp.IrohIdentity)
+```
+
+`send_identities/0` sends every provider's, changed or not.
 
 ### Writing a provider
 

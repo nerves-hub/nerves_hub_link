@@ -100,8 +100,14 @@ defmodule NervesHubLink.Extensions.NetworkIdentity.Provider do
   @doc """
   Report this device's identity for one service.
 
-  Called when NervesHub asks, which is once per connection, so it is fine for
-  this to read from a running process. It should not block for long.
+  Called when NervesHub asks, which is once per connection, and again on every
+  poll — five minutes apart by default. Reading from a running process is fine
+  and is the point; blocking for a long time is not, because this runs inside
+  the extension process and a slow provider delays the others behind it.
+
+  Answer with what is true now. The extension compares each answer with the last
+  one it sent and only tells NervesHub about the difference, so returning the
+  same identity repeatedly costs nothing.
   """
   @callback identity() :: response()
 end
