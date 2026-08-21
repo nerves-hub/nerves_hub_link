@@ -20,6 +20,7 @@ defmodule NervesHubLink.ArchiveManager do
 
   alias NervesHubLink.Client
   alias NervesHubLink.Downloader
+  alias NervesHubLink.FwupConfig
   alias NervesHubLink.Message.ArchiveInfo
 
   require Logger
@@ -170,6 +171,20 @@ defmodule NervesHubLink.ArchiveManager do
   end
 
   defp maybe_update_archive(info, verification_keys, state) do
+    if FwupConfig.signing_keys_available?(verification_keys) do
+      download_archive(info, verification_keys, state)
+    else
+      # `fwup -V` exits 0 when it is given no public key, so an unsigned archive
+      # would validate. Refuse the archive rather than hand it to the client.
+      Logger.error(
+        "[NervesHubLink] Refusing archive : no public keys are available to verify the archive signature"
+      )
+
+      state
+    end
+  end
+
+  defp download_archive(info, verification_keys, state) do
     # Cancel an existing timer if it exists.
     # This prevents rescheduled updates`
     # from compounding.
@@ -226,6 +241,14 @@ defmodule NervesHubLink.ArchiveManager do
   end
 
   defp valid_archive?(file_path, public_keys) do
+    if FwupConfig.signing_keys_available?(public_keys) do
+      fwup_verify(file_path, public_keys)
+    else
+      false
+    end
+  end
+
+  defp fwup_verify(file_path, public_keys) do
     args = ["-V", "-i", file_path]
 
     args =

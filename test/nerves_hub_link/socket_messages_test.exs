@@ -143,6 +143,38 @@ defmodule NervesHubLink.SocketMessagesTest do
              ]
     end
 
+    test "an empty key list from the server does not clear the configured firmware keys", %{
+      socket: socket
+    } do
+      # NervesHub supplies the firmware as well as the keys that verify it, so a
+      # server that sends no keys must not be able to disable signature checking.
+      push(socket, @device_topic, "fwup_public_keys", %{"keys" => []})
+
+      assert NervesHubLink.socket_connected?(socket)
+
+      assert :sys.get_state(socket).assigns.config.fwup_public_keys == ["configured fwup key"]
+    end
+
+    test "an empty key list from the server does not clear the configured archive keys", %{
+      socket: socket
+    } do
+      push(socket, @device_topic, "archive_public_keys", %{"keys" => []})
+
+      assert NervesHubLink.socket_connected?(socket)
+
+      assert :sys.get_state(socket).assigns.config.archive_public_keys == [
+               "configured archive key"
+             ]
+    end
+
+    test "keys from the server that are not binaries are discarded", %{socket: socket} do
+      push(socket, @device_topic, "fwup_public_keys", %{"keys" => [nil, 42]})
+
+      assert NervesHubLink.socket_connected?(socket)
+
+      assert :sys.get_state(socket).assigns.config.fwup_public_keys == ["configured fwup key"]
+    end
+
     test "an extensions:get message asks to join the extensions topic", %{socket: socket} do
       push(socket, @device_topic, "extensions:get", %{})
 

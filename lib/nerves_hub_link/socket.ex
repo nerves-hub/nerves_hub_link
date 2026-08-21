@@ -19,6 +19,7 @@ defmodule NervesHubLink.Socket do
   alias NervesHubLink.Configurator
   alias NervesHubLink.Configurator.SharedSecret
   alias NervesHubLink.Extensions
+  alias NervesHubLink.FwupConfig
   alias NervesHubLink.Message.ArchiveInfo
   alias NervesHubLink.Message.UpdateInfo
   alias NervesHubLink.NetworkInterface
@@ -351,37 +352,25 @@ defmodule NervesHubLink.Socket do
   # Device API messages
   #
   def handle_message(@device_topic, "fwup_public_keys", params, socket) do
-    count = Enum.count(params["keys"])
-
-    config = %{socket.assigns.config | fwup_public_keys: params["keys"]}
-
-    if count == 0 do
-      Logger.warning(
-        "[NervesHubLink] No public keys for firmware verification received : firmware updates cannot be verified and installed"
+    config =
+      update_public_keys(
+        socket.assigns.config,
+        :fwup_public_keys,
+        params["keys"],
+        "firmware"
       )
-    else
-      Logger.info(
-        "[NervesHubLink] Public keys for firmware verification updated - #{count} key(s) received"
-      )
-    end
 
     {:ok, assign(socket, config: config)}
   end
 
   def handle_message(@device_topic, "archive_public_keys", params, socket) do
-    count = Enum.count(params["keys"])
-
-    config = %{socket.assigns.config | archive_public_keys: params["keys"]}
-
-    if count == 0 do
-      Logger.warning(
-        "[NervesHubLink] No public keys for archive verification received : archive updates cannot be verified and installed"
+    config =
+      update_public_keys(
+        socket.assigns.config,
+        :archive_public_keys,
+        params["keys"],
+        "archive"
       )
-    else
-      Logger.info(
-        "[NervesHubLink] Public keys for archive verification updated - #{count} key(s) received"
-      )
-    end
 
     {:ok, assign(socket, config: config)}
   end
@@ -791,6 +780,42 @@ defmodule NervesHubLink.Socket do
       end
 
     merge_http_opts(base, config.socket[:http_opts] || [])
+  end
+
+  # NervesHub distributes signing keys over the socket, but it also supplies the
+  # firmware those keys verify. Letting it replace a locally configured key list
+  # with an empty one would let the server turn off signature verification, so
+  # an empty list never clears keys we already hold.
+  @spec update_public_keys(Configurator.Config.t(), atom(), any(), String.t()) ::
+          Configurator.Config.t()
+  defp update_public_keys(config, field, received_keys, label) do
+    received_keys =
+      if is_list(received_keys), do: Enum.filter(received_keys, &is_binary/1), else: []
+
+    existing_keys = Map.fetch!(config, field)
+
+    cond do
+      received_keys != [] ->
+        Logger.info(
+          "[NervesHubLink] Public keys for #{label} verification updated - #{length(received_keys)} key(s) received"
+        )
+
+        Map.put(config, field, received_keys)
+
+      FwupConfig.signing_keys_available?(existing_keys) ->
+        Logger.error(
+          "[NervesHubLink] NervesHub sent no public keys for #{label} verification : keeping the #{length(existing_keys)} locally configured key(s)"
+        )
+
+        config
+
+      true ->
+        Logger.error(
+          "[NervesHubLink] No public keys for #{label} verification are available : #{label} updates will be refused"
+        )
+
+        config
+    end
   end
 
   # Shallow-merge user-supplied opts on top of the base, but for :transport_opts
