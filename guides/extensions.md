@@ -1,12 +1,13 @@
-# Extensions: Health and Geo
+# Extensions: Health, Geo and more
 
 Extensions are pieces of non-critical functionality going over the NervesHub WebSocket. They are separated out under the Extensions mechanism so that the client can happily ignore anything extension-related in service of keeping firmware updates healthy. That is always the top priority.
 
-There are two extensions currently:
+There are four extensions currently:
 
 - [**Geo**](#geo) provides hooks to send a device's GeoIP information.
 - [**Health**](#health) reports device metrics, alarms, metadata and similar.
 - [**Local Shell**](#local-shell) gives NervesHub the ability to expose an interactive shell in the UI.
+- [**Network Identity**](#network-identity) reports the device's identity on networks NervesHub doesn't run, such as iroh or NetBird.
 
 Your NervesHub server controls enabling and disabling extensions to allow you to switch them off if they impact operations.
 
@@ -133,3 +134,135 @@ Provides an interactive local shell for NervesHub to connect to. This is useful 
 This extension is enabled by default, but must also be enabled in your Device and Product settings on your NervesHub platform.
 
 To use this extension, you need to include the [`ExPTY`](https://hex.pm/packages/expty) library in your project's dependencies.
+
+## Network Identity
+
+Devices increasingly reach the outside world over something other than their NervesHub socket — an iroh endpoint, a NetBird or Tailscale peer, a plain WireGuard interface. Each of those networks names the device by a long-lived public key, and that key is what you need in order to reach it by any route other than NervesHub.
+
+This extension reports those identities so they show up on the device page in NervesHub, where an operator can copy one without opening a console.
+
+There is no default provider, and there can't be one: NervesHubLink has no way to know that your device is also an iroh endpoint. The library that owns the identity does, so you point the extension at a module that can answer.
+
+```elixir
+config :nerves_hub_link,
+  network_identity: [
+    providers: [MyApp.IrohIdentity],
+    interval_minutes: 5
+  ]
+```
+
+One provider reports one service. A device on both iroh and NetBird configures two.
+
+### When identities are sent
+
+NervesHub asks for all of them once, when the extension attaches. After that the device asks its own providers every `interval_minutes` and sends only what changed.
+
+The key itself doesn't move — that's what makes it an identity. What changes is everything a provider puts beside it: a device that switches relay keeps its endpoint id and changes the address anyone would reach it on. A stale address is worse than no address when it's the only route to the device.
+
+Nothing goes over the wire when nothing has changed, so the interval costs one local call per provider and no traffic. Set `interval_minutes: 0` to turn the poll off and send only on connect.
+
+A provider that already knows the moment its identity changed doesn't have to wait for the poll:
+
+```elixir
+NervesHubLink.Extensions.NetworkIdentity.send_identity(MyApp.IrohIdentity)
+```
+
+`send_identities/0` sends every provider's, changed or not.
+
+### Writing a provider
+
+Implement `NervesHubLink.Extensions.NetworkIdentity.Provider`, which is a single `identity/0` callback. For a device running [`iroh_console`](https://hex.pm/packages/iroh_console):
+
+```elixir
+defmodule MyApp.IrohIdentity do
+  @behaviour NervesHubLink.Extensions.NetworkIdentity.Provider
+
+  @impl true
+  def identity() do
+    # One addr/1 call, so the id and the ticket describe the same moment.
+    # IrohConsole.Server.ticket/1 reads the address again, so asking for both
+    # can pair an id with a ticket built after a relay change.
+    with {:ok, addr} <- IrohConsole.Server.addr(),
+         {:ok, ticket} <- IrohBeam.EndpointTicket.new(addr) do
+      {:ok,
+       %{
+         service: "iroh",
+         identifier: to_string(addr.id),
+         details: %{"ticket" => to_string(ticket)}
+       }}
+    else
+      # The console isn't up yet, or isn't running on this unit at all
+      {:error, :not_running} -> :unavailable
+      {:error, reason} -> {:error, reason}
+    end
+  end
+end
+```
+
+Note which value goes where. The **endpoint id** is the identifier: it is the key the device proves it holds, and it doesn't change. The **ticket** goes in `details`, because it bundles the id together with the relay and direct addresses the device is currently reachable on — which do change. They are not interchangeable, and only the ticket can be dialled.
+
+### More than one endpoint of the same service
+
+A device can run two iroh endpoints — a remote console, plus whatever the application itself uses iroh for — each with its own key. Both are `iroh`, so name the `instance` to tell them apart:
+
+```elixir
+{:ok, %{service: "iroh", instance: "app_sync", identifier: key, details: %{}}}
+```
+
+Omit it and NervesHub treats the identity as that service's only endpoint, which is what you want for a singleton like Tailscale. `iroh_console` reports itself as `iroh_console`, so an endpoint of your own only needs a name that isn't that.
+
+The same applies to WireGuard, where `wg0` and `wg1` are two identities of one protocol.
+
+**Pick something stable.** NervesHub keys the identity on the instance, so one that changes between reports creates a second record instead of updating the first. The name of the library or feature owning the endpoint works well; anything derived from the key does not — the key is exactly the thing that might rotate, and surviving a rotation is the point.
+
+The same shape works for anything else. A NetBird provider is really just parsing that agent's status:
+
+```elixir
+defmodule MyApp.NetBirdIdentity do
+  @behaviour NervesHubLink.Extensions.NetworkIdentity.Provider
+
+  @impl true
+  def identity() do
+    case System.cmd("netbird", ["status", "--json"]) do
+      {output, 0} ->
+        status = Jason.decode!(output)
+
+        {:ok,
+         %{
+           service: "netbird",
+           identifier: status["publicKey"],
+           details: %{"ip" => status["netbirdIp"], "fqdn" => status["fqdn"]}
+         }}
+
+      {_output, _code} ->
+        :unavailable
+    end
+  end
+end
+```
+
+### `:unavailable` versus `{:error, reason}`
+
+Both skip the provider, and both are fine — the difference is only how loudly it is logged.
+
+Return `:unavailable` when there is simply nothing to report: the endpoint hasn't started, or this particular unit isn't on that network. It's logged at debug. Return `{:error, reason}` when something is actually wrong, and it's logged as a warning.
+
+The distinction matters because devices reconnect often. If a unit that legitimately has no iroh identity produced a warning every time it connected, the warnings would stop meaning anything.
+
+A provider that raises is caught, logged and skipped — one broken provider never costs the others their identities, and never disturbs the socket.
+
+### Which services NervesHub understands
+
+Currently `iroh`, `netbird`, `tailscale` and `wireguard`. Anything else is discarded by the server, deliberately and quietly, so that reporting something unknown never costs a device its other identities. Adding a service is a change to NervesHub itself.
+
+Keep `details` small — NervesHub rejects a payload over 4KB once encoded — and never put a secret in it. This is an identity record, and it's visible to anyone who can view the device.
+
+### Checking what your providers return
+
+To see what they currently answer without sending anything, which is the quickest way to work out why a device isn't showing what you expect:
+
+```elixir
+NervesHubLink.Extensions.NetworkIdentity.identities()
+```
+
+Like every extension, this must also be enabled in your Product and Device settings on your NervesHub platform.
