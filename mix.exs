@@ -75,6 +75,7 @@ defmodule NervesHubLink.MixProject do
           NervesHubLink.Client.Default
         ],
         Configuration: [
+          NervesHubLink.Supervisor,
           NervesHubLink.Configurator,
           NervesHubLink.Configurator.Config,
           NervesHubLink.Configurator.LocalCertKey,
