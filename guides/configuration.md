@@ -7,7 +7,7 @@ By default `:nerves_hub_link` is an OTP application that starts
 application environment (i.e. your `config.exs`). This is the historical
 behaviour and requires no changes.
 
-If you'd prefer to own the connection's lifecycle — for example to start it
+If you'd prefer to own the connection's lifecycle - for example to start it
 only after some runtime setup, or to build the configuration programmatically —
 you can opt out of the automatic startup:
 
