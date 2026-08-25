@@ -1,5 +1,45 @@
 # Configuration
 
+## Supervision
+
+By default `:nerves_hub_link` is an OTP application that starts
+`NervesHubLink.Supervisor` automatically and builds its configuration from the
+application environment (i.e. your `config.exs`). This is the historical
+behaviour and requires no changes.
+
+If you'd prefer to own the connection's lifecycle - for example to start it
+only after some runtime setup, or to build the configuration programmatically —
+you can opt out of the automatic startup:
+
+```elixir
+config :nerves_hub_link, start: :manual
+```
+
+With `start: :manual`, the application starts nothing on boot. Instead, add
+`NervesHubLink.Supervisor` to your own supervision tree:
+
+```elixir
+children = [
+  # ...
+  NervesHubLink.Supervisor
+]
+```
+
+When started without options, the supervisor still builds its configuration
+from the application environment via `NervesHubLink.Configurator.build/0`, so
+`config :nerves_hub_link, ...` keeps working. To pass configuration explicitly
+instead, provide a `NervesHubLink.Configurator.Config` struct:
+
+```elixir
+children = [
+  {NervesHubLink.Supervisor, config: MyApp.build_nh_config()}
+]
+```
+
+The default (`start: :auto`) and the manual mode share the same code path, so
+switching between them does not change how the connection is configured — only
+who is responsible for starting it.
+
 ## Runtime configuration
 
 `NervesHubLink` also supports runtime configuration via the `NervesHubLink.Configurator` behavior. This is called during application startup to build the configuration that is to be used for the connection. When implementing the behavior, you'll receive the initial default config read in from the application environment and you can modify it however you need.
