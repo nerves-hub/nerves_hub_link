@@ -64,7 +64,7 @@ defmodule NervesHubLink.DownloaderTest do
       Downloader.start_download(@failure_url, handler_fun, retry_config: retry_args)
 
     assert_receive {:error, %Mint.TransportError{reason: :econnrefused}}, 1000
-    assert_receive {:EXIT, ^download, :max_timeout_reached}
+    assert_receive {:EXIT, ^download, :max_timeout_reached}, 1000
   end
 
   describe "idle timeout" do
