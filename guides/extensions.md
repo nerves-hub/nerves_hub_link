@@ -12,6 +12,8 @@ There are five extensions currently:
 
 Your NervesHub server controls enabling and disabling extensions to allow you to switch them off if they impact operations.
 
+Which extensions a device offers is decided when it connects. The server names the extensions it has, and the versions of each, and the device offers back the ones it also implements. An extension the server does not name is not offered, so switching one off server-side stops the device doing the work as well as stops the reporting. A server that asks without naming anything is offered every extension this library implements, exactly as before. And nothing is offered until the server asks, so a server that never asks gets no extensions at all.
+
 ## Geo
 
 The Geo `NervesHubLink.Extensions.Geo.DefaultResolver` uses the https://whenwhere.nerves-project.org/ service to resolve the device's location using the publicly available IP address.

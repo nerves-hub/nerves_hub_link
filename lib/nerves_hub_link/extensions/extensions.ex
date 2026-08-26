@@ -104,6 +104,53 @@ defmodule NervesHubLink.Extensions do
         ]
   def list(), do: GenServer.call(__MODULE__, :list)
 
+  @doc """
+  What to offer on the extensions join, given what the platform says it has.
+
+  The platform sends its side in `extensions:get`, as `%{name => versions}`.
+  This picks, for each extension both sides have, the version to declare, and
+  returns the `%{name => version}` map the join carries.
+
+  Pass `nil` when the server asked without naming anything, which is what every
+  NervesHub does until it learns to advertise. It still serves the versions it
+  always did, so everything is offered at the version this client implements
+  rather than nothing being offered at all.
+
+  Nothing is offered unless the server asks. Joining the extensions topic
+  uninvited would be the device deciding it should be reporting, and that
+  decision is the platform's.
+
+  An extension the platform did not name is left out. It either does not
+  implement it or has it switched off, and either way there is nothing to
+  attach.
+
+  > #### One version per extension {: .info}
+  >
+  > This client implements exactly one version of each extension, so choosing
+  > is only ever a question of whether the platform has that one. Giving an
+  > extension a second version means keying the registry by name *and* version
+  > rather than by name alone, since `find_extensions/0` would otherwise keep
+  > whichever module it saw last.
+  """
+  @spec offer(%{String.t() => [String.t()]} | nil) :: %{String.t() => String.t()}
+  def offer(advertisement) do
+    for {name, %{version: version}} <- list(),
+        offering?(advertisement, name, version),
+        into: %{},
+        do: {name, to_string(version)}
+  end
+
+  defp offering?(nil, _name, _version), do: true
+
+  defp offering?(advertisement, name, version) when is_map(advertisement) do
+    to_string(version) in List.wrap(advertisement[name])
+  end
+
+  # Anything else is not an advertisement. Treated as though the server named
+  # nothing, because refusing to offer extensions over a payload this client
+  # cannot read would make a malformed message worse than an empty one.
+  defp offering?(_advertisement, _name, _version), do: true
+
   @spec handle_event(String.t(), map()) :: :ok
   def handle_event(event, message) do
     GenServer.cast(__MODULE__, {:handle_event, event, message})
