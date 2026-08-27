@@ -2,11 +2,12 @@
 
 Extensions are pieces of non-critical functionality going over the NervesHub WebSocket. They are separated out under the Extensions mechanism so that the client can happily ignore anything extension-related in service of keeping firmware updates healthy. That is always the top priority.
 
-There are four extensions currently:
+There are five extensions currently:
 
 - [**Geo**](#geo) provides hooks to send a device's GeoIP information.
 - [**Health**](#health) reports device metrics, alarms, metadata and similar.
 - [**Local Shell**](#local-shell) gives NervesHub the ability to expose an interactive shell in the UI.
+- [**Logging**](#logging) sends the device's log lines to NervesHub, where they are stored and searchable.
 - [**Network Identity**](#network-identity) reports the device's identity on networks NervesHub doesn't run, such as iroh or NetBird.
 
 Your NervesHub server controls enabling and disabling extensions to allow you to switch them off if they impact operations.
@@ -134,6 +135,52 @@ Provides an interactive local shell for NervesHub to connect to. This is useful 
 This extension is enabled by default, but must also be enabled in your Device and Product settings on your NervesHub platform.
 
 To use this extension, you need to include the [`ExPTY`](https://hex.pm/packages/expty) library in your project's dependencies.
+
+## Logging
+
+The Logging extension is responsible for sending logs to the NervesHub platform.
+
+It is in early release and is off by default. To turn it on, name it in `extension_modules`:
+
+```elixir
+config :nerves_hub_link,
+  extension_modules: [
+    NervesHubLink.Extensions.Geo,
+    NervesHubLink.Extensions.Health,
+    NervesHubLink.Extensions.LocalShell,
+    NervesHubLink.Extensions.NetworkIdentity,
+    NervesHubLink.Extensions.Logging
+  ]
+```
+
+> #### This list replaces the defaults {: .warning}
+>
+> `extension_modules` replaces the default list rather than adding to it, so every extension you want has to be named, not just the one you are adding. `NervesHubLink.Extensions.LocalShell` is only in the default list when [`ExPTY`](https://hex.pm/packages/expty) is available, so leave it out of your list if you don't depend on it.
+
+Enabling it here only makes the extension available. Like every extension, it sends nothing until NervesHub asks the device to attach it, which you control in your Device and Product settings.
+
+### Choosing what gets sent
+
+Every log line is a message over the socket, so only `:info` and above are sent by default. Devices on metered connections will want to raise that:
+
+```elixir
+config :nerves_hub_link,
+  logging: [level: :warning]
+```
+
+Any [Logger level](https://hexdocs.pm/logger/Logger.html#t:level/0) is accepted, as is `:all` to send everything the `Logger` level allows through.
+
+### One message per line
+
+This extension sends a message per log line, and NervesHub limits how often a device may send rather than how much it may say: a few messages a second, and **anything past that is dropped without telling the device**. A device logging faster than that loses lines, and the loss is invisible from both ends.
+
+Boot is when a device logs fastest, so the lines most worth having are the ones most likely to go. Keep the level high enough that the device is not talking constantly.
+
+### What is not sent
+
+The handler is installed when the extension is attached and removed when it is detached, so lines written before that are not sent. Nothing from the boot is reported unless the device was already attached.
+
+Only lines of text are sent. Reports, which is how OTP logs a crash, a supervisor starting a child, or an alarm, are skipped.
 
 ## Network Identity
 
