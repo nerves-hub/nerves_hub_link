@@ -31,6 +31,17 @@ defmodule NervesHubLink.Extensions.Logging do
 
   Any [Logger level](`t:Logger.level/0`) is accepted, as is `:all` to send
   everything the `Logger` level allows through.
+
+  Each line also carries the metadata `Logger` attached to it, which is
+  everything by default. That includes the pid and group leader of the process
+  that logged, and on a crash the whole reason and stacktrace. Name the keys to
+  send less:
+
+      config :nerves_hub_link,
+        logging: [metadata: [:mfa, :file, :line]]
+
+  The timestamp is always sent, whatever that is set to. NervesHub reads it to
+  know when the line was written, and drops a line it cannot read one from.
   """
   use NervesHubLink.Extensions, name: "logging", version: "0.0.1"
 
@@ -84,7 +95,7 @@ defmodule NervesHubLink.Extensions.Logging do
     payload = %{
       level: level,
       message: to_message(message),
-      meta: for({k, v} <- meta, into: %{}, do: {k, inspect(v)})
+      meta: metadata(meta)
     }
 
     _ = push_log(payload)
@@ -92,9 +103,30 @@ defmodule NervesHubLink.Extensions.Logging do
     {:noreply, state}
   end
 
-  defp level() do
+  defp level(), do: config(:level, @default_level)
+
+  defp metadata(meta) do
+    meta
+    |> selected(config(:metadata, :all))
+    |> Map.new(fn {key, value} -> {key, inspect(value)} end)
+    |> Map.put(:time, timestamp(meta))
+  end
+
+  defp selected(meta, :all), do: meta
+  defp selected(meta, keys) when is_list(keys), do: Map.take(meta, keys)
+  defp selected(meta, _other), do: meta
+
+  # Set last, and never left to the metadata selection above. NervesHub reads
+  # `meta.time` to know when the line was written, and a line it cannot read a
+  # timestamp from fails validation and is dropped **silently**: no error back
+  # to the device, and nothing in the UI. `Logger` records it as microseconds
+  # since the epoch, which is exactly what the server parses.
+  defp timestamp(%{time: time}) when is_integer(time), do: Integer.to_string(time)
+  defp timestamp(_meta), do: Integer.to_string(System.os_time(:microsecond))
+
+  defp config(key, default) do
     Application.get_env(:nerves_hub_link, :logging, [])
-    |> Keyword.get(:level, @default_level)
+    |> Keyword.get(key, default)
   end
 
   # `Logger` hands over chardata, which is often an iolist rather than a binary.

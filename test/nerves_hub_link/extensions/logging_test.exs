@@ -109,7 +109,7 @@ defmodule NervesHubLink.Extensions.LoggingTest do
   describe "log level" do
     test "levels below the configured one are not sent" do
       Application.put_env(:nerves_hub_link, :logging, level: :error)
-      attach_logging(%{})
+      attach_logging(:ok)
 
       Logger.info("this should stay on the device")
       Logger.error("this should be sent")
@@ -119,7 +119,7 @@ defmodule NervesHubLink.Extensions.LoggingTest do
     end
 
     test "debug lines are not sent by default" do
-      attach_logging(%{})
+      attach_logging(:ok)
 
       Logger.debug("chatty")
       Logger.info("worth sending")
@@ -129,15 +129,70 @@ defmodule NervesHubLink.Extensions.LoggingTest do
     end
   end
 
+  describe "metadata" do
+    setup :attach_logging
+
+    test "carries the moment the line was written" do
+      # NervesHub reads `meta.time` to know when the line was written, and
+      # drops a line it cannot read one from without telling the device. That
+      # makes this the one field the payload cannot be missing.
+      before = System.os_time(:microsecond)
+
+      Logger.info("when did this happen")
+
+      assert_receive {:pushed, "extensions", "logging:send", payload}
+
+      time = String.to_integer(payload.meta[:time])
+
+      assert time >= before
+      assert time <= System.os_time(:microsecond)
+    end
+
+    test "is everything Logger attached, by default" do
+      Logger.info("with metadata")
+
+      assert_receive {:pushed, "extensions", "logging:send", payload}
+
+      assert is_binary(payload.meta[:pid])
+      assert is_binary(payload.meta[:time])
+    end
+
+    test "can be narrowed to the keys worth sending" do
+      # All of it includes the group leader, and on a crash the whole reason
+      # and stacktrace, which is a lot of bytes for a device paying by the
+      # megabyte.
+      Application.put_env(:nerves_hub_link, :logging, metadata: [:mfa])
+      attach_logging(:ok)
+
+      Logger.info("narrowed")
+
+      assert_receive {:pushed, "extensions", "logging:send", payload}
+
+      assert is_binary(payload.meta[:mfa])
+      refute Map.has_key?(payload.meta, :pid)
+    end
+
+    test "keeps the timestamp whatever was narrowed to" do
+      Application.put_env(:nerves_hub_link, :logging, metadata: [:mfa])
+      attach_logging(:ok)
+
+      Logger.info("still timestamped")
+
+      assert_receive {:pushed, "extensions", "logging:send", payload}
+
+      assert String.to_integer(payload.meta[:time]) > 0
+    end
+  end
+
   describe "the logger handler" do
     test "is installed while the extension is attached" do
-      attach_logging(%{})
+      attach_logging(:ok)
 
       assert {:ok, _config} = :logger.get_handler_config(@handler_id)
     end
 
     test "is removed when the extension is detached" do
-      attach_logging(%{})
+      attach_logging(:ok)
 
       :ok = Extensions.detach("logging")
       assert_receive {:pushed, "extensions", "logging:detached", %{}}
@@ -146,7 +201,7 @@ defmodule NervesHubLink.Extensions.LoggingTest do
     end
 
     test "stops sending once the extension is detached" do
-      attach_logging(%{})
+      attach_logging(:ok)
 
       :ok = Extensions.detach("logging")
       assert_receive {:pushed, "extensions", "logging:detached", %{}}
@@ -157,7 +212,7 @@ defmodule NervesHubLink.Extensions.LoggingTest do
     end
   end
 
-  defp attach_logging(_context \\ %{}) do
+  defp attach_logging(_context) do
     :ok = Extensions.attach("logging")
     assert_receive {:pushed, "extensions", "logging:attached", %{}}
     :ok

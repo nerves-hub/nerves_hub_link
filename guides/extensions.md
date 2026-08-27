@@ -170,6 +170,15 @@ config :nerves_hub_link,
 
 Any [Logger level](https://hexdocs.pm/logger/Logger.html#t:level/0) is accepted, as is `:all` to send everything the `Logger` level allows through.
 
+Each line also carries the metadata `Logger` attached to it. That is everything by default, which includes the pid and group leader of the process that logged, and on a crash the whole reason and stacktrace. To send less, name the keys you want:
+
+```elixir
+config :nerves_hub_link,
+  logging: [metadata: [:mfa, :file, :line]]
+```
+
+The timestamp is always sent, whatever you set here. NervesHub needs it to store the line at all.
+
 ### One message per line
 
 This extension sends a message per log line, and NervesHub limits how often a device may send rather than how much it may say: a few messages a second, and **anything past that is dropped without telling the device**. A device logging faster than that loses lines, and the loss is invisible from both ends.
