@@ -23,6 +23,9 @@ defmodule NervesHubLink.Extensions.Logging.Line do
 
   @type t :: %{String.t() => String.t() | %{String.t() => String.t()}}
 
+  # `Logger`'s own default for how much of a message it keeps.
+  @max_bytes 8_192
+
   @doc """
   Build a line from an OTP log event.
   """
@@ -61,8 +64,16 @@ defmodule NervesHubLink.Extensions.Logging.Line do
   defp message({:string, chardata}), do: to_binary(chardata)
 
   # OTP reports, which arrive from the runtime rather than from application
-  # code: a crash, a supervisor starting a child, an alarm.
-  defp message({:report, report}), do: inspect(report)
+  # code: a crash, a supervisor starting a child, an alarm. These are the lines
+  # someone most wants when a device misbehaves, so they are sent rather than
+  # skipped.
+  #
+  # `inspect/2` rather than `:logger.format_report/1`, which renders a report
+  # over several indented lines. One line per line is what makes a log
+  # searchable, and a stack trace spread over twenty rows is worse to read than
+  # one long one. Bounded, because a crash report carries the whole stacktrace
+  # and every argument in it.
+  defp message({:report, report}), do: inspect(report, limit: 50, printable_limit: 4_096)
 
   defp message({format, args}) when is_list(format) or is_binary(format) do
     format
@@ -73,9 +84,20 @@ defmodule NervesHubLink.Extensions.Logging.Line do
   defp message(other), do: inspect(other)
 
   defp to_binary(chardata) do
-    IO.chardata_to_string(chardata)
+    chardata
+    |> IO.chardata_to_string()
+    |> truncate()
   rescue
     # Chardata that will not render is still worth reporting as something.
-    _error -> inspect(chardata)
+    _error -> chardata |> inspect() |> truncate()
+  end
+
+  # One line should not be able to fill a message on its own. The cap matches
+  # `Logger`'s own `:truncate` default, and says so rather than leaving a line
+  # that stops mid-word.
+  defp truncate(message) when byte_size(message) <= @max_bytes, do: message
+
+  defp truncate(message) do
+    binary_part(message, 0, @max_bytes) <> " ... (truncated)"
   end
 end

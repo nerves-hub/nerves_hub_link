@@ -23,9 +23,43 @@ defmodule NervesHubLink.Extensions.Logging.LineTest do
     end
 
     test "keeps a report as something readable" do
+      # Reports are how OTP logs a crash, a supervisor starting a child, or an
+      # alarm, which is most of what someone wants when a device misbehaves.
       line = Line.from_log_event(event(msg: {:report, %{reason: :shutdown}}))
 
       assert line["message"] =~ "shutdown"
+    end
+
+    test "keeps a report on one line" do
+      # `:logger.format_report/1` spreads one over several indented lines, and
+      # a stack trace across twenty rows is worse to read than one long row.
+      line = Line.from_log_event(event(msg: {:report, [a: 1, b: 2]}))
+
+      refute line["message"] =~ "\n"
+    end
+
+    test "bounds a report that carries a whole stacktrace" do
+      report = %{reason: {:shutdown, Enum.map(1..500, &{Module, :function, &1, []})}}
+
+      line = Line.from_log_event(event(msg: {:report, report}))
+
+      assert byte_size(line["message"]) < 8_192
+    end
+  end
+
+  describe "long messages" do
+    test "are cut rather than sent whole" do
+      # One line should not be able to fill a message on its own.
+      line = Line.from_log_event(event(msg: {:string, String.duplicate("x", 20_000)}))
+
+      assert byte_size(line["message"]) < 9_000
+      assert line["message"] =~ "(truncated)"
+    end
+
+    test "are left alone when they fit" do
+      line = Line.from_log_event(event(msg: {:string, "short enough"}))
+
+      assert line["message"] == "short enough"
     end
 
     test "carries the level the line was written at" do

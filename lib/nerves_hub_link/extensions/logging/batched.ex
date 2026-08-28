@@ -54,7 +54,10 @@ defmodule NervesHubLink.Extensions.Logging.Batched do
   60 whatever it is set to.
   """
 
-  use NervesHubLink.Extensions, name: "logging", version: "0.1.0"
+  use NervesHubLink.Extensions,
+    name: "logging",
+    version: "0.1.0",
+    versions: [NervesHubLink.Extensions.Logging, NervesHubLink.Extensions.Logging.Batched]
 
   alias NervesHubLink.Extensions.Logging.Collector
   alias NervesHubLink.Extensions.Logging.Config

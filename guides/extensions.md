@@ -183,21 +183,9 @@ The timestamp is always sent, whatever you set here. NervesHub needs it to store
 
 ### Sending a minute at a time
 
-There are two versions of this extension, and they are the same feature: 0.0.1 sends a message per log line, 0.1.0 collects lines and sends a minute of them at a time. Name both, and the device offers whichever your NervesHub has:
+There are two versions of this extension, and they are the same feature: 0.0.1 sends a message per log line, 0.1.0 collects lines and sends a minute of them at a time.
 
-```elixir
-config :nerves_hub_link,
-  extension_modules: [
-    NervesHubLink.Extensions.Geo,
-    NervesHubLink.Extensions.Health,
-    NervesHubLink.Extensions.LocalShell,
-    NervesHubLink.Extensions.NetworkIdentity,
-    NervesHubLink.Extensions.Logging,
-    NervesHubLink.Extensions.Logging.Batched
-  ]
-```
-
-Naming only `Logging.Batched` is fine if every NervesHub your fleet talks to understands 0.1.0. A device that offers only 0.1.0 to a platform that has only 0.0.1 gets no logging at all, which is why keeping both is the safer default.
+Naming `NervesHubLink.Extensions.Logging` gets you both. There is nothing extra to configure: the device offers whichever version your NervesHub has, and prefers 0.1.0 where it is available.
 
 **Why it matters.** NervesHub limits how often a device may send rather than how much it may say: a few messages a second, and anything past that is dropped without telling the device. At a message per line that is a limit on *lines*, and boot is when a device logs fastest, so the lines most worth having are the ones most likely to go. At a minute per message the same budget carries a minute of logs.
 
@@ -218,7 +206,9 @@ config :nerves_hub_link,
 
 On 0.0.1 the handler is installed when the extension is attached and removed when it is detached, so lines written before that are not sent. 0.1.0 collects from application start instead, and has the boot.
 
-Only lines of text are sent, on either version. Reports, which is how OTP logs a crash, a supervisor starting a child, or an alarm, are skipped.
+0.0.1 sends only lines of text. Reports, which is how OTP logs a crash, a supervisor starting a child, or an alarm, are skipped by it. 0.1.0 sends those too, on one line and bounded in length, since they are most of what you want when a device misbehaves.
+
+Any single line longer than 8KB is cut short and marked, so one line cannot fill a message on its own.
 
 ## Network Identity
 

@@ -84,6 +84,48 @@ defmodule NervesHubLink.ExtensionsTest do
     end
   end
 
+  describe "configured_modules/0" do
+    test "an extension with more than one version registers all of them" do
+      # Naming a version should be naming the extension. A device that had to
+      # list every version by hand would silently get nothing from a platform
+      # that has one it did not think of.
+      Application.put_env(:nerves_hub_link, :extension_modules, [
+        NervesHubLink.Extensions.Logging
+      ])
+
+      modules = Extensions.configured_modules()
+
+      assert NervesHubLink.Extensions.Logging in modules
+      assert NervesHubLink.Extensions.Logging.Batched in modules
+    end
+
+    test "naming the newer version registers the older one too" do
+      Application.put_env(:nerves_hub_link, :extension_modules, [
+        NervesHubLink.Extensions.Logging.Batched
+      ])
+
+      modules = Extensions.configured_modules()
+
+      assert NervesHubLink.Extensions.Logging in modules
+      assert NervesHubLink.Extensions.Logging.Batched in modules
+    end
+
+    test "naming both is the same as naming either" do
+      Application.put_env(:nerves_hub_link, :extension_modules, [
+        NervesHubLink.Extensions.Logging,
+        NervesHubLink.Extensions.Logging.Batched
+      ])
+
+      assert length(Extensions.configured_modules()) == 2
+    end
+
+    test "an extension with one version is left as it is" do
+      Application.put_env(:nerves_hub_link, :extension_modules, [Reporter])
+
+      assert Extensions.configured_modules() == [Reporter]
+    end
+  end
+
   describe "offer/1" do
     test "offers an extension the platform has, at the version it named" do
       assert Extensions.offer(%{"reporter" => ["1.2.3"], "broken" => ["0.0.1"]}) == %{

@@ -43,7 +43,10 @@ defmodule NervesHubLink.Extensions.Logging do
   The timestamp is always sent, whatever that is set to. NervesHub reads it to
   know when the line was written, and drops a line it cannot read one from.
   """
-  use NervesHubLink.Extensions, name: "logging", version: "0.0.1"
+  use NervesHubLink.Extensions,
+    name: "logging",
+    version: "0.0.1",
+    versions: [NervesHubLink.Extensions.Logging, NervesHubLink.Extensions.Logging.Batched]
 
   alias NervesHubLink.Extensions.Logging.LoggerHandler
 

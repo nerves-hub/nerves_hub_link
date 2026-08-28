@@ -191,6 +191,18 @@ defmodule NervesHubLink.Extensions do
   @spec configured_modules() :: [module()]
   def configured_modules() do
     Application.get_env(:nerves_hub_link, :extension_modules, @default_extension_modules)
+    |> Enum.flat_map(&siblings/1)
+    |> Enum.uniq()
+  end
+
+  # An extension implemented at more than one version names all of them, so
+  # configuring one is configuring the extension. Otherwise a device would have
+  # to list every version of `logging` by hand and would silently get no
+  # logging at all from a platform that has a version it did not think to name.
+  defp siblings(mod) do
+    _ = Code.ensure_loaded(mod)
+
+    if function_exported?(mod, :__versions__, 0), do: mod.__versions__(), else: [mod]
   end
 
   defp find_extensions() do
@@ -212,7 +224,7 @@ defmodule NervesHubLink.Extensions do
         entry = Map.get(extensions, name, new_entry())
         versions = Map.put(entry.versions, to_string(mod.__version__()), mod)
 
-        Map.put(extensions, name, %{entry | versions: versions} |> default_to_newest())
+        Map.put(extensions, name, %{entry | versions: versions} |> default_to_oldest())
     end
   end
 
@@ -221,23 +233,15 @@ defmodule NervesHubLink.Extensions do
   end
 
   # What an extension resolves to before anything has been negotiated: the
-  # newest version this device implements. `attach/1` called by hand has no
-  # advertisement to go on, and the newest is the best answer available.
-  defp default_to_newest(entry) do
-    version = entry.versions |> Map.keys() |> newest()
+  # oldest version this device implements. `attach/1` called by hand has no
+  # advertisement to go on, and the oldest is the one a platform is sure to
+  # have. The newest would be a device guessing that the far end is current,
+  # and being wrong about it silently.
+  defp default_to_oldest(entry) do
+    version =
+      entry.versions |> Map.keys() |> Enum.sort_by(&parsed/1, {:asc, Version}) |> List.first()
 
     %{entry | version: version, module: entry.versions[version]}
-  end
-
-  defp newest([]), do: nil
-
-  defp newest(versions) do
-    Enum.max_by(versions, fn version ->
-      case Version.parse(version) do
-        {:ok, parsed} -> parsed
-        :error -> Version.parse!("0.0.0")
-      end
-    end)
   end
 
   @impl GenServer
@@ -418,6 +422,11 @@ defmodule NervesHubLink.Extensions do
   defmacro __using__(opts) do
     name = opts[:name] || raise "Missing required extension arg: name"
     version = opts[:version] || raise "Missing required extension arg: version"
+    # Every module implementing this extension, when there is more than one
+    # version of it. Naming any of them configures all of them. Decided here
+    # rather than in the generated function, which would leave one arm of a
+    # `case` that can never be taken.
+    versions = opts[:versions] || quote(do: [__MODULE__])
 
     quote location: :keep do
       use GenServer
@@ -425,6 +434,9 @@ defmodule NervesHubLink.Extensions do
 
       def __name__(), do: unquote(name)
       def __version__(), do: unquote(version)
+
+      @doc false
+      def __versions__(), do: unquote(versions)
 
       # Re-implemented the included `child_spec/1` function from `use GenServer` so
       # that `@doc false` can be used to hide `child_spec/1` from the generated docs.
