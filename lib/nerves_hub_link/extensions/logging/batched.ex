@@ -10,9 +10,8 @@ defmodule NervesHubLink.Extensions.Logging.Batched do
   device and made searchable. One direction only: nothing is ever sent back.
 
   `NervesHubLink.Extensions.Logging` is version 0.0.1 of the same extension and
-  lives alongside this one. They are the same feature and a device offers
-  whichever the platform has, so naming both in `extension_modules` is what
-  gets a device the better one where it is available:
+  lives alongside this one. They are the same feature, and naming either one in
+  `extension_modules` configures both:
 
       config :nerves_hub_link,
         extension_modules: [
@@ -20,9 +19,11 @@ defmodule NervesHubLink.Extensions.Logging.Batched do
           NervesHubLink.Extensions.Health,
           NervesHubLink.Extensions.LocalShell,
           NervesHubLink.Extensions.NetworkIdentity,
-          NervesHubLink.Extensions.Logging,
-          NervesHubLink.Extensions.Logging.Batched
+          NervesHubLink.Extensions.Logging
         ]
+
+  There is nothing to add for this module. A device offers whichever version
+  the platform has and prefers this one where it is available.
 
   ## What 0.1.0 changes
 
