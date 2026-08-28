@@ -39,6 +39,7 @@ defmodule NervesHubLink.Supervisor do
   alias NervesHubLink.ArchiveManager
   alias NervesHubLink.Configurator
   alias NervesHubLink.Extensions
+  alias NervesHubLink.Extensions.Logging
   alias NervesHubLink.ExtensionsSupervisor
   alias NervesHubLink.FwupConfig
   alias NervesHubLink.Socket
@@ -63,16 +64,32 @@ defmodule NervesHubLink.Supervisor do
       fwup_env: config.fwup_env
     }
 
-    children = [
-      {DynamicSupervisor, name: ExtensionsSupervisor},
-      Extensions,
-      {UpdateManager, {fwup_config, config.updater}},
-      {ArchiveManager, config},
-      {Socket, config},
-      {Task.Supervisor, name: SupportScriptsTaskSupervisor},
-      SupportScriptsManager
-    ]
+    children =
+      [
+        {DynamicSupervisor, name: ExtensionsSupervisor},
+        Extensions,
+        # Before the socket, and whether or not NervesHub ever attaches
+        # logging: the lines a device writes while booting are the ones worth
+        # having, and by the time an extension is attached they are gone.
+        log_collector(),
+        {UpdateManager, {fwup_config, config.updater}},
+        {ArchiveManager, config},
+        {Socket, config},
+        {Task.Supervisor, name: SupportScriptsTaskSupervisor},
+        SupportScriptsManager
+      ]
+      |> List.flatten()
 
     Supervisor.init(children, strategy: :one_for_one)
+  end
+
+  # Only for devices that offer the version of logging that collects. 0.0.1
+  # installs its own handler when it attaches and has nothing to collect into.
+  defp log_collector() do
+    if Logging.Batched in Extensions.configured_modules() do
+      [{Logging.Collector, level: Logging.Config.level(), max_lines: Logging.Config.max_lines()}]
+    else
+      []
+    end
   end
 end
