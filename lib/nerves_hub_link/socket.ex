@@ -37,6 +37,12 @@ defmodule NervesHubLink.Socket do
 
   @firmware_validation_check_interval :timer.seconds(10)
 
+  # How long to wait for NervesHub's answer to a device-initiated update request.
+  # Generous: the answer involves the platform resolving a deployment group and,
+  # for a request, signing a firmware URL.
+  @update_request_timeout :timer.seconds(30)
+  @update_request_call_timeout @update_request_timeout + :timer.seconds(5)
+
   # How long to wait on the connection process when working out which network
   # interface is in use. Short, because nothing depends on the answer.
   @connection_state_timeout 500
@@ -106,6 +112,51 @@ defmodule NervesHubLink.Socket do
     GenServer.call(server, :console_active?)
   end
 
+  @doc """
+  How this device receives firmware, as NervesHub last reported it.
+
+  `nil` until NervesHub says — a server too old to know about update modes never
+  will, and the device keeps taking updates exactly as it did before.
+  """
+  @spec update_mode(GenServer.server()) :: NervesHubLink.update_mode() | nil
+  def update_mode(server \\ __MODULE__) do
+    GenServer.call(server, :update_mode)
+  end
+
+  @doc """
+  Whether NervesHub allows this device to manage its own updates.
+  """
+  @spec managed_updates_allowed?(GenServer.server()) :: boolean()
+  def managed_updates_allowed?(server \\ __MODULE__) do
+    GenServer.call(server, :managed_updates_allowed?)
+  end
+
+  @doc """
+  Ask NervesHub whether there is firmware waiting for this device.
+  """
+  @spec check_for_update(GenServer.server()) ::
+          {:ok, %{available?: boolean(), firmware_meta: map() | nil}} | {:error, term()}
+  def check_for_update(server \\ __MODULE__) do
+    GenServer.call(server, :check_for_update, @update_request_call_timeout)
+  end
+
+  @doc """
+  Ask NervesHub for the firmware itself, and start applying it.
+  """
+  @spec start_update(GenServer.server()) :: :ok | {:error, term()}
+  def start_update(server \\ __MODULE__) do
+    GenServer.call(server, :start_update, @update_request_call_timeout)
+  end
+
+  @doc """
+  Ask NervesHub to change how this device receives firmware.
+  """
+  @spec set_update_mode(GenServer.server(), :automatic | :device_managed) ::
+          :ok | {:error, term()}
+  def set_update_mode(server \\ __MODULE__, mode) when mode in [:automatic, :device_managed] do
+    GenServer.call(server, {:set_update_mode, mode}, @update_request_call_timeout)
+  end
+
   @spec push_extensions_message(
           GenServer.server(),
           event :: String.t(),
@@ -135,6 +186,9 @@ defmodule NervesHubLink.Socket do
       |> assign(joined_at: nil)
       |> assign(firmware_validation_timer_pid: nil)
       |> assign(redirect_count: 0)
+      |> assign(update_mode: nil)
+      |> assign(managed_updates_allowed: false)
+      |> assign(pending_update_requests: %{})
 
     if config.connect_wait_for_network do
       schedule_network_availability_check()
@@ -241,6 +295,32 @@ defmodule NervesHubLink.Socket do
 
   def handle_call(:console_active?, _from, socket) do
     {:reply, socket.assigns.iex_pid != nil, socket}
+  end
+
+  def handle_call(:update_mode, _from, socket) do
+    {:reply, socket.assigns.update_mode, socket}
+  end
+
+  def handle_call(:managed_updates_allowed?, _from, socket) do
+    {:reply, socket.assigns.managed_updates_allowed, socket}
+  end
+
+  def handle_call(:check_for_update, from, socket) do
+    start_update_request(socket, :check_for_update, from, "check_update", %{})
+  end
+
+  def handle_call(:start_update, from, socket) do
+    # UpdateManager ignores a second update while one is in flight, so asking
+    # NervesHub for another firmware URL would only waste a deployment slot.
+    if UpdateManager.status() == :updating do
+      {:reply, {:error, :updating}, socket}
+    else
+      start_update_request(socket, :start_update, from, "request_update", %{})
+    end
+  end
+
+  def handle_call({:set_update_mode, mode}, from, socket) do
+    start_update_request(socket, :set_update_mode, from, "set_update_mode", %{mode: mode})
   end
 
   def handle_call({:push, topic, event, payload}, _from, socket) do
@@ -404,7 +484,9 @@ defmodule NervesHubLink.Socket do
     case UpdateInfo.parse(update) do
       {:ok, %UpdateInfo{} = info} ->
         _ = UpdateManager.apply_update(info, socket.assigns.config.fwup_public_keys)
-        {:ok, socket}
+        # The same message answers a `request_update` and carries a deployment's
+        # own push; resolving is a no-op when nothing asked.
+        {:ok, resolve_update_request(socket, :start_update, :ok)}
 
       error ->
         Logger.error(
@@ -413,6 +495,42 @@ defmodule NervesHubLink.Socket do
 
         {:ok, socket}
     end
+  end
+
+  def handle_message(@device_topic, "update_mode", params, socket) do
+    socket =
+      socket
+      |> assign(update_mode: parse_update_mode(params["mode"]))
+      |> assign(managed_updates_allowed: params["managed_updates_allowed"] == true)
+
+    result =
+      case params["error"] do
+        nil -> :ok
+        error -> {:error, update_request_error(error)}
+      end
+
+    {:ok, resolve_update_request(socket, :set_update_mode, result)}
+  end
+
+  def handle_message(@device_topic, "update_available", params, socket) do
+    result =
+      {:ok,
+       %{
+         available?: params["available"] == true,
+         firmware_meta: params["firmware_meta"]
+       }}
+
+    {:ok, resolve_update_request(socket, :check_for_update, result)}
+  end
+
+  def handle_message(@device_topic, "update_rejected", params, socket) do
+    result =
+      case {params["reason"], params["delay_for"]} do
+        {"busy", delay} when is_integer(delay) -> {:error, {:busy, delay}}
+        {reason, _} -> {:error, update_request_error(reason)}
+      end
+
+    {:ok, resolve_update_request(socket, :start_update, result)}
   end
 
   def handle_message(@device_topic, "extensions:get", _payload, socket) do
@@ -511,6 +629,10 @@ defmodule NervesHubLink.Socket do
         schedule_network_availability_check(3_000)
         {:noreply, socket}
     end
+  end
+
+  def handle_info({:update_request_timeout, kind}, socket) do
+    {:noreply, resolve_update_request(socket, kind, {:error, :timeout})}
   end
 
   def handle_info(:firmware_validation_status_check, socket) do
@@ -760,6 +882,62 @@ defmodule NervesHubLink.Socket do
   defp json_serializer(config) do
     {config.socket[:url], Slipstream.Serializer.PhoenixSocketV2Serializer}
   end
+
+  # A device-initiated request is answered by a separate message rather than a
+  # reply to the push, so the caller is parked here until that message arrives —
+  # or until the timeout does, so a lost answer cannot leak a stuck caller.
+  defp start_update_request(socket, kind, from, event, payload) do
+    cond do
+      not joined?(socket, @device_topic) ->
+        {:reply, {:error, :disconnected}, socket}
+
+      Map.has_key?(socket.assigns.pending_update_requests, kind) ->
+        {:reply, {:error, :already_in_progress}, socket}
+
+      true ->
+        case push(socket, @device_topic, event, payload) do
+          {:ok, _ref} ->
+            timer =
+              Process.send_after(self(), {:update_request_timeout, kind}, @update_request_timeout)
+
+            pending = Map.put(socket.assigns.pending_update_requests, kind, {from, timer})
+
+            {:noreply, assign(socket, pending_update_requests: pending)}
+
+          {:error, reason} ->
+            {:reply, {:error, reason}, socket}
+        end
+    end
+  end
+
+  defp resolve_update_request(socket, kind, result) do
+    case Map.pop(socket.assigns.pending_update_requests, kind) do
+      {nil, _pending} ->
+        socket
+
+      {{from, timer}, pending} ->
+        _ = Process.cancel_timer(timer)
+        GenServer.reply(from, result)
+        assign(socket, pending_update_requests: pending)
+    end
+  end
+
+  defp parse_update_mode("automatic"), do: :automatic
+  defp parse_update_mode("device_managed"), do: :device_managed
+  defp parse_update_mode("off"), do: :off
+
+  defp parse_update_mode(mode) do
+    Logger.warning("[NervesHubLink] unknown update mode from NervesHub : #{inspect(mode)}")
+    nil
+  end
+
+  # Mapped rather than converted, so a reason NervesHub invents later cannot grow
+  # this device's atom table.
+  defp update_request_error("not_permitted"), do: :not_permitted
+  defp update_request_error("unknown_mode"), do: :unknown_mode
+  defp update_request_error("no_update"), do: :no_update
+  defp update_request_error("no_deployment_group"), do: :no_deployment_group
+  defp update_request_error(_other), do: :error
 
   defp alarm_if_firmware_auto_reverted() do
     if Client.firmware_auto_revert_detected?() do

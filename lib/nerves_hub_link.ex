@@ -23,6 +23,16 @@ defmodule NervesHubLink do
   alias NervesHubLink.Socket
   alias NervesHubLink.UpdateManager
 
+  @typedoc """
+  How a device receives firmware.
+
+  `:automatic` is the default — the device's deployment group sends firmware on
+  its own schedule. `:device_managed` means the device asks for firmware itself,
+  on whatever schedule suits it; its deployment group still decides *which*
+  firmware. `:off` means it takes none but a manual push from an operator.
+  """
+  @type update_mode :: :off | :automatic | :device_managed
+
   @type update_status ::
           :received
           | {:started, downloader_network_interface :: String.t() | nil}
@@ -97,4 +107,108 @@ defmodule NervesHubLink do
   """
   @spec send_file(GenServer.server(), Path.t()) :: :ok | {:error, :too_large | File.posix()}
   defdelegate send_file(server \\ Socket, file_path), to: Socket
+
+  @doc """
+  How this device receives firmware, as NervesHub last reported it.
+
+  `nil` until NervesHub says. A server too old to know about update modes never
+  will, and the device goes on taking updates exactly as it did before — so treat
+  `nil` as "not device managed" rather than as an error.
+
+  ## Example
+
+  ```elixir
+  NervesHubLink.update_mode()
+  #=> :automatic
+  ```
+  """
+  @spec update_mode(GenServer.server()) :: update_mode() | nil
+  defdelegate update_mode(server \\ Socket), to: Socket
+
+  @doc """
+  Whether NervesHub allows this device to manage its own updates.
+
+  An operator grants this per device, and it is off until they do. A settings
+  screen should ask before offering the choice, rather than offering a switch
+  NervesHub will refuse.
+  """
+  @spec managed_updates_allowed?(GenServer.server()) :: boolean()
+  defdelegate managed_updates_allowed?(server \\ Socket), to: Socket
+
+  @doc """
+  Ask NervesHub whether there is firmware waiting for this device.
+
+  Allowed in every update mode, including `:off` — a frozen device can still tell
+  its user that an update exists and an administrator needs to act.
+
+  The answer carries firmware metadata and no URL. Firmware URLs are signed and
+  time limited, so one is fetched when it is about to be used, by
+  `start_update/1`.
+
+  ## Example
+
+  ```elixir
+  NervesHubLink.check_for_update()
+  #=> {:ok, %{available?: true, firmware_meta: %{"version" => "1.2.0"}}}
+  ```
+  """
+  @spec check_for_update(GenServer.server()) ::
+          {:ok, %{available?: boolean(), firmware_meta: map() | nil}} | {:error, term()}
+  defdelegate check_for_update(server \\ Socket), to: Socket
+
+  @doc """
+  Ask NervesHub for firmware, and start applying it.
+
+  Returns `:ok` once NervesHub has sent the update — from there it proceeds
+  exactly as an update the deployment group pushed, reporting through
+  `NervesHubLink.Client`.
+
+  Deployment groups pace their rollouts, and a device asking for firmware takes a
+  slot in that pacing like any other update. A device that finds none free gets
+  `{:error, {:busy, minutes}}` and should try again no sooner than that.
+
+  ## Example
+
+  ```elixir
+  NervesHubLink.start_update()
+  #=> :ok
+
+  # or, when the deployment group has no room right now
+  NervesHubLink.start_update()
+  #=> {:error, {:busy, 5}}
+  ```
+  """
+  @spec start_update(GenServer.server()) :: :ok | {:error, term()}
+  defdelegate start_update(server \\ Socket), to: Socket
+
+  @doc """
+  Ask NervesHub to change how this device receives firmware.
+
+  A device can move itself between `:automatic` and `:device_managed`, and only
+  once an operator has allowed it — see `managed_updates_allowed?/1`. It can never
+  set `:off`, which would let a device stop its own updates and leave nobody able
+  to fix it remotely.
+
+  The mode is held by NervesHub rather than here, so it survives a reboot without
+  this library persisting anything, and `update_mode/1` always reports what
+  NervesHub actually has.
+
+  Returns `{:error, :disconnected}` when there is no connection to ask over. The
+  change is not queued: an application that must converge should re-assert it
+  from `c:NervesHubLink.Client.connected/0`, which is safe to repeat.
+
+  ## Example
+
+  ```elixir
+  NervesHubLink.set_update_mode(:device_managed)
+  #=> :ok
+
+  # or, when an operator has not allowed this device to manage its own updates
+  NervesHubLink.set_update_mode(:device_managed)
+  #=> {:error, :not_permitted}
+  ```
+  """
+  @spec set_update_mode(GenServer.server(), :automatic | :device_managed) ::
+          :ok | {:error, term()}
+  defdelegate set_update_mode(server \\ Socket, mode), to: Socket
 end
