@@ -181,17 +181,34 @@ config :nerves_hub_link,
 
 The timestamp is always sent, whatever you set here. NervesHub needs it to store the line at all.
 
-### One message per line
+### Sending a minute at a time
 
-This extension sends a message per log line, and NervesHub limits how often a device may send rather than how much it may say: a few messages a second, and **anything past that is dropped without telling the device**. A device logging faster than that loses lines, and the loss is invisible from both ends.
+There are two versions of this extension, and they are the same feature: 0.0.1 sends a message per log line, 0.1.0 collects lines and sends a minute of them at a time.
 
-Boot is when a device logs fastest, so the lines most worth having are the ones most likely to go. Keep the level high enough that the device is not talking constantly.
+Naming `NervesHubLink.Extensions.Logging` gets you both. There is nothing extra to configure: the device offers whichever version your NervesHub has, and prefers 0.1.0 where it is available.
+
+**Why it matters.** NervesHub limits how often a device may send rather than how much it may say: a few messages a second, and anything past that is dropped without telling the device. At a message per line that is a limit on *lines*, and boot is when a device logs fastest, so the lines most worth having are the ones most likely to go. At a minute per message the same budget carries a minute of logs.
+
+0.1.0 also collects from application start rather than from the attach, so the boot is still there to send, and holds the lines in a bounded buffer, reporting anything it had to drop:
+
+```elixir
+config :nerves_hub_link,
+  logging: [
+    level: :info,
+    # How many lines the collector holds before dropping the oldest.
+    max_lines: 1000,
+    # Never less than 60, whatever you put here.
+    interval_seconds: 60
+  ]
+```
 
 ### What is not sent
 
-The handler is installed when the extension is attached and removed when it is detached, so lines written before that are not sent. Nothing from the boot is reported unless the device was already attached.
+On 0.0.1 the handler is installed when the extension is attached and removed when it is detached, so lines written before that are not sent. 0.1.0 collects from application start instead, and has the boot.
 
-Only lines of text are sent. Reports, which is how OTP logs a crash, a supervisor starting a child, or an alarm, are skipped.
+0.0.1 sends only lines of text. Reports, which is how OTP logs a crash, a supervisor starting a child, or an alarm, are skipped by it. 0.1.0 sends those too, on one line and bounded in length, since they are most of what you want when a device misbehaves.
+
+Any single line longer than 8KB is cut short and marked, so one line cannot fill a message on its own.
 
 ## Network Identity
 

@@ -17,11 +17,17 @@ defmodule NervesHubLink.Extensions.Logging do
           NervesHubLink.Extensions.Geo,
           NervesHubLink.Extensions.Health,
           NervesHubLink.Extensions.LocalShell,
+          NervesHubLink.Extensions.NetworkIdentity,
           NervesHubLink.Extensions.Logging
         ]
 
   Like every extension, it sends nothing until NervesHub asks the device to
   attach it.
+
+  Naming this also registers `NervesHubLink.Extensions.Logging.Batched`, which
+  is version 0.1.0 of the same extension: it collects lines and sends a minute
+  of them per message rather than a message per line. The device offers
+  whichever version the platform has, so there is nothing to add for it.
 
   Every log line is a message over the socket, so only `:info` and above are sent
   by default. Devices on metered connections will want to raise that:
@@ -43,7 +49,10 @@ defmodule NervesHubLink.Extensions.Logging do
   The timestamp is always sent, whatever that is set to. NervesHub reads it to
   know when the line was written, and drops a line it cannot read one from.
   """
-  use NervesHubLink.Extensions, name: "logging", version: "0.0.1"
+  use NervesHubLink.Extensions,
+    name: "logging",
+    version: "0.0.1",
+    versions: [NervesHubLink.Extensions.Logging, NervesHubLink.Extensions.Logging.Batched]
 
   alias NervesHubLink.Extensions.Logging.LoggerHandler
 

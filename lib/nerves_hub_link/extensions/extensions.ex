@@ -134,26 +134,42 @@ defmodule NervesHubLink.Extensions do
   """
   @spec offer(%{String.t() => [String.t()]} | nil) :: %{String.t() => String.t()}
   def offer(advertisement) do
-    for {name, %{version: version}} <- list(),
-        offering?(advertisement, name, version),
-        into: %{},
-        do: {name, to_string(version)}
+    GenServer.call(__MODULE__, {:offer, advertisement})
   end
-
-  defp offering?(nil, _name, _version), do: true
-
-  defp offering?(advertisement, name, version) when is_map(advertisement) do
-    to_string(version) in List.wrap(advertisement[name])
-  end
-
-  # Anything else is not an advertisement. Treated as though the server named
-  # nothing, because refusing to offer extensions over a payload this client
-  # cannot read would make a malformed message worse than an empty one.
-  defp offering?(_advertisement, _name, _version), do: true
 
   @spec handle_event(String.t(), map()) :: :ok
   def handle_event(event, message) do
     GenServer.cast(__MODULE__, {:handle_event, event, message})
+  end
+
+  # The best version both sides have, most preferred first, matched as strings.
+  # There is no version arithmetic to do here: the platform has already said
+  # what it has, and asking a device to compare semver would mean a parser on
+  # every client for a question already answered.
+  defp choose(versions, advertisement, name) when is_map(advertisement) do
+    case advertisement[name] do
+      advertised when is_list(advertised) ->
+        versions
+        |> Enum.sort_by(&parsed/1, {:desc, Version})
+        |> Enum.find(&(&1 in advertised))
+
+      _not_advertised ->
+        nil
+    end
+  end
+
+  # No advertisement, or one this client cannot read. A NervesHub that names
+  # nothing still serves the versions it always did, so the oldest is offered:
+  # it is the one such a platform is sure to have.
+  defp choose(versions, _advertisement, _name) do
+    versions |> Enum.sort_by(&parsed/1, {:asc, Version}) |> List.first()
+  end
+
+  defp parsed(version) do
+    case Version.parse(version) do
+      {:ok, parsed} -> parsed
+      :error -> Version.parse!("0.0.0")
+    end
   end
 
   @spec start_link(keyword()) :: GenServer.on_start()
@@ -166,9 +182,31 @@ defmodule NervesHubLink.Extensions do
     {:ok, %{extensions: find_extensions()}}
   end
 
+  @doc """
+  The extension modules this device is configured with.
+
+  The configured list replaces the defaults rather than adding to them, which
+  is what makes this worth asking for rather than reading the config directly.
+  """
+  @spec configured_modules() :: [module()]
+  def configured_modules() do
+    Application.get_env(:nerves_hub_link, :extension_modules, @default_extension_modules)
+    |> Enum.flat_map(&siblings/1)
+    |> Enum.uniq()
+  end
+
+  # An extension implemented at more than one version names all of them, so
+  # configuring one is configuring the extension. Otherwise a device would have
+  # to list every version of `logging` by hand and would silently get no
+  # logging at all from a platform that has a version it did not think to name.
+  defp siblings(mod) do
+    _ = Code.ensure_loaded(mod)
+
+    if function_exported?(mod, :__versions__, 0), do: mod.__versions__(), else: [mod]
+  end
+
   defp find_extensions() do
-    modules =
-      Application.get_env(:nerves_hub_link, :extension_modules, @default_extension_modules)
+    modules = configured_modules()
 
     Enum.each(modules, &Code.ensure_loaded/1)
 
@@ -176,15 +214,62 @@ defmodule NervesHubLink.Extensions do
         function_exported?(mod, :module_info, 1),
         {:behaviour, behaviours} <- mod.module_info(:attributes),
         __MODULE__ in behaviours,
-        into: %{} do
-      {mod.__name__(),
-       %{module: mod, version: mod.__version__(), attached?: false, attach_ref: nil}}
+        reduce: %{} do
+      extensions ->
+        # Keyed by name *and* version. One extension can have more than one
+        # version implemented at once -- `logging` does, and 0.0.1 and 0.1.0 are
+        # not the same conversation -- so keeping only whichever module was
+        # found last would let load order decide what a device offers.
+        name = mod.__name__()
+        entry = Map.get(extensions, name, new_entry())
+        versions = Map.put(entry.versions, to_string(mod.__version__()), mod)
+
+        Map.put(extensions, name, %{entry | versions: versions} |> default_to_oldest())
     end
+  end
+
+  defp new_entry() do
+    %{versions: %{}, module: nil, version: nil, attached?: false, attach_ref: nil}
+  end
+
+  # What an extension resolves to before anything has been negotiated: the
+  # oldest version this device implements. `attach/1` called by hand has no
+  # advertisement to go on, and the oldest is the one a platform is sure to
+  # have. The newest would be a device guessing that the far end is current,
+  # and being wrong about it silently.
+  defp default_to_oldest(entry) do
+    version =
+      entry.versions |> Map.keys() |> Enum.sort_by(&parsed/1, {:asc, Version}) |> List.first()
+
+    %{entry | version: version, module: entry.versions[version]}
   end
 
   @impl GenServer
   def handle_call(:list, _from, state) do
     {:reply, find_extensions(), state}
+  end
+
+  def handle_call({:offer, advertisement}, _from, state) do
+    extensions = find_extensions()
+
+    chosen =
+      for {name, %{versions: versions}} <- extensions,
+          version = choose(Map.keys(versions), advertisement, name),
+          into: %{},
+          do: {name, version}
+
+    # Remembered so that the attach that follows starts the version that was
+    # offered. A device that offered 0.0.1 and then attached 0.1.0 would be
+    # talking a language the platform said it does not have.
+    extensions =
+      for {name, entry} <- extensions, into: %{} do
+        case chosen[name] do
+          nil -> {name, entry}
+          version -> {name, %{entry | version: version, module: entry.versions[version]}}
+        end
+      end
+
+    {:reply, chosen, %{state | extensions: extensions}}
   end
 
   def handle_call({:push, extension, event, payload}, _from, state) do
@@ -337,6 +422,11 @@ defmodule NervesHubLink.Extensions do
   defmacro __using__(opts) do
     name = opts[:name] || raise "Missing required extension arg: name"
     version = opts[:version] || raise "Missing required extension arg: version"
+    # Every module implementing this extension, when there is more than one
+    # version of it. Naming any of them configures all of them. Decided here
+    # rather than in the generated function, which would leave one arm of a
+    # `case` that can never be taken.
+    versions = opts[:versions] || quote(do: [__MODULE__])
 
     quote location: :keep do
       use GenServer
@@ -344,6 +434,9 @@ defmodule NervesHubLink.Extensions do
 
       def __name__(), do: unquote(name)
       def __version__(), do: unquote(version)
+
+      @doc false
+      def __versions__(), do: unquote(versions)
 
       # Re-implemented the included `child_spec/1` function from `use GenServer` so
       # that `@doc false` can be used to hide `child_spec/1` from the generated docs.
