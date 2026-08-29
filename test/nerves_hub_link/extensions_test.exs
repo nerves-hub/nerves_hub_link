@@ -84,6 +84,88 @@ defmodule NervesHubLink.ExtensionsTest do
     end
   end
 
+  describe "configured_modules/0" do
+    test "an extension with more than one version registers all of them" do
+      # Naming a version should be naming the extension. A device that had to
+      # list every version by hand would silently get nothing from a platform
+      # that has one it did not think of.
+      Application.put_env(:nerves_hub_link, :extension_modules, [
+        NervesHubLink.Extensions.Logging
+      ])
+
+      modules = Extensions.configured_modules()
+
+      assert NervesHubLink.Extensions.Logging in modules
+      assert NervesHubLink.Extensions.Logging.Batched in modules
+    end
+
+    test "naming the newer version registers the older one too" do
+      Application.put_env(:nerves_hub_link, :extension_modules, [
+        NervesHubLink.Extensions.Logging.Batched
+      ])
+
+      modules = Extensions.configured_modules()
+
+      assert NervesHubLink.Extensions.Logging in modules
+      assert NervesHubLink.Extensions.Logging.Batched in modules
+    end
+
+    test "naming both is the same as naming either" do
+      Application.put_env(:nerves_hub_link, :extension_modules, [
+        NervesHubLink.Extensions.Logging,
+        NervesHubLink.Extensions.Logging.Batched
+      ])
+
+      assert length(Extensions.configured_modules()) == 2
+    end
+
+    test "an extension with one version is left as it is" do
+      Application.put_env(:nerves_hub_link, :extension_modules, [Reporter])
+
+      assert Extensions.configured_modules() == [Reporter]
+    end
+  end
+
+  describe "offer/1" do
+    test "offers an extension the platform has, at the version it named" do
+      assert Extensions.offer(%{"reporter" => ["1.2.3"], "broken" => ["0.0.1"]}) == %{
+               "reporter" => "1.2.3",
+               "broken" => "0.0.1"
+             }
+    end
+
+    test "picks the version both sides have out of several" do
+      assert Extensions.offer(%{"reporter" => ["2.0.0", "1.2.3"]}) == %{"reporter" => "1.2.3"}
+    end
+
+    test "leaves out an extension the platform did not name" do
+      # Either it does not implement it or an operator has switched it off.
+      # Declaring it anyway would have this device offering to serve something
+      # nothing will ever ask it for.
+      assert Extensions.offer(%{"reporter" => ["1.2.3"]}) == %{"reporter" => "1.2.3"}
+    end
+
+    test "leaves out an extension whose versions do not overlap" do
+      assert Extensions.offer(%{"reporter" => ["2.0.0"]}) == %{}
+    end
+
+    test "offers nothing when the platform has nothing" do
+      assert Extensions.offer(%{}) == %{}
+    end
+
+    test "offers everything when no advertisement arrived" do
+      # A NervesHub old enough not to advertise still serves the versions it
+      # always did, so the answer is what this device implements rather than
+      # nothing at all.
+      assert Extensions.offer(nil) == %{"reporter" => "1.2.3", "broken" => "0.0.1"}
+    end
+
+    test "treats a payload it cannot read as no advertisement" do
+      # A malformed message should not cost this device every extension it has.
+      assert Extensions.offer("nonsense") == %{"reporter" => "1.2.3", "broken" => "0.0.1"}
+    end
+  end
+
   describe "attaching" do
     test "starts the extension and tells NervesHub" do
       :ok = Extensions.attach("reporter")

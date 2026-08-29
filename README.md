@@ -173,7 +173,7 @@ Any [valid Erlang ssl socket option](http://erlang.org/doc/man/ssl.html#TLS/DTLS
 ## Additional guides
 
 - [Configuration](guides/configuration.md): Runtime and compile time configuration examples.
-- [Extensions](guides/extensions.md): Setup and configure Health and Geo extensions.
+- [Extensions](guides/extensions.md): Setup and configure the Health, Geo, Logging and other extensions.
 - [Device-Managed Updates](guides/device_managed_updates.md): Let a device choose when it takes firmware.
 - [Debugging](guides/debugging.md): Tips to debug connection issues.
 

@@ -533,13 +533,12 @@ defmodule NervesHubLink.Socket do
     {:ok, resolve_update_request(socket, :start_update, result)}
   end
 
-  def handle_message(@device_topic, "extensions:get", _payload, socket) do
-    available_extensions =
-      for {name, %{version: ver}} <- Extensions.list(),
-          into: %{},
-          do: {name, to_string(ver)}
-
-    {:ok, join(socket, "extensions", available_extensions)}
+  # The platform's half of the negotiation: which extensions it has, and which
+  # versions of each. Offering only what it named means this device never
+  # declares a version nothing can serve, and never declares an extension an
+  # operator has switched off.
+  def handle_message(@device_topic, "extensions:get", payload, socket) do
+    {:ok, join(socket, @extensions_topic, Extensions.offer(payload["extensions"]))}
   end
 
   ##
