@@ -29,6 +29,7 @@ SPDX-License-Identifier = "CC0-1.0"
 path = [
  "guides/configuration.md",
  "guides/debugging.md",
+ "guides/device_managed_updates.md",
  "guides/extensions.md",
  "README.md",
  "RELEASE.md"
