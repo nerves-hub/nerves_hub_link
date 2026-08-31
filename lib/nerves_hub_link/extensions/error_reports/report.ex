@@ -201,7 +201,7 @@ defmodule NervesHubLink.Extensions.ErrorReports.Report do
     if byte_size(value) <= max_bytes do
       value
     else
-      # On a codepoint boundary: cutting mid-character leaves a binary that is
+      # On a code point boundary: cutting mid-character leaves a binary that is
       # no longer valid UTF-8, which the server stores and nothing renders.
       case value |> binary_part(0, max_bytes) |> String.chunk(:valid) do
         [valid | _rest] -> valid

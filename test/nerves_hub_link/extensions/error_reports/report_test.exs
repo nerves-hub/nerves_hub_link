@@ -128,7 +128,7 @@ defmodule NervesHubLink.Extensions.ErrorReports.ReportTest do
       assert length(Report.from_log_event(log_event({:badarg, stacktrace}))["frames"]) == 30
     end
 
-    test "keep a frame shape they do not recognise rather than dropping it" do
+    test "keep a frame shape they do not recognize rather than dropping it" do
       # Dropping it would shift every frame below and change the fingerprint.
       stacktrace = [:something_unexpected, {Foo, :bar, 0, [file: ~c"foo.ex", line: 1]}]
 
@@ -180,7 +180,7 @@ defmodule NervesHubLink.Extensions.ErrorReports.ReportTest do
 
     # Cutting mid-character leaves a binary the server stores and nothing
     # renders.
-    test "cut on a codepoint boundary" do
+    test "cut on a code point boundary" do
       report =
         Report.from_caught(:error, %RuntimeError{message: String.duplicate("é", 3_000)}, [])
 
