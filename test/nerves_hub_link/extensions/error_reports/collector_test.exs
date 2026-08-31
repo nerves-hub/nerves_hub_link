@@ -7,6 +7,7 @@ defmodule NervesHubLink.Extensions.ErrorReports.CollectorTest do
   use ExUnit.Case, async: false
 
   alias NervesHubLink.Extensions.ErrorReports.Collector
+  alias NervesHubLink.Extensions.ErrorReports.Report
 
   require Logger
 
@@ -156,9 +157,14 @@ defmodule NervesHubLink.Extensions.ErrorReports.CollectorTest do
 
   # Straight into the collector, so a test does not depend on what else in the
   # VM happens to be crashing while it runs.
+  #
+  # Real timestamps, not fabricated ones. The drop notice is dated from the
+  # clock, so a report carrying a made-up time is not comparable with it, and
+  # the ordering assertion below would hold or fail depending on the time of
+  # day the suite ran.
   defp collect(reason) do
     Collector.collect(%{
-      "timestamp" => "2026-08-31T10:00:0#{:rand.uniform(9)}.000000Z",
+      "timestamp" => Report.now(),
       "kind" => "error",
       "reason" => reason,
       "frames" => []

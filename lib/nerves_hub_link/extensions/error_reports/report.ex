@@ -84,8 +84,8 @@ defmodule NervesHubLink.Extensions.ErrorReports.Report do
   @doc """
   A report saying how many were dropped, and when the gap opened.
 
-  `at` is the moment the first report was dropped rather than the moment this
-  is built, so it sorts ahead of the reports that survived it. It carries its
+  `at` is the timestamp of the first report that was dropped, so the notice
+  sorts ahead of every report that survived it. It carries its
   own grouping key, so a fleet's dropped-report notices land on one issue
   instead of one per device.
   """

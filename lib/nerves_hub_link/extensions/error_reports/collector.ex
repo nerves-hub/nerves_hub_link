@@ -145,14 +145,18 @@ defmodule NervesHubLink.Extensions.ErrorReports.Collector do
     state = %{state | reports: :queue.in(report, state.reports), held: state.held + 1}
 
     if state.held > state.max_reports do
-      {_dropped, reports} = :queue.out(state.reports)
+      {{:value, dropped}, reports} = :queue.out(state.reports)
 
       %{
         state
         | reports: reports,
           held: state.held - 1,
           dropped: state.dropped + 1,
-          gap_opened: state.gap_opened || Report.now()
+          # The dropped report's own timestamp, not the clock. Dropping happens
+          # when the report that overflowed the buffer arrives, so a wall-clock
+          # reading here would date the notice *after* the oldest report that
+          # survived and sort it into the middle of them.
+          gap_opened: state.gap_opened || dropped["timestamp"] || Report.now()
       }
     else
       state
