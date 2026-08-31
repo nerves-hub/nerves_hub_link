@@ -45,6 +45,7 @@
     "nvread",
     "privkey",
     "reconnections",
+    "rollouts",
     "strftime",
     "subkey",
     "vcgencmd",

@@ -76,6 +76,157 @@ defmodule NervesHubLink.SocketMessagesTest do
     {:ok, socket: socket, data_path: data_path}
   end
 
+  describe "update mode" do
+    setup :join_device_topic
+
+    test "the mode NervesHub reports is what update_mode/1 answers", %{socket: socket} do
+      assert Socket.update_mode(socket) == nil
+      refute Socket.managed_updates_allowed?(socket)
+
+      push(socket, @device_topic, "update_mode", %{
+        "mode" => "device_managed",
+        "managed_updates_allowed" => true
+      })
+
+      # push/4 and this call arrive at the socket in order, so no waiting is needed.
+      assert Socket.update_mode(socket) == :device_managed
+      assert Socket.managed_updates_allowed?(socket)
+    end
+
+    test "a mode this version does not know is ignored rather than stored", %{socket: socket} do
+      push(socket, @device_topic, "update_mode", %{
+        "mode" => "whenever",
+        "managed_updates_allowed" => false
+      })
+
+      # A future NervesHub adding a mode must not leave an old device holding a
+      # value it cannot reason about.
+      assert Socket.update_mode(socket) == nil
+    end
+
+    test "setting the mode is answered by NervesHub's report of it", %{socket: socket} do
+      task = Task.async(fn -> Socket.set_update_mode(socket, :device_managed) end)
+
+      assert_push(@device_topic, "set_update_mode", %{mode: :device_managed})
+
+      push(socket, @device_topic, "update_mode", %{
+        "mode" => "device_managed",
+        "managed_updates_allowed" => true
+      })
+
+      assert Task.await(task) == :ok
+      assert Socket.update_mode(socket) == :device_managed
+    end
+
+    test "a refused change reports why, and the mode NervesHub still has", %{socket: socket} do
+      task = Task.async(fn -> Socket.set_update_mode(socket, :device_managed) end)
+
+      assert_push(@device_topic, "set_update_mode", %{mode: :device_managed})
+
+      push(socket, @device_topic, "update_mode", %{
+        "mode" => "automatic",
+        "managed_updates_allowed" => false,
+        "error" => "not_permitted"
+      })
+
+      assert Task.await(task) == {:error, :not_permitted}
+      assert Socket.update_mode(socket) == :automatic
+    end
+  end
+
+  describe "device initiated updates" do
+    setup :join_device_topic
+
+    test "check_for_update reports what NervesHub has waiting", %{socket: socket} do
+      task = Task.async(fn -> Socket.check_for_update(socket) end)
+
+      assert_push(@device_topic, "check_update", %{})
+
+      push(socket, @device_topic, "update_available", %{
+        "available" => true,
+        "firmware_meta" => %{"version" => "1.2.0"}
+      })
+
+      assert {:ok, %{available?: true, firmware_meta: %{"version" => "1.2.0"}}} = Task.await(task)
+    end
+
+    test "check_for_update reports nothing waiting", %{socket: socket} do
+      task = Task.async(fn -> Socket.check_for_update(socket) end)
+
+      assert_push(@device_topic, "check_update", %{})
+
+      push(socket, @device_topic, "update_available", %{
+        "available" => false,
+        "firmware_meta" => nil
+      })
+
+      assert {:ok, %{available?: false, firmware_meta: nil}} = Task.await(task)
+    end
+
+    test "start_update is answered by the update message itself", %{socket: socket} do
+      test_pid = self()
+
+      expect(UpdaterMock, :start_update, fn update_info, _fwup_config, _keys ->
+        send(test_pid, {:start_update, update_info})
+        {:ok, spawn(fn -> Process.sleep(:infinity) end)}
+      end)
+
+      task = Task.async(fn -> Socket.start_update(socket) end)
+
+      assert_push(@device_topic, "request_update", %{})
+
+      # NervesHub answers a request with the same "update" message a deployment
+      # group sends, so nothing new applies the firmware.
+      push(socket, @device_topic, "update", update_payload())
+
+      assert Task.await(task) == :ok
+      assert_receive {:start_update, %UpdateInfo{}}
+
+      # Applying an update reports itself, and every push has to be asserted or
+      # the socket blocks on it.
+      assert_push(@device_topic, "status_update", %{status: :received})
+    end
+
+    test "a refused request reports how long to wait", %{socket: socket} do
+      task = Task.async(fn -> Socket.start_update(socket) end)
+
+      assert_push(@device_topic, "request_update", %{})
+
+      push(socket, @device_topic, "update_rejected", %{"reason" => "busy", "delay_for" => 5})
+
+      assert Task.await(task) == {:error, {:busy, 5}}
+    end
+
+    test "a request refused for a reason this version does not know still resolves", %{
+      socket: socket
+    } do
+      task = Task.async(fn -> Socket.start_update(socket) end)
+
+      assert_push(@device_topic, "request_update", %{})
+
+      push(socket, @device_topic, "update_rejected", %{"reason" => "some_future_reason"})
+
+      # The caller must never be left parked on a reason we cannot name.
+      assert Task.await(task) == {:error, :error}
+    end
+
+    test "start_update is refused locally while an update is already running", %{socket: socket} do
+      expect(UpdaterMock, :start_update, fn _update_info, _fwup_config, _keys ->
+        {:ok, spawn(fn -> Process.sleep(:infinity) end)}
+      end)
+
+      push(socket, @device_topic, "update", update_payload())
+
+      # The update is applied before this is pushed, so asserting it is also how
+      # the test knows UpdateManager has been told.
+      assert_push(@device_topic, "status_update", %{status: :received})
+      assert UpdateManager.status() == :updating
+
+      # Asking for another firmware URL would only waste a deployment slot.
+      assert Socket.start_update(socket) == {:error, :updating}
+    end
+  end
+
   describe "device messages" do
     test "an update message starts an update with the configured firmware keys", %{socket: socket} do
       test_pid = self()
@@ -482,7 +633,7 @@ defmodule NervesHubLink.SocketMessagesTest do
                    remote_iex: true,
                    params: %{
                      "console_version" => "2.0.0",
-                     "device_api_version" => "2.3.0",
+                     "device_api_version" => "2.4.0",
                      "nerves_fw_uuid" => "8a8b902c-d1a9-58aa-6111-04ab57c2f2a8",
                      "nerves_fw_version" => "1.0.0",
                      "serial_number" => "test-device"
@@ -492,7 +643,7 @@ defmodule NervesHubLink.SocketMessagesTest do
     test "the device join describes the device and its firmware" do
       assert_join(@device_topic, params, :error)
 
-      assert params["device_api_version"] == "2.3.0"
+      assert params["device_api_version"] == "2.4.0"
       assert params["nerves_fw_uuid"] == "8a8b902c-d1a9-58aa-6111-04ab57c2f2a8"
       assert params["serial_number"] == "test-device"
       assert params["currently_downloading_uuid"] == nil
@@ -502,7 +653,7 @@ defmodule NervesHubLink.SocketMessagesTest do
     test "the console join carries only the protocol versions" do
       assert_join(@console_topic, params, :error)
 
-      assert params == %{"console_version" => "2.0.0", "device_api_version" => "2.3.0"}
+      assert params == %{"console_version" => "2.0.0", "device_api_version" => "2.4.0"}
     end
   end
 
@@ -617,7 +768,7 @@ defmodule NervesHubLink.SocketMessagesTest do
           data_path: data_path,
           fwup_public_keys: ["configured fwup key"],
           heartbeat_interval_msec: 30_000,
-          params: %{"device_api_version" => "2.3.0"},
+          params: %{"device_api_version" => "2.4.0"},
           rejoin_after: [1_000],
           remote_iex: false,
           remote_iex_timeout: 300,

@@ -59,6 +59,7 @@ defmodule NervesHubLink.MixProject do
         "README.md",
         "guides/configuration.md": [title: "Configuration"],
         "guides/extensions.md": [title: "Extensions"],
+        "guides/device_managed_updates.md": [title: "Device-Managed Updates"],
         "guides/debugging.md": [title: "Debugging"],
         "CHANGELOG.md": [title: "Changelog"]
       ],
