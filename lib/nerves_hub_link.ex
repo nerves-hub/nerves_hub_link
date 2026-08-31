@@ -20,6 +20,7 @@ defmodule NervesHubLink do
   a file to a connected console and more.
   """
 
+  alias NervesHubLink.Extensions.ErrorReports
   alias NervesHubLink.Socket
   alias NervesHubLink.UpdateManager
 
@@ -211,4 +212,47 @@ defmodule NervesHubLink do
   @spec set_update_mode(GenServer.server(), :automatic | :device_managed) ::
           :ok | {:error, term()}
   defdelegate set_update_mode(server \\ Socket, mode), to: Socket
+
+  @doc """
+  Report an error your application caught to NervesHub.
+
+  Crashes are reported on their own once the Error Reports extension is turned
+  on. This is for the ones that never reach the runtime: an error you rescued,
+  handled, and still want to see grouped across the fleet.
+
+      try do
+        charge(order)
+      rescue
+        error -> NervesHubLink.report_error(error, __STACKTRACE__, group: "payments")
+      end
+
+  ## Options
+
+    * `:group` - group these reports under a key of your own rather than by
+      their stacktrace. Every failure in a payment integration arriving through
+      one HTTP client function is one issue to the person on call, and six
+      issues to a stacktrace.
+    * `:context` - a map of extra detail to attach to this report alone. What
+      you want on *every* report belongs in
+      `NervesHubLink.Extensions.ErrorReports.Config.context/0` instead.
+    * `:kind` - `:error` (the default), `:exit` or `:throw`, matching the
+      clauses of `try/1`.
+
+  Returns `:ok` whether or not the extension is running, so a call to this is
+  never the thing that takes an application down. The report is buffered and
+  goes out with the next batch; nothing is sent at all until NervesHub attaches
+  the extension.
+  """
+  @spec report_error(term(), Exception.stacktrace(), keyword()) :: :ok
+  def report_error(error, stacktrace \\ [], opts \\ []) do
+    kind = Keyword.get(opts, :kind, :error)
+
+    kind
+    |> ErrorReports.Report.from_caught(error, stacktrace, opts)
+    |> ErrorReports.Collector.collect()
+  rescue
+    # Whatever went wrong building or buffering the report, the caller is
+    # already handling an error and must not be handed a second one.
+    _error -> :ok
+  end
 end
