@@ -2,8 +2,9 @@
 
 Extensions are pieces of non-critical functionality going over the NervesHub WebSocket. They are separated out under the Extensions mechanism so that the client can happily ignore anything extension-related in service of keeping firmware updates healthy. That is always the top priority.
 
-There are five extensions currently:
+There are six extensions currently:
 
+- [**Error Reports**](#error-reports) sends the device's exceptions and crashes to NervesHub, where they are grouped into issues you can resolve.
 - [**Geo**](#geo) provides hooks to send a device's GeoIP information.
 - [**Health**](#health) reports device metrics, alarms, metadata and similar.
 - [**Local Shell**](#local-shell) gives NervesHub the ability to expose an interactive shell in the UI.
@@ -13,6 +14,102 @@ There are five extensions currently:
 Your NervesHub server controls enabling and disabling extensions to allow you to switch them off if they impact operations.
 
 Which extensions a device offers is decided when it connects. The server names the extensions it has, and the versions of each, and the device offers back the ones it also implements. An extension the server does not name is not offered, so switching one off server-side stops the device doing the work as well as stops the reporting. A server that asks without naming anything is offered every extension this library implements, exactly as before. And nothing is offered until the server asks, so a server that never asks gets no extensions at all.
+
+## Error Reports
+
+The Error Reports extension sends the exceptions, exits and explicit error reports from your device to NervesHub, where they are grouped into issues you can resolve or mute. One direction only: nothing is ever sent back to the device.
+
+It is off by default. To turn it on, name it in `extension_modules`:
+
+```elixir
+config :nerves_hub_link,
+  extension_modules: [
+    NervesHubLink.Extensions.ErrorReports,
+    NervesHubLink.Extensions.Geo,
+    NervesHubLink.Extensions.Health,
+    NervesHubLink.Extensions.LocalShell,
+    NervesHubLink.Extensions.NetworkIdentity
+  ]
+```
+
+> #### This list replaces the defaults {: .warning}
+>
+> `extension_modules` replaces the default list rather than adding to it, so every extension you want has to be named, not just the one you are adding. `NervesHubLink.Extensions.LocalShell` is only in the default list when [`ExPTY`](https://hex.pm/packages/expty) is available, so leave it out of your list if you don't depend on it.
+
+Enabling it here only makes the extension available. Like every extension, it sends nothing until NervesHub asks the device to attach it, which you control in your Product settings.
+
+### What counts as an error
+
+Anything the runtime attaches a `crash_reason` to. That covers a process dying from an exception, an exit or a throw, a GenServer terminating abnormally, and a failed `Task`. It is also what `Logger.error(message, crash_reason: {exception, stacktrace})` sets, so code that already reports that way is picked up without changing.
+
+It is deliberately not every line logged at `:error`. Most of those are text, with no stacktrace to read and nothing to group two occurrences of the same bug by. It is also not only the reports OTP labels as crashes, which would miss anything reported by hand.
+
+### Reporting an error you handled
+
+Crashes report themselves. `NervesHubLink.report_error/3` is for the ones that never reach the runtime, where your code caught the error, dealt with it, and you still want to see it across the fleet:
+
+```elixir
+try do
+  charge(order)
+rescue
+  error ->
+    NervesHubLink.report_error(error, __STACKTRACE__,
+      group: "payments",
+      context: %{"order" => order.id}
+    )
+
+    :error
+end
+```
+
+It returns `:ok` whether or not the extension is running, so a call to it is never the thing that takes your application down.
+
+### How errors are grouped
+
+NervesHub decides which occurrences are the same bug, from the kind of error, the reason with its per-occurrence detail stripped out, and the top few stack frames. Line numbers are ignored on purpose: a line moves whenever the file above it changes, and an issue that splits on every unrelated edit is worse than no grouping at all.
+
+The `:group` option overrides that. Use it when your application knows something the stacktrace does not. Every failure in a payment integration arriving through one HTTP client function is one issue to the person on call, and six issues to a stacktrace.
+
+### Attaching device state
+
+Every report carries the device's uptime. Anything else is specific to your hardware and is not free to read, which matters because the moment of a crash is the worst time to go looking for it. So the rest is yours to supply:
+
+```elixir
+config :nerves_hub_link,
+  error_reports: [context: {MyApp.Telemetry, :error_context, []}]
+```
+
+```elixir
+defmodule MyApp.Telemetry do
+  def error_context() do
+    %{"reboot_count" => MyApp.reboot_count(), "site" => "depot-4"}
+  end
+end
+```
+
+The function is called once per batch on the extension's own process, never in the process that crashed, and one that raises costs the report its context and nothing else. Keys named `uptime_ms`, `free_memory_bytes` and `reboot_count` are given units in the NervesHub UI; everything else is shown as it arrives.
+
+You do not need to send the firmware UUID. NervesHub fills that in from the device's connection.
+
+### Buffering, and what is not sent
+
+Reports collect from application start rather than from the attach, so a crash during boot, or while the device is offline, is still there to send once there is a connection. That is the crash you most want and the one that is hardest to catch.
+
+A restart storm produces reports faster than they can be sent, so the buffer is bounded and drops the oldest past its limit. What it dropped is reported as an error of its own, ahead of the ones that survived, because a gap you can see beats a gap you cannot:
+
+```elixir
+config :nerves_hub_link,
+  error_reports: [
+    # How many reports the collector holds before dropping the oldest.
+    max_reports: 100,
+    # Never less than 60, whatever you put here.
+    interval_seconds: 60
+  ]
+```
+
+Sending is batched for the same reason logging is. NervesHub limits how often a device may send rather than how much it may say, so a message carrying twenty-five reports costs what one carrying a single report costs. A flush with more than that to send splits into several messages.
+
+Reasons are cut at 2KB and messages at 8KB, and a stacktrace past 30 frames is trimmed, so one enormous crash cannot fill a message on its own.
 
 ## Geo
 

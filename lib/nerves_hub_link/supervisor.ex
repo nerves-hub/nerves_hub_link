@@ -39,6 +39,7 @@ defmodule NervesHubLink.Supervisor do
   alias NervesHubLink.ArchiveManager
   alias NervesHubLink.Configurator
   alias NervesHubLink.Extensions
+  alias NervesHubLink.Extensions.ErrorReports
   alias NervesHubLink.Extensions.Logging
   alias NervesHubLink.ExtensionsSupervisor
   alias NervesHubLink.FwupConfig
@@ -72,6 +73,10 @@ defmodule NervesHubLink.Supervisor do
         # logging: the lines a device writes while booting are the ones worth
         # having, and by the time an extension is attached they are gone.
         log_collector(),
+        # Same reasoning, and the same reason it is not started by the
+        # extension: a crash during boot is the one worth having, and it is
+        # long gone by the time NervesHub decides it wants error reports.
+        error_report_collector(),
         {UpdateManager, {fwup_config, config.updater}},
         {ArchiveManager, config},
         {Socket, config},
@@ -88,6 +93,14 @@ defmodule NervesHubLink.Supervisor do
   defp log_collector() do
     if Logging.Batched in Extensions.configured_modules() do
       [{Logging.Collector, level: Logging.Config.level(), max_lines: Logging.Config.max_lines()}]
+    else
+      []
+    end
+  end
+
+  defp error_report_collector() do
+    if ErrorReports in Extensions.configured_modules() do
+      [{ErrorReports.Collector, max_reports: ErrorReports.Config.max_reports()}]
     else
       []
     end
