@@ -36,7 +36,9 @@ defmodule NervesHubLink.Extensions.Components do
     handler. NervesHub only ever sees the identifier and label; what the
     action does stays on the device. Invocation arrives as an explicit
     message, not over the console channel, so it works for fleets that keep
-    the remote console disabled.
+    the remote console disabled. An action declared with `confirm: true` has
+    NervesHub ask the operator to confirm before it is requested — for the
+    ones that are disruptive rather than merely useful.
   - `modes` — a selectable value (a display's day/night mode). The list of
     values is reported with the topology; the *current* value is read from
     the health metadata entry named by `metadata_key` (defaulting to the
@@ -63,6 +65,7 @@ defmodule NervesHubLink.Extensions.Components do
                     %{
                       identifier: "recalibrate",
                       label: "Recalibrate touch",
+                      confirm: true,
                       handler: {MyApp.Display, :recalibrate, []}
                     }
                   ],

@@ -162,6 +162,7 @@ defmodule NervesHubLink.Extensions.Components.Topology do
         wire =
           %{"identifier" => id}
           |> put_optional("label", string_or_nil(get(action, :label)))
+          |> put_optional("confirm", if(get(action, :confirm) == true, do: true))
 
         {acc ++ [wire],
          put_handler(handlers, {component_id, :action, id}, %{handler: handler, values: nil})}

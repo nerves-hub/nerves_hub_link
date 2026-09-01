@@ -69,7 +69,13 @@ defmodule NervesHubLink.Extensions.ComponentsTest do
                 metrics: ["display_fps"],
                 metadata: [:panel_firmware],
                 actions: [
-                  %{identifier: "recalibrate", label: "Recalibrate", handler: fn -> :ok end}
+                  %{identifier: "recalibrate", label: "Recalibrate", handler: fn -> :ok end},
+                  %{
+                    identifier: "reboot-panel",
+                    label: "Reboot panel",
+                    confirm: true,
+                    handler: fn -> :ok end
+                  }
                 ],
                 modes: [
                   %{
@@ -97,8 +103,15 @@ defmodule NervesHubLink.Extensions.ComponentsTest do
       assert component["metrics"] == ["display_fps"]
       assert component["metadata"] == ["panel_firmware"]
 
-      assert [action] = component["actions"]
+      assert [action, confirmed_action] = component["actions"]
       assert action == %{"identifier" => "recalibrate", "label" => "Recalibrate"}
+
+      # `confirm` travels only when declared, and only as `true`.
+      assert confirmed_action == %{
+               "identifier" => "reboot-panel",
+               "label" => "Reboot panel",
+               "confirm" => true
+             }
 
       assert [mode] = component["modes"]
       assert mode["identifier"] == "display_mode"
