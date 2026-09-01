@@ -48,7 +48,9 @@ defmodule NervesHubLink.Extensions.Components do
     values is reported with the topology; the *current* value is read from
     the health metadata entry named by `metadata_key` (defaulting to the
     mode's identifier), so keep that metadata entry up to date. A selection
-    is applied through the mode's handler.
+    is applied through the mode's handler. A mode must offer at least one
+    value — a valueless mode would accept anything while rendering as an
+    empty dropdown, so it is dropped.
 
   ## Configuration
 
@@ -139,20 +141,29 @@ defmodule NervesHubLink.Extensions.Components do
   """
   @spec report_topology() :: :ok | {:error, :detached | term()}
   def report_topology() do
-    case push("report", Topology.report()) do
-      {:ok, _ref} -> :ok
-      {:error, reason} -> {:error, reason}
+    # Routed through the extension process so the handler lookup it keeps is
+    # always the one belonging to the last reported topology. Not running
+    # means not attached.
+    case GenServer.whereis(__MODULE__) do
+      nil -> {:error, :detached}
+      _pid -> GenServer.call(__MODULE__, :report_topology)
     end
   end
 
   @impl GenServer
   def init(_opts) do
-    {:ok, %{runs: %{}}}
+    {:ok, %{runs: %{}, handlers: nil}}
+  end
+
+  @impl GenServer
+  def handle_call(:report_topology, _from, state) do
+    {result, state} = build_and_report(state)
+    {:reply, result, state}
   end
 
   @impl NervesHubLink.Extensions
   def handle_event("request", _payload, state) do
-    _ = report_topology()
+    {_result, state} = build_and_report(state)
     {:noreply, state}
   end
 
@@ -163,13 +174,14 @@ defmodule NervesHubLink.Extensions.Components do
       )
       when is_binary(ref) and is_binary(component) and is_binary(action) do
     context = %{"component" => component, "action" => action}
+    state = ensure_handlers(state)
 
-    case Topology.fetch_action(component, action) do
-      {:ok, handler} ->
+    case state.handlers[{component, :action, action}] do
+      %{handler: handler} ->
         params = if(is_map(payload["params"]), do: payload["params"], else: %{})
         {:noreply, start_run(state, ref, "action:result", context, run_action(handler, params))}
 
-      :error ->
+      nil ->
         _ = push_result("action:result", ref, context, {:error, "unknown action"})
         {:noreply, state}
     end
@@ -182,17 +194,18 @@ defmodule NervesHubLink.Extensions.Components do
       )
       when is_binary(ref) and is_binary(component) and is_binary(mode) and is_binary(value) do
     context = %{"component" => component, "mode" => mode, "value" => value}
+    state = ensure_handlers(state)
 
-    case Topology.fetch_mode(component, mode) do
-      {:ok, {handler, values}} ->
-        if values == [] or value in values do
+    case state.handlers[{component, :mode, mode}] do
+      %{handler: handler, values: values} ->
+        if value in values do
           {:noreply, start_run(state, ref, "mode:result", context, run_mode(handler, value))}
         else
           _ = push_result("mode:result", ref, context, {:error, "invalid value"})
           {:noreply, state}
         end
 
-      :error ->
+      nil ->
         _ = push_result("mode:result", ref, context, {:error, "unknown mode"})
         {:noreply, state}
     end
@@ -251,6 +264,27 @@ defmodule NervesHubLink.Extensions.Components do
     Logger.debug("[#{inspect(__MODULE__)}] unexpected message: #{inspect(msg)}")
     {:noreply, state}
   end
+
+  # Building the topology consults every source, so it happens when a report
+  # goes out — not on every invocation. The lookup used to dispatch an action
+  # is the one belonging to the topology NervesHub was last shown.
+  defp build_and_report(state) do
+    built = Topology.build()
+    state = %{state | handlers: built.handlers}
+
+    case push("report", built.report) do
+      {:ok, _ref} -> {:ok, state}
+      {:error, reason} -> {{:error, reason}, state}
+    end
+  end
+
+  # An invocation can arrive before any report has been built here — a server
+  # holding a topology from a previous connection is entitled to use it.
+  defp ensure_handlers(%{handlers: nil} = state) do
+    %{state | handlers: Topology.build().handlers}
+  end
+
+  defp ensure_handlers(state), do: state
 
   defp start_run(state, ref, event, context, fun) do
     parent = self()

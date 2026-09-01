@@ -55,29 +55,6 @@ defmodule NervesHubLink.Extensions.Components.Topology do
   @spec report() :: %{String.t() => [map()]}
   def report(), do: build().report
 
-  @doc """
-  Look up the handler for an action on a component or peer.
-  """
-  @spec fetch_action(String.t(), String.t()) :: {:ok, handler()} | :error
-  def fetch_action(component, action) do
-    case Map.fetch(build().handlers, {component, :action, action}) do
-      {:ok, %{handler: handler}} -> {:ok, handler}
-      :error -> :error
-    end
-  end
-
-  @doc """
-  Look up the handler and allowed values for a mode on a component or peer.
-  """
-  @spec fetch_mode(String.t(), String.t()) ::
-          {:ok, {handler(), [String.t()] | nil}} | :error
-  def fetch_mode(component, mode) do
-    case Map.fetch(build().handlers, {component, :mode, mode}) do
-      {:ok, %{handler: handler, values: values}} -> {:ok, {handler, values}}
-      :error -> :error
-    end
-  end
-
   defp config(), do: Application.get_env(:nerves_hub_link, :components, [])
 
   defp configured(key), do: config() |> Keyword.get(key, []) |> List.wrap()
@@ -85,16 +62,22 @@ defmodule NervesHubLink.Extensions.Components.Topology do
   defp from_sources(key) do
     config()
     |> Keyword.get(:sources, [])
-    |> Enum.flat_map(fn source ->
-      if Code.ensure_loaded?(source) and function_exported?(source, key, 0) do
-        List.wrap(apply(source, key, []))
-      else
-        []
-      end
-    end)
+    |> Enum.flat_map(&source_entries(&1, key))
+  end
+
+  # Rescued per source, so one raising callback loses its own contribution and
+  # nobody else's.
+  defp source_entries(source, key) do
+    if Code.ensure_loaded?(source) and function_exported?(source, key, 0) do
+      List.wrap(apply(source, key, []))
+    else
+      []
+    end
   rescue
     error ->
-      Logger.warning("[#{inspect(__MODULE__)}] a topology source failed: #{inspect(error)}")
+      Logger.warning(
+        "[#{inspect(__MODULE__)}] topology source #{inspect(source)} failed: #{inspect(error)}"
+      )
 
       []
   end
@@ -180,9 +163,8 @@ defmodule NervesHubLink.Extensions.Components.Topology do
   defp normalize_modes(component_id, modes, handlers) do
     Enum.reduce(modes, {[], handlers}, fn mode, {acc, handlers} ->
       with id when not is_nil(id) <- identifier(mode),
-           handler when not is_nil(handler) <- valid_handler(get(mode, :handler)) do
-        values = mode |> get(:values, []) |> vof() |> string_list()
-
+           handler when not is_nil(handler) <- valid_handler(get(mode, :handler)),
+           [_ | _] = values <- mode |> get(:values, []) |> vof() |> string_list() do
         wire =
           %{"identifier" => id}
           |> put_optional("label", string_or_nil(get(mode, :label)))
@@ -193,8 +175,10 @@ defmodule NervesHubLink.Extensions.Components.Topology do
          put_handler(handlers, {component_id, :mode, id}, %{handler: handler, values: values})}
       else
         _ ->
+          # A mode with no values would accept anything from the server while
+          # rendering as an empty dropdown, so it needs at least one value.
           Logger.warning(
-            "[#{inspect(__MODULE__)}] dropping mode without an identifier or valid handler on \"#{component_id}\": #{inspect(mode)}"
+            "[#{inspect(__MODULE__)}] dropping mode without an identifier, valid handler or values on \"#{component_id}\": #{inspect(mode)}"
           )
 
           {acc, handlers}

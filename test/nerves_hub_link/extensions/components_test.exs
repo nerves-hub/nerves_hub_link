@@ -10,6 +10,15 @@ defmodule NervesHubLink.Extensions.ComponentsTest do
   alias NervesHubLink.Extensions.Components
   alias NervesHubLink.Support.SocketStub
 
+  defmodule BrokenSource do
+    @behaviour NervesHubLink.Extensions.Components.Source
+
+    @impl NervesHubLink.Extensions.Components.Source
+    def networks() do
+      raise "probing the hardware went badly"
+    end
+  end
+
   defmodule ZWaveSource do
     @behaviour NervesHubLink.Extensions.Components.Source
 
@@ -158,6 +167,88 @@ defmodule NervesHubLink.Extensions.ComponentsTest do
       assert [%{"identifier" => "ok", "components" => [component]}] = report["assemblies"]
       assert component["identifier"] == "sensor"
       assert component["actions"] == []
+    end
+
+    test "a raising source loses only its own contribution" do
+      put_components_config(sources: [BrokenSource, ZWaveSource])
+
+      attach_and_request()
+
+      assert_receive {:pushed, "extensions", "components:report", report}
+
+      assert [%{"identifier" => "zwave"}] = report["networks"]
+    end
+
+    test "drops a mode without values" do
+      put_components_config(
+        assemblies: [
+          %{
+            identifier: "display",
+            components: [
+              %{
+                identifier: "panel",
+                modes: [
+                  %{identifier: "useless", values: [], handler: fn _value -> :ok end},
+                  %{identifier: "useful", values: ["on", "off"], handler: fn _value -> :ok end}
+                ]
+              }
+            ]
+          }
+        ]
+      )
+
+      attach_and_request()
+
+      assert_receive {:pushed, "extensions", "components:report", report}
+
+      assert [%{"components" => [%{"modes" => [mode]}]}] = report["assemblies"]
+      assert mode["identifier"] == "useful"
+    end
+
+    test "invocations dispatch against the last reported topology" do
+      put_action_config(fn -> "old" end)
+      attach_and_request()
+      assert_receive {:pushed, "extensions", "components:report", _report}
+
+      # The world changes: the action is renamed. Nothing re-reported yet, so
+      # the old name still dispatches and the new one is unknown.
+      put_components_config(
+        assemblies: [
+          %{
+            identifier: "display",
+            components: [
+              %{
+                identifier: "panel",
+                actions: [%{identifier: "restart", handler: fn -> "new" end}]
+              }
+            ]
+          }
+        ]
+      )
+
+      handle("components:action:run", %{
+        "ref" => "r1",
+        "component" => "panel",
+        "action" => "restart"
+      })
+
+      assert_receive {:pushed, "extensions", "components:action:result",
+                      %{"ref" => "r1", "status" => "error"}}
+
+      # A fresh report refreshes the lookup along with what NervesHub sees.
+      assert Components.report_topology() == :ok
+      assert_receive {:pushed, "extensions", "components:report", _report}
+
+      handle("components:action:run", %{
+        "ref" => "r2",
+        "component" => "panel",
+        "action" => "restart"
+      })
+
+      assert_receive {:pushed, "extensions", "components:action:result", result}
+      assert result["ref"] == "r2"
+      assert result["status"] == "ok"
+      assert result["output"] == "new"
     end
 
     test "resolves mode values given as an MFA at report time" do
