@@ -30,7 +30,12 @@ defmodule NervesHubLink.Extensions.Components do
 
   Components and peers can expose:
 
-  - `metrics` — health metric keys (numbers) that belong to this part
+  - `metrics` — health metric keys (numbers) that belong to this part. The
+    health metric namespace is device-wide, so a network fronting several
+    devices of one type should key their metrics per device —
+    `battery_pct_leak_sensor_2878f`. NervesHub trims the biggest suffix
+    shared by a peer's metrics when displaying them, so inside that peer's
+    box the reading is just "Battery pct".
   - `metadata` — health metadata keys (strings) that belong to this part
   - `actions` — operations an operator can invoke, each bound to a local
     handler. NervesHub only ever sees the identifier and label; what the
