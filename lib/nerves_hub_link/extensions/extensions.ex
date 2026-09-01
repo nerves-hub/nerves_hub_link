@@ -29,6 +29,7 @@ defmodule NervesHubLink.Extensions do
   # `NervesHubLink.Extensions.Logging` is deliberately absent while it is in
   # early release. See `guides/extensions.md` for how to opt in.
   @default_extension_modules [
+                               NervesHubLink.Extensions.Components,
                                NervesHubLink.Extensions.Geo,
                                NervesHubLink.Extensions.Health,
                                NervesHubLink.Extensions.NetworkIdentity

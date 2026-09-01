@@ -2,8 +2,9 @@
 
 Extensions are pieces of non-critical functionality going over the NervesHub WebSocket. They are separated out under the Extensions mechanism so that the client can happily ignore anything extension-related in service of keeping firmware updates healthy. That is always the top priority.
 
-There are six extensions currently:
+There are seven extensions currently:
 
+- [**Components**](#components) reports the device's hardware topology — assemblies of components and networks of peers — and carries out actions and mode changes requested from NervesHub.
 - [**Error Reports**](#error-reports) sends the device's exceptions and crashes to NervesHub, where they are grouped into issues you can resolve.
 - [**Geo**](#geo) provides hooks to send a device's GeoIP information.
 - [**Health**](#health) reports device metrics, alarms, metadata and similar.
@@ -14,6 +15,40 @@ There are six extensions currently:
 Your NervesHub server controls enabling and disabling extensions to allow you to switch them off if they impact operations.
 
 Which extensions a device offers is decided when it connects. The server names the extensions it has, and the versions of each, and the device offers back the ones it also implements. An extension the server does not name is not offered, so switching one off server-side stops the device doing the work as well as stops the reporting. A server that asks without naming anything is offered every extension this library implements, exactly as before. And nothing is offered until the server asks, so a server that never asks gets no extensions at all.
+
+## Components
+
+The Components extension reports the hardware topology of your device: assemblies of components (the display, the environment sensors) and networks of peers (the Z-Wave devices this hub talks to). The topology names which health metrics and metadata belong to each part, so NervesHub can render a temperature sensor as a box with its readings instead of a flat list of numbers. Components can also expose actions (bound to local handlers, invoked by explicit messages rather than the console channel) and modes (a selectable value, such as a display's day/night mode).
+
+Fixed topology is defined in config; runtime topology (paired peers, hot-plugged boards) comes from source modules. See `NervesHubLink.Extensions.Components` and `NervesHubLink.Extensions.Components.Source` for the full configuration reference.
+
+```elixir
+config :nerves_hub_link,
+  components: [
+    assemblies: [
+      %{
+        identifier: "display",
+        label: "Display",
+        components: [
+          %{
+            identifier: "panel",
+            label: "Panel",
+            metrics: ["display_fps"],
+            actions: [
+              %{identifier: "recalibrate", label: "Recalibrate touch", handler: {MyApp.Display, :recalibrate, []}}
+            ],
+            modes: [
+              %{identifier: "display_mode", label: "Display mode", values: ["day", "night", "auto"], handler: {MyApp.Display, :set_mode, []}}
+            ]
+          }
+        ]
+      }
+    ],
+    sources: [MyApp.ZWaveTopology]
+  ]
+```
+
+NervesHub never learns what an action does — only its identifier and label — and the handler runs on the device with a timeout, reporting its outcome back.
 
 ## Error Reports
 
