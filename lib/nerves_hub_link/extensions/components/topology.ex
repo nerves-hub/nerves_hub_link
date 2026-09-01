@@ -145,7 +145,7 @@ defmodule NervesHubLink.Extensions.Components.Topology do
         wire =
           %{"identifier" => id}
           |> put_optional("label", string_or_nil(get(action, :label)))
-          |> put_optional("confirm", if(get(action, :confirm) == true, do: true))
+          |> put_optional("confirm", confirm_flag(action))
 
         {acc ++ [wire],
          put_handler(handlers, {component_id, :action, id}, %{handler: handler, values: nil})}
@@ -200,6 +200,11 @@ defmodule NervesHubLink.Extensions.Components.Topology do
 
   defp put_optional(map, _key, nil), do: map
   defp put_optional(map, key, value), do: Map.put(map, key, value)
+
+  # `confirm` travels only when declared, and only as `true`.
+  defp confirm_flag(action) do
+    if get(action, :confirm) == true, do: true
+  end
 
   defp identifier(entry) do
     entry |> get(:identifier) |> string_or_nil()
