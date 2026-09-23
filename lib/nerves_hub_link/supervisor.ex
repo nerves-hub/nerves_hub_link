@@ -36,6 +36,7 @@ defmodule NervesHubLink.Supervisor do
 
   use Supervisor
 
+  alias NervesHubLink.Alarms.Tracker, as: AlarmsTracker
   alias NervesHubLink.ArchiveManager
   alias NervesHubLink.Configurator
   alias NervesHubLink.Extensions
@@ -77,6 +78,9 @@ defmodule NervesHubLink.Supervisor do
         # extension: a crash during boot is the one worth having, and it is
         # long gone by the time NervesHub decides it wants error reports.
         error_report_collector(),
+        # And again: an alarm raised while booting is raised before there is a
+        # connection, and only something already watching knows when.
+        alarms_tracker(),
         {UpdateManager, {fwup_config, config.updater}},
         {ArchiveManager, config},
         {Socket, config},
@@ -93,6 +97,15 @@ defmodule NervesHubLink.Supervisor do
   defp log_collector() do
     if Logging.Batched in Extensions.configured_modules() do
       [{Logging.Collector, level: Logging.Config.level(), max_lines: Logging.Config.max_lines()}]
+    else
+      []
+    end
+  end
+
+  # Only without Alarmist, which already knows when each alarm was set.
+  defp alarms_tracker() do
+    if Extensions.Alarms in Extensions.configured_modules() and not Code.ensure_loaded?(Alarmist) do
+      [AlarmsTracker]
     else
       []
     end
