@@ -20,8 +20,14 @@ defmodule NervesHubLink.AlarmsTest do
                ~U[2026-09-24 11:58:30.000000Z]
     end
 
+    # Compared in milliseconds either way round: the reference is read inside
+    # `to_utc/1`, a few microseconds after anything the test could read, and
+    # newer Elixir rounds a sub-second negative difference down to -1 second.
     test "defaults to now" do
-      assert DateTime.diff(DateTime.utc_now(), Alarms.to_utc(System.monotonic_time()), :second) in 0..1
+      diff =
+        DateTime.diff(Alarms.to_utc(System.monotonic_time()), DateTime.utc_now(), :millisecond)
+
+      assert abs(diff) < 1000
     end
   end
 
