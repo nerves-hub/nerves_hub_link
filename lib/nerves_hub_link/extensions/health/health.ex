@@ -13,11 +13,15 @@ defmodule NervesHubLink.Extensions.Health do
   the operational state of a device. The device's "health". This information
   is reported over the extensions mechanism to NervesHub for display, alerting
   and more.
+
+  While `NervesHubLink.Extensions.Alarms` is attached, alarms are sent there as
+  they happen and left out of health reports.
   """
 
   use NervesHubLink.Extensions, name: "health", version: "0.0.1"
 
   alias NervesHubLink.Alarms
+  alias NervesHubLink.Extensions.Alarms, as: AlarmsExtension
   alias NervesHubLink.Extensions.Health.DefaultReport
   alias NervesHubLink.Extensions.Health.DeviceStatus
 
@@ -85,9 +89,24 @@ defmodule NervesHubLink.Extensions.Health do
   end
 
   defp send_health_report(state) do
-    case push("report", %{"value" => check_health()}) do
+    case push("report", %{"value" => report_value()}) do
       {:ok, _} -> {:ok, %{state | report_sent: true}}
       {:error, _reason} -> {:error, state}
+    end
+  end
+
+  # Without the `alarms` key at all, rather than with an empty map: NervesHub
+  # reads an empty map as "no alarms" and would clear everything the alarms
+  # extension had raised, where a missing key says nothing about alarms.
+  defp report_value() do
+    case check_health() do
+      %DeviceStatus{} = status ->
+        if AlarmsExtension.attached?(),
+          do: status |> Map.from_struct() |> Map.delete(:alarms),
+          else: status
+
+      nil ->
+        nil
     end
   end
 
