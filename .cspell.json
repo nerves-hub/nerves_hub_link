@@ -36,6 +36,7 @@
     "getcap",
     "iroh",
     "kbps",
+    "mainboard",
     "maint",
     "msgpack",
     "Msgpax",
@@ -46,11 +47,14 @@
     "nodekey",
     "nvread",
     "privkey",
+    "recalibrated",
     "reconnections",
     "rollouts",
     "strftime",
     "subkey",
+    "unencodable",
     "vcgencmd",
-    "whenwhere"
+    "whenwhere",
+    "zwave"
   ]
 }
