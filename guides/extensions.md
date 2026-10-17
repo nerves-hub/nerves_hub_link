@@ -2,8 +2,9 @@
 
 Extensions are pieces of non-critical functionality going over the NervesHub WebSocket. They are separated out under the Extensions mechanism so that the client can happily ignore anything extension-related in service of keeping firmware updates healthy. That is always the top priority.
 
-There are six extensions currently:
+There are seven extensions currently:
 
+- [**Alarms**](#alarms) sends the device's alarms to NervesHub as they are raised and cleared.
 - [**Error Reports**](#error-reports) sends the device's exceptions and crashes to NervesHub, where they are grouped into issues you can resolve.
 - [**Geo**](#geo) provides hooks to send a device's GeoIP information.
 - [**Health**](#health) reports device metrics, alarms, metadata and similar.
@@ -14,6 +15,45 @@ There are six extensions currently:
 Your NervesHub server controls enabling and disabling extensions to allow you to switch them off if they impact operations.
 
 Which extensions a device offers is decided when it connects. The server names the extensions it has, and the versions of each, and the device offers back the ones it also implements. An extension the server does not name is not offered, so switching one off server-side stops the device doing the work as well as stops the reporting. A server that asks without naming anything is offered every extension this library implements, exactly as before. And nothing is offered until the server asks, so a server that never asks gets no extensions at all.
+
+## Alarms
+
+The Alarms extension sends the device's alarms to NervesHub as they are raised and cleared. Health sends alarms too, but only in its reports, which NervesHub asks for every hour or so while nobody is looking at the device. An alarm raised just after a report isn't seen for up to an hour, and one raised and cleared between two reports isn't seen at all.
+
+It is off by default. To turn it on, name it in `extension_modules`:
+
+```elixir
+config :nerves_hub_link,
+  extension_modules: [
+    NervesHubLink.Extensions.Alarms,
+    NervesHubLink.Extensions.Geo,
+    NervesHubLink.Extensions.Health,
+    NervesHubLink.Extensions.LocalShell,
+    NervesHubLink.Extensions.NetworkIdentity
+  ]
+```
+
+> #### This list replaces the defaults {: .warning}
+>
+> `extension_modules` replaces the default list rather than adding to it, so every extension you want has to be named, not just the one you are adding. `NervesHubLink.Extensions.LocalShell` is only in the default list when [`ExPTY`](https://hex.pm/packages/expty) is available, so leave it out of your list if you don't depend on it.
+
+Enabling it here only makes the extension available. Like every extension, it sends nothing until NervesHub asks the device to attach it, which you control in your Product settings. It needs a NervesHub that has the Alarms extension; against one that doesn't, the device keeps sending alarms in its health reports as before.
+
+### What is sent
+
+When NervesHub attaches the extension, it asks for every alarm currently set, and does so again whenever it needs to catch up. That corrects anything that changed while the device was offline. After that, each alarm is sent as it is raised and as it clears.
+
+Alarms are named and filtered exactly as Health names and filters them, including the `ignore_disk_full_mounts` setting under `health:`. So moving a device from one to the other doesn't change what NervesHub shows.
+
+While the Alarms extension is attached, Health leaves alarms out of its reports, so they aren't reported twice.
+
+### When alarms happened
+
+Each alarm carries the time it was raised or cleared. Alarms are watched from application start, so an alarm raised during boot, before the device had connected, is sent with the time it was actually raised rather than the time the device connected.
+
+With [`alarmist`](https://hex.pm/packages/alarmist), the times come from Alarmist. Without it, NervesHubLink watches `:alarm_handler` itself, and knows the time of every alarm raised after it started.
+
+Times are only sent once `NervesTime.synchronized?/0` says the clock is right. Until NTP has synced, the clock can be hours or days behind, so NervesHub uses the time each message arrives instead. A device that doesn't use NTP through `NervesTime` never sends times, and gets arrival times throughout, as it would from Health.
 
 ## Error Reports
 
@@ -226,6 +266,8 @@ Specifying a list of mounts to ignore will override the default `/`, so make sur
 
 The [default health report](`NervesHubLink.Extensions.Health.DefaultReport`) uses `:alarm_handler`, but we
 recommend the [`alarmist`](https://hex.pm/packages/alarmist) library for improved alarms handling.
+
+To have alarms reach NervesHub as they happen rather than with the next report, turn on the [Alarms extension](#alarms). While it is attached, health reports leave alarms out.
 
 ## Local Shell
 
