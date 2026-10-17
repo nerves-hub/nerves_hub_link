@@ -256,6 +256,36 @@ my_der_list = [<<213, 34, 234, 53, 83, 8, 2, ...>>]
 config :nerves_hub_link, downloader_ssl: [cacerts: my_der_list]
 ```
 
+## TLS 1.3 and session resumption
+
+The device offers TLS 1.2 to NervesHub by default. A device talking to a NervesHub that supports TLS 1.3 can offer that as well, and turn on TLS 1.3 session tickets so a reconnection costs a resumed handshake rather than a full one. A resumed handshake sends no certificates and verifies none, which is worth having on a slow or metered connection such as LTE-M, where the bytes and the round trips of a full handshake are the expensive part of reconnecting:
+
+```elixir
+config :nerves_hub_link,
+  ssl: [
+    versions: [:"tlsv1.3", :"tlsv1.2"],
+    session_tickets: :auto
+  ]
+```
+
+Both options are needed, as `:ssl` refuses `session_tickets` unless `:"tlsv1.3"` is one of the `:versions`. Keeping `:"tlsv1.2"` in the list means a device that reaches a server without TLS 1.3 still connects.
+
+NervesCloud has TLS 1.3 enabled. NervesHub always issues `stateless_with_cert` session tickets when TLS 1.3 is enabled, so the ticket carries the device's certificate: a resumed handshake exchanges none, and that is what lets the server tell which device has reconnected. Devices authenticating with a certificate (NervesKey, TPM, or a local certificate and key) and devices authenticating with a shared secret can both resume.
+
+Tickets are held in memory by the `ssl` application, so they outlive the socket reconnecting but not a reboot — the first connection after boot is always a full handshake. A ticket is matched on the server name, which is the host the device connects to, or `:sni` if you have configured one. Two `ssl` application variables bound the store, and their defaults (two hours, 1000 tickets) are generous for a device that only talks to one server:
+
+```elixir
+config :ssl,
+  client_session_ticket_lifetime: 7200,
+  client_session_ticket_store_size: 10
+```
+
+The firmware downloader leaves the TLS version to `Mint`, which already offers TLS 1.3. It can resume handshakes too, which is worth having when firmware is downloaded in parts or a download is retried:
+
+```elixir
+config :nerves_hub_link, downloader_ssl: [session_tickets: :auto]
+```
+
 ## HTTP proxy
 
 Devices that have to reach NervesHub through an HTTP proxy can configure one for both the WebSocket connection and the firmware downloader. The option is passed through to `Mint.HTTP.connect/4` as `:proxy`, so any `Mint` proxy form is accepted:
