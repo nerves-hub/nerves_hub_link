@@ -157,7 +157,7 @@ defmodule NervesHubLink.MixProject do
       {:dialyxir, "~> 1.1", only: [:dev, :test], runtime: false},
       {:excoveralls, "~> 0.10", only: :test},
       {:ex_doc, "~> 0.18", only: :docs, runtime: false},
-      {:expty, "~> 0.2.1", optional: true},
+      {:expty, "~> 0.3.0", optional: true},
       {:extty, "~> 0.4.1"},
       {:fwup, "~> 1.0"},
       {:jason, "~> 1.0"},
