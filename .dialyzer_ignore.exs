@@ -16,5 +16,10 @@
   # `NervesHubLink.ChannelTest`. Neither a spec on the calling function nor one
   # on a wrapper module shifts it: dialyzer narrows a declared return to what
   # it inferred, so the warning follows the code that matches on success.
-  {"lib/nerves_hub_link/channel.ex", :pattern_match}
+  {"lib/nerves_hub_link/channel.ex", :pattern_match},
+  # The same opaque-connection problem as the downloader above, where
+  # `NervesHubLink.Channel` hands the connection to `Mint.WebSocket.upgrade/5`.
+  # Reported on the OTP in `.tool-versions` and not on OTP 28, so which of
+  # these two channel entries is doing any work depends on the OTP being used.
+  {"lib/nerves_hub_link/channel.ex", :call_with_opaque}
 ]
