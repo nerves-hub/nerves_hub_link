@@ -19,10 +19,10 @@ defmodule NervesHubLink.SocketTest do
       opts = Socket.mint_opts(config)
 
       assert opts[:protocols] == [:http1]
-      assert opts[:transport_opts] == [verify: :verify_peer]
+      assert opts[:transport_opts][:verify] == :verify_peer
     end
 
-    test "ws omits transport_opts" do
+    test "ws omits the ssl options" do
       config = %Config{
         socket: [url: URI.parse("ws://example.test/socket")],
         ssl: [verify: :verify_peer]
@@ -31,7 +31,7 @@ defmodule NervesHubLink.SocketTest do
       opts = Socket.mint_opts(config)
 
       assert opts[:protocols] == [:http1]
-      refute Keyword.has_key?(opts, :transport_opts)
+      refute Keyword.has_key?(opts[:transport_opts], :verify)
     end
 
     test "http_opts pass through to Mint.HTTP.connect options" do
@@ -49,7 +49,7 @@ defmodule NervesHubLink.SocketTest do
 
       assert opts[:proxy] == proxy
       assert opts[:protocols] == [:http1]
-      assert opts[:transport_opts] == [verify: :verify_peer]
+      assert opts[:transport_opts][:verify] == :verify_peer
     end
 
     test "http_opts can override base keys" do
@@ -95,6 +95,86 @@ defmodule NervesHubLink.SocketTest do
 
       assert opts[:transport_opts][:verify] == :verify_none
       assert opts[:transport_opts][:cacerts] == [:fake_ca]
+    end
+
+    # Without a send timeout a stalled write blocks the connection forever, and
+    # blocks the heartbeat that would otherwise notice the link is dead.
+    test "writes are bounded by a send timeout over wss" do
+      config = %Config{socket: [url: URI.parse("wss://example.test/socket")], ssl: []}
+
+      opts = Socket.mint_opts(config)
+
+      assert opts[:transport_opts][:send_timeout] == 30_000
+      assert opts[:transport_opts][:send_timeout_close] == true
+    end
+
+    test "writes are bounded by a send timeout over ws too" do
+      config = %Config{socket: [url: URI.parse("ws://example.test/socket")], ssl: []}
+
+      opts = Socket.mint_opts(config)
+
+      assert opts[:transport_opts][:send_timeout] == 30_000
+      assert opts[:transport_opts][:send_timeout_close] == true
+    end
+
+    test "the send timeout is configurable" do
+      config = %Config{
+        socket: [url: URI.parse("wss://example.test/socket")],
+        send_timeout_msec: 5_000,
+        ssl: []
+      }
+
+      assert Socket.mint_opts(config)[:transport_opts][:send_timeout] == 5_000
+    end
+
+    test "ssl options win over the default send timeout" do
+      config = %Config{
+        socket: [url: URI.parse("wss://example.test/socket")],
+        ssl: [send_timeout: 1_000]
+      }
+
+      assert Socket.mint_opts(config)[:transport_opts][:send_timeout] == 1_000
+    end
+
+    test "http_opts transport_opts win over the default send timeout" do
+      config = %Config{
+        socket: [
+          url: URI.parse("wss://example.test/socket"),
+          http_opts: [transport_opts: [send_timeout: 2_000]]
+        ],
+        ssl: [verify: :verify_peer]
+      }
+
+      opts = Socket.mint_opts(config)
+
+      assert opts[:transport_opts][:send_timeout] == 2_000
+      assert opts[:transport_opts][:verify] == :verify_peer
+    end
+
+    test "a send timeout of 0 leaves writes unbounded" do
+      config = %Config{
+        socket: [url: URI.parse("wss://example.test/socket")],
+        send_timeout_msec: 0,
+        ssl: [verify: :verify_peer]
+      }
+
+      opts = Socket.mint_opts(config)
+
+      refute Keyword.has_key?(opts[:transport_opts], :send_timeout)
+      assert opts[:transport_opts][:verify] == :verify_peer
+    end
+
+    test "a send timeout of 0 over ws omits transport_opts entirely" do
+      config = %Config{
+        socket: [url: URI.parse("ws://example.test/socket")],
+        send_timeout_msec: 0,
+        ssl: [verify: :verify_peer]
+      }
+
+      opts = Socket.mint_opts(config)
+
+      assert opts[:protocols] == [:http1]
+      refute Keyword.has_key?(opts, :transport_opts)
     end
   end
 

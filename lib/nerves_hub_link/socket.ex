@@ -1015,15 +1015,29 @@ defmodule NervesHubLink.Socket do
   @doc false
   @spec mint_opts(Configurator.Config.t()) :: keyword()
   def mint_opts(config) do
+    ssl_opts = if config.socket[:url].scheme == "wss", do: config.ssl, else: []
+
     base =
-      if config.socket[:url].scheme == "wss" do
-        [protocols: [:http1], transport_opts: config.ssl]
-      else
-        [protocols: [:http1]]
+      case Keyword.merge(send_timeout_opts(config), ssl_opts) do
+        [] -> [protocols: [:http1]]
+        transport_opts -> [protocols: [:http1], transport_opts: transport_opts]
       end
 
     merge_http_opts(base, config.socket[:http_opts] || [])
   end
+
+  # Bounds how long a write to the socket may block. Without this a stalled
+  # write - a server that has stopped reading, so the send buffer never
+  # drains - blocks the connection indefinitely, and takes the heartbeat that
+  # would otherwise notice the dead link down with it. The device then sits
+  # there believing it is connected until something reboots it.
+  #
+  # `send_timeout_close` closes the socket when the timeout trips, so the
+  # ordinary disconnect and reconnect path takes over.
+  defp send_timeout_opts(%{send_timeout_msec: timeout}) when timeout in [0, nil], do: []
+
+  defp send_timeout_opts(%{send_timeout_msec: timeout}),
+    do: [send_timeout: timeout, send_timeout_close: true]
 
   # NervesHub distributes signing keys over the socket, but it also supplies the
   # firmware those keys verify. Letting it replace a locally configured key list
