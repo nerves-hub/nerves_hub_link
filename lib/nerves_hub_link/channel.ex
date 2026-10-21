@@ -418,9 +418,9 @@ defmodule NervesHubLink.Channel do
     end
   end
 
-  # An unencodable payload is this device's own bug, but taking the connection
-  # down over it would also take away the way to ship the fix, so it is
-  # reported to the caller and the connection left alone.
+  # A payload that cannot be encoded is this device's own bug, but taking the
+  # connection down over it would also take away the way to ship the fix, so
+  # it is reported to the caller and the connection left alone.
   defp encode(channel, message) do
     {:ok, channel.serializer.encode!(message)}
   rescue
