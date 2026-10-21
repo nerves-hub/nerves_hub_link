@@ -235,6 +235,7 @@ defmodule NervesHubLink.Socket do
         serializer: serializer,
         mint_opts: mint_opts(config),
         extensions: mint_extensions(config),
+        upgrade_timeout_msec: config.upgrade_timeout_msec,
         reconnect_after_msec: backoff_list(config.socket[:reconnect_after_msec], 1_000),
         rejoin_after_msec: backoff_list(config.rejoin_after, 5_000)
       )
@@ -855,6 +856,12 @@ defmodule NervesHubLink.Socket do
 
   defp handle_reply(ref, {:error, "detach"}, socket) do
     Extensions.detach(ref)
+    {:ok, socket}
+  end
+
+  defp handle_reply(ref, reply, socket) do
+    Logger.debug("[#{inspect(__MODULE__)}] Reply to #{ref} : #{inspect(reply)}")
+
     {:ok, socket}
   end
 

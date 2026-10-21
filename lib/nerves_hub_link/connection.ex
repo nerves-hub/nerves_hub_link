@@ -107,8 +107,13 @@ defmodule NervesHubLink.Connection do
           | {:reply, ref :: String.t(), reply :: reply()}
           | {:disconnected, reason :: term()}
 
-  @typedoc "A server's answer to a push. An empty response collapses to the bare atom."
-  @type reply :: :ok | :error | {:ok, term()} | {:error, term()}
+  @typedoc """
+  A server's answer to a push.
+
+  An empty response collapses to the bare atom. A status other than `ok` or
+  `error` keeps the string the server sent.
+  """
+  @type reply :: :ok | :error | {:ok, term()} | {:error, term()} | {String.t(), term()}
 
   defstruct [
     :uri,
@@ -123,7 +128,7 @@ defmodule NervesHubLink.Connection do
     headers: [],
     mint_opts: [protocols: [:http1]],
     extensions: [],
-    upgrade_timeout_msec: 30_000,
+    upgrade_timeout_msec: 10_000,
     reconnect_after_msec: [1_000],
     rejoin_after_msec: [5_000],
     upgrade_data: [],
@@ -628,14 +633,17 @@ defmodule NervesHubLink.Connection do
 
   defp handle_frame(connection, {:pong, _data}), do: {connection, []}
 
-  defp handle_frame(connection, {:close, _code, _reason}) do
-    {close(connection), [{:disconnected, :closed_by_remote}]}
-  end
-
-  defp handle_frame(connection, frame) do
-    Logger.warning("[NervesHubLink] ignoring an unexpected websocket frame : #{inspect(frame)}")
+  # A frame Mint could not read - a reserved opcode, a text frame that is not
+  # valid UTF-8 - arrives as an entry in the frame list rather than as a
+  # failure, because the rest of the batch may be perfectly good.
+  defp handle_frame(connection, {:error, reason}) do
+    Logger.warning("[NervesHubLink] dropping a frame that could not be read : #{inspect(reason)}")
 
     {connection, []}
+  end
+
+  defp handle_frame(connection, {:close, _code, _reason}) do
+    {close(connection), [{:disconnected, :closed_by_remote}]}
   end
 
   defp handle_payload(connection, payload, opcode) do
@@ -739,11 +747,14 @@ defmodule NervesHubLink.Connection do
   defp status_and_response(_payload), do: :error
 
   # The status is matched rather than converted, so a status NervesHub invents
-  # later cannot grow this device's atom table.
+  # later cannot grow this device's atom table. One this version does not know
+  # is passed through as it arrived rather than called an error, since Phoenix
+  # lets a channel reply with any status it likes.
   defp reply("ok", response) when response == %{}, do: :ok
   defp reply("error", response) when response == %{}, do: :error
   defp reply("ok", response), do: {:ok, response}
-  defp reply(_status, response), do: {:error, response}
+  defp reply("error", response), do: {:error, response}
+  defp reply(status, response), do: {status, response}
 
   ## Joins
 

@@ -261,6 +261,46 @@ defmodule NervesHubLink.ConnectionTest do
                Enum.find(harness.events, &match?({:reply, _, _}, &1))
     end
 
+    # Phoenix lets a channel reply with any status, and calling an unknown one
+    # an error would report a success as a failure.
+    test "a reply with a status this version does not know keeps that status" do
+      harness = Harness.connected() |> Harness.join(@device_topic)
+
+      assert {:ok, ref, connection} =
+               Connection.push(harness.connection, @device_topic, "work", %{})
+
+      harness = %{harness | connection: connection}
+
+      {message, harness} = Harness.await_received(harness, @device_topic, "work")
+
+      harness =
+        harness
+        |> Harness.server_reply(message, "accepted", %{"queued" => true})
+        |> Harness.await(&match?({:reply, ^ref, _}, &1))
+
+      assert {:reply, ^ref, {"accepted", %{"queued" => true}}} =
+               Enum.find(harness.events, &match?({:reply, _, _}, &1))
+    end
+
+    test "an error reply carrying a response keeps both" do
+      harness = Harness.connected() |> Harness.join(@device_topic)
+
+      assert {:ok, ref, connection} =
+               Connection.push(harness.connection, @device_topic, "work", %{})
+
+      harness = %{harness | connection: connection}
+
+      {message, harness} = Harness.await_received(harness, @device_topic, "work")
+
+      harness =
+        harness
+        |> Harness.server_reply(message, "error", %{"reason" => "busy"})
+        |> Harness.await(&match?({:reply, ^ref, _}, &1))
+
+      assert {:reply, ^ref, {:error, %{"reason" => "busy"}}} =
+               Enum.find(harness.events, &match?({:reply, _, _}, &1))
+    end
+
     test "a binary payload goes out as a binary frame" do
       harness = Harness.connected() |> Harness.join(@device_topic)
 
@@ -514,6 +554,25 @@ defmodule NervesHubLink.ConnectionTest do
         |> Harness.await(&(&1 == :connected))
 
       assert Connection.connected?(harness.connection)
+    end
+
+    # `#93` upstream: Mint reports these as entries in the frame list, and
+    # Slipstream had nothing that matched them.
+    test "a frame that cannot be read is dropped and the next one still arrives" do
+      message = %Message{topic: @device_topic, event: "identify", payload: %{}, ref: nil}
+      {:text, encoded} = JSON.encode!(message)
+
+      # Opcode 0xB is reserved, so Mint cannot read the first of these.
+      port =
+        raw_upgrade_server(split: false, then_send: <<0x8B, 0x00>> <> text_frame(encoded))
+
+      harness =
+        [connection: [uri: URI.parse("ws://localhost:#{port}/socket/websocket?vsn=2.0.0")]]
+        |> start_against_raw_server()
+        |> Harness.await(&match?({:message, @device_topic, "identify", _}, &1))
+
+      assert Connection.connected?(harness.connection)
+      refute Enum.any?(harness.events, &match?({:disconnected, _}, &1))
     end
 
     test "a frame in the same packet as the end of the response is still decoded" do

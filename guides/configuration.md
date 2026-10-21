@@ -286,6 +286,16 @@ The firmware downloader leaves the TLS version to `Mint`, which already offers T
 config :nerves_hub_link, downloader_ssl: [session_tickets: :auto]
 ```
 
+## Bounding the upgrade
+
+A server can accept the TCP connection and then never answer the websocket upgrade request. Nothing below the socket notices, and the heartbeat that would is not running until the upgrade completes, so the device waits. The upgrade is therefore given 10 seconds, after which the connection is closed and the usual reconnect takes over:
+
+```elixir
+config :nerves_hub_link, upgrade_timeout_msec: 30_000
+```
+
+Setting it to `0` waits forever, which is how things behaved before this option existed.
+
 ## Bounding socket writes
 
 A write to the socket can stall: the server stops reading, the send buffer fills, and the write never completes. Nothing below the socket notices, so the device keeps believing it is connected — and the heartbeat that would otherwise spot the dead connection is itself waiting behind the stalled write. Until something reboots the device, it is gone.

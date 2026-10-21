@@ -672,6 +672,35 @@ defmodule NervesHubLink.SocketMessagesTest do
     end
   end
 
+  describe "replies to the device's own pushes" do
+    setup :join_device_topic
+
+    # Phoenix sends a reply whenever a channel returns `{:reply, ...}`, so any
+    # of these pushes can be answered. Only the extensions detach means
+    # anything here, and the rest used to take the socket down.
+    test "an ok reply is ignored rather than fatal", %{socket: socket} do
+      NervesHubLink.send_update_status(socket, :received)
+
+      message = assert_push(@device_topic, "status_update", %{"status" => "received"})
+      server_reply(message, "ok")
+      assert_handled_in_order()
+
+      assert NervesHubLink.socket_connected?(socket)
+      assert Process.alive?(socket)
+    end
+
+    test "a reply with a status this version does not know is ignored too", %{socket: socket} do
+      NervesHubLink.send_update_status(socket, :received)
+
+      message = assert_push(@device_topic, "status_update", %{"status" => "received"})
+      server_reply(message, "accepted", %{"queued" => true})
+      assert_handled_in_order()
+
+      assert NervesHubLink.socket_connected?(socket)
+      assert Process.alive?(socket)
+    end
+  end
+
   describe "disconnecting" do
     test "a close from NervesHub tells the client and raises the alarm", %{socket: socket} do
       server_close()
