@@ -35,12 +35,41 @@ defmodule NervesHubLink.Socket do
   defmodule State do
     @moduledoc false
 
-    # `assigns` rather than named fields, because almost every function here
-    # reads something out of it and the two are easier to separate one at a
-    # time than all at once.
-    defstruct [:connection, assigns: %{}]
+    defstruct [
+      :config,
+      :connection,
+      :data_path,
+      :firmware_validation_timer,
+      :heartbeat_timer,
+      :iex_pid,
+      :iex_timer,
+      :params,
+      :remote_iex,
+      :signing_time_hint,
+      :update_mode,
+      :uploader_pid,
+      managed_updates_allowed: false,
+      pending_update_requests: %{},
+      redirect_count: 0
+    ]
 
-    @type t :: %__MODULE__{connection: NervesHubLink.Connection.t(), assigns: map()}
+    @type t :: %__MODULE__{
+            config: NervesHubLink.Configurator.Config.t(),
+            connection: NervesHubLink.Connection.t(),
+            data_path: Path.t(),
+            firmware_validation_timer: reference() | nil,
+            heartbeat_timer: reference() | nil,
+            iex_pid: pid() | nil,
+            iex_timer: reference() | nil,
+            params: map(),
+            remote_iex: boolean(),
+            signing_time_hint: DateTime.t() | nil,
+            update_mode: NervesHubLink.update_mode() | nil,
+            uploader_pid: pid() | nil,
+            managed_updates_allowed: boolean(),
+            pending_update_requests: map(),
+            redirect_count: non_neg_integer()
+          }
   end
 
   @console_topic "console"
@@ -210,24 +239,13 @@ defmodule NervesHubLink.Socket do
         rejoin_after_msec: backoff_list(config.rejoin_after, 5_000)
       )
 
-    socket =
-      %State{connection: connection}
-      |> assign(config: config)
-      |> assign(signing_time_hint: nil)
-      |> assign(params: config.params)
-      |> assign(remote_iex: config.remote_iex)
-      |> assign(iex_pid: nil)
-      |> assign(iex_timer: nil)
-      |> assign(uploader_pid: nil)
-      |> assign(data_path: config.data_path)
-      |> assign(started_at: System.monotonic_time(:millisecond))
-      |> assign(connected_at: nil)
-      |> assign(joined_at: nil)
-      |> assign(firmware_validation_timer_pid: nil)
-      |> assign(redirect_count: 0)
-      |> assign(update_mode: nil)
-      |> assign(managed_updates_allowed: false)
-      |> assign(pending_update_requests: %{})
+    socket = %State{
+      config: config,
+      connection: connection,
+      data_path: config.data_path,
+      params: config.params,
+      remote_iex: config.remote_iex
+    }
 
     if config.connect_wait_for_network do
       schedule_network_availability_check()
@@ -266,21 +284,21 @@ defmodule NervesHubLink.Socket do
   end
 
   defp headers(socket) do
-    config = socket.assigns.config
+    config = socket.config
 
     case Configurator.fetch_configurator() do
-      SharedSecret -> SharedSecret.headers(config, socket.assigns.signing_time_hint)
+      SharedSecret -> SharedSecret.headers(config, socket.signing_time_hint)
       _ -> config.socket[:headers] || []
     end
   end
 
-  defp handle_connect(%{assigns: %{config: config}} = socket) do
+  defp handle_connect(%State{config: config} = socket) do
     Logger.info("[NervesHubLink] connection to #{config.socket[:url].host} succeeded")
 
     currently_downloading_uuid = UpdateManager.currently_downloading_uuid()
 
     device_join_params =
-      socket.assigns.params
+      socket.params
       |> Map.put("currently_downloading_uuid", currently_downloading_uuid)
       |> Map.put("meta", %{
         "firmware_auto_revert_detected" => Client.firmware_auto_revert_detected?(),
@@ -288,12 +306,9 @@ defmodule NervesHubLink.Socket do
       })
 
     socket =
-      socket
-      |> assign(params: device_join_params)
+      %{socket | params: device_join_params, redirect_count: 0}
       |> join(@device_topic, device_join_params)
       |> maybe_join_console()
-      |> assign(connected_at: System.monotonic_time(:millisecond))
-      |> assign(redirect_count: 0)
       |> schedule_heartbeat()
 
     Alarms.clear_alarm(NervesHubLink.Disconnected)
@@ -310,7 +325,7 @@ defmodule NervesHubLink.Socket do
 
     send(self(), :get_network_interface)
 
-    {:ok, assign(socket, joined_at: System.monotonic_time(:millisecond))}
+    {:ok, socket}
   end
 
   defp handle_join(@console_topic, _reply, socket) do
@@ -342,15 +357,15 @@ defmodule NervesHubLink.Socket do
   end
 
   def handle_call(:console_active?, _from, socket) do
-    {:reply, socket.assigns.iex_pid != nil, socket}
+    {:reply, socket.iex_pid != nil, socket}
   end
 
   def handle_call(:update_mode, _from, socket) do
-    {:reply, socket.assigns.update_mode, socket}
+    {:reply, socket.update_mode, socket}
   end
 
   def handle_call(:managed_updates_allowed?, _from, socket) do
-    {:reply, socket.assigns.managed_updates_allowed, socket}
+    {:reply, socket.managed_updates_allowed, socket}
   end
 
   def handle_call(:check_for_update, from, socket) do
@@ -381,7 +396,7 @@ defmodule NervesHubLink.Socket do
     case File.stat(file_path) do
       {:ok, %{size: size}} when size < 10_485_760 ->
         {:ok, uploader_pid} = UploadFile.start_link(file_path, self())
-        {:reply, :ok, assign(socket, :uploader_pid, uploader_pid)}
+        {:reply, :ok, %{socket | uploader_pid: uploader_pid}}
 
       {:ok, _} ->
         {:reply, {:error, :too_large}, socket}
@@ -392,7 +407,7 @@ defmodule NervesHubLink.Socket do
   end
 
   def handle_call({:start_uploading, filename}, _from, socket) do
-    if socket.assigns.uploader_pid do
+    if socket.uploader_pid do
       socket = push(socket, @console_topic, "file-data/start", %{filename: filename})
 
       {:reply, :ok, socket}
@@ -402,7 +417,7 @@ defmodule NervesHubLink.Socket do
   end
 
   def handle_call({:upload_data, filename, index, chunk}, _from, socket) do
-    if socket.assigns.uploader_pid do
+    if socket.uploader_pid do
       socket =
         push(socket, @console_topic, "file-data", %{
           filename: filename,
@@ -417,18 +432,18 @@ defmodule NervesHubLink.Socket do
   end
 
   def handle_call({:finish_uploading, filename}, _from, socket) do
-    if socket.assigns.uploader_pid do
+    if socket.uploader_pid do
       socket = push(socket, @console_topic, "file-data/stop", %{filename: filename})
 
-      {:reply, :ok, assign(socket, :uploader_pid, nil)}
+      {:reply, :ok, %{socket | uploader_pid: nil}}
     else
       {:reply, :error, socket}
     end
   end
 
   def handle_call(:cancel_upload, _from, socket) do
-    if socket.assigns.uploader_pid do
-      true = Process.exit(socket.assigns.uploader_pid, :kill)
+    if socket.uploader_pid do
+      true = Process.exit(socket.uploader_pid, :kill)
       {:reply, :ok, socket}
     else
       {:reply, :error, socket}
@@ -494,25 +509,25 @@ defmodule NervesHubLink.Socket do
   defp handle_message(@device_topic, "fwup_public_keys", params, socket) do
     config =
       update_public_keys(
-        socket.assigns.config,
+        socket.config,
         :fwup_public_keys,
         params["keys"],
         "firmware"
       )
 
-    {:ok, assign(socket, config: config)}
+    {:ok, %{socket | config: config}}
   end
 
   defp handle_message(@device_topic, "archive_public_keys", params, socket) do
     config =
       update_public_keys(
-        socket.assigns.config,
+        socket.config,
         :archive_public_keys,
         params["keys"],
         "archive"
       )
 
-    {:ok, assign(socket, config: config)}
+    {:ok, %{socket | config: config}}
   end
 
   defp handle_message(@device_topic, "reboot", _params, socket) do
@@ -536,14 +551,14 @@ defmodule NervesHubLink.Socket do
 
   defp handle_message(@device_topic, "archive", params, socket) do
     {:ok, info} = ArchiveInfo.parse(params)
-    _ = ArchiveManager.apply_archive(info, socket.assigns.config.archive_public_keys)
+    _ = ArchiveManager.apply_archive(info, socket.config.archive_public_keys)
     {:ok, socket}
   end
 
   defp handle_message(@device_topic, "update", update, socket) do
     case UpdateInfo.parse(update) do
       {:ok, %UpdateInfo{} = info} ->
-        _ = UpdateManager.apply_update(info, socket.assigns.config.fwup_public_keys)
+        _ = UpdateManager.apply_update(info, socket.config.fwup_public_keys)
         # The same message answers a `request_update` and carries a deployment's
         # own push; resolving is a no-op when nothing asked.
         {:ok, resolve_update_request(socket, :start_update, :ok)}
@@ -559,9 +574,11 @@ defmodule NervesHubLink.Socket do
 
   defp handle_message(@device_topic, "update_mode", params, socket) do
     socket =
-      socket
-      |> assign(update_mode: parse_update_mode(params["mode"]))
-      |> assign(managed_updates_allowed: params["managed_updates_allowed"] == true)
+      %{
+        socket
+        | update_mode: parse_update_mode(params["mode"]),
+          managed_updates_allowed: params["managed_updates_allowed"] == true
+      }
 
     result =
       case params["error"] do
@@ -617,12 +634,12 @@ defmodule NervesHubLink.Socket do
     {:ok, set_iex_timer(socket)}
   end
 
-  defp handle_message(@console_topic, message, payload, %{assigns: %{iex_pid: nil}} = socket) do
+  defp handle_message(@console_topic, message, payload, %State{iex_pid: nil} = socket) do
     handle_message(@console_topic, message, payload, start_iex(socket))
   end
 
   defp handle_message(@console_topic, "dn", %{"data" => data}, socket) do
-    _ = ExTTY.send_text(socket.assigns.iex_pid, data)
+    _ = ExTTY.send_text(socket.iex_pid, data)
     {:ok, set_iex_timer(socket)}
   end
 
@@ -632,20 +649,20 @@ defmodule NervesHubLink.Socket do
          %{"height" => height, "width" => width},
          socket
        ) do
-    _ = ExTTY.window_change(socket.assigns.iex_pid, width, height)
+    _ = ExTTY.window_change(socket.iex_pid, width, height)
     {:ok, set_iex_timer(socket)}
   end
 
   defp handle_message(@console_topic, "file-data/start", params, socket) do
-    :ok = File.mkdir_p!(socket.assigns.data_path)
-    path = Path.join(socket.assigns.data_path, params["filename"])
+    :ok = File.mkdir_p!(socket.data_path)
+    path = Path.join(socket.data_path, params["filename"])
     _ = File.rm_rf!(path)
     :ok = File.touch!(path)
     {:ok, socket}
   end
 
   defp handle_message(@console_topic, "file-data", params, socket) do
-    path = Path.join(socket.assigns.data_path, params["filename"])
+    path = Path.join(socket.data_path, params["filename"])
 
     _res =
       File.open!(path, [:append], fn fd ->
@@ -676,7 +693,7 @@ defmodule NervesHubLink.Socket do
 
   @impl GenServer
   def handle_info(:connect_check_network_availability, socket) do
-    uri = URI.parse(socket.assigns.config.socket[:url])
+    uri = URI.parse(socket.config.socket[:url])
 
     case :gen_tcp.connect(to_charlist(uri.host), uri.port, [active: false, packet: 0], 2_000) do
       {:ok, tcp_socket} ->
@@ -699,7 +716,7 @@ defmodule NervesHubLink.Socket do
       Logger.info("[NervesHubLink] Firmware is validated, notifying NervesHub")
       socket = push(socket, @device_topic, "firmware_validated", %{})
 
-      {:noreply, assign(socket, :firmware_validation_timer_pid, nil)}
+      {:noreply, %{socket | firmware_validation_timer: nil}}
     else
       Logger.debug(
         "[NervesHubLink] Firmware is not marked as validated, checking again in #{@firmware_validation_check_interval / 1000} seconds"
@@ -748,7 +765,7 @@ defmodule NervesHubLink.Socket do
     {:noreply, set_iex_timer(socket)}
   end
 
-  def handle_info({:EXIT, iex_pid, reason}, %{assigns: %{iex_pid: iex_pid}} = socket) do
+  def handle_info({:EXIT, iex_pid, reason}, %State{iex_pid: iex_pid} = socket) do
     msg = "Remote IEx stopped: #{inspect(reason)}"
     socket = push(socket, @console_topic, "up", %{data: "\r******* #{msg} *******\r"})
     Logger.warning("[NervesHubLink] #{msg}")
@@ -763,11 +780,11 @@ defmodule NervesHubLink.Socket do
 
   def handle_info(
         {:EXIT, uploader_pid, :killed},
-        %{assigns: %{uploader_pid: uploader_pid}} = socket
+        %State{uploader_pid: uploader_pid} = socket
       ) do
     Logger.info("[#{inspect(__MODULE__)}] Upload cancelled")
 
-    {:noreply, assign(socket, :uploader_pid, nil)}
+    {:noreply, %{socket | uploader_pid: nil}}
   end
 
   def handle_info(:iex_timeout, socket) do
@@ -788,9 +805,8 @@ defmodule NervesHubLink.Socket do
   def handle_info(:get_network_interface, socket) do
     case network_interface(socket) do
       interface when is_binary(interface) ->
-        socket = push(socket, @device_topic, "report_network_interface", %{interface: interface})
-
-        {:noreply, assign(socket, network_interface: interface)}
+        {:noreply,
+         push(socket, @device_topic, "report_network_interface", %{interface: interface})}
 
       result ->
         Logger.warning(
@@ -854,14 +870,15 @@ defmodule NervesHubLink.Socket do
     _ = Client.handle_error(reason)
     :alarm_handler.set_alarm({NervesHubLink.Disconnected, [reason: reason]})
 
-    socket
-    |> cancel_heartbeat()
+    socket = cancel_heartbeat(socket)
+
     # When the failed upgrade response carried a `Date` header, the next
     # attempt signs with that time instead of the device clock, which recovers
     # a device whose RTC or NTP is not trustworthy yet. The signing itself
     # happens in `connect/1`, so what is kept here is only the hint.
-    |> assign(signing_time_hint: SharedSecret.server_time_hint(reason))
-    |> handle_redirect(reason)
+    socket = %{socket | signing_time_hint: SharedSecret.server_time_hint(reason)}
+
+    handle_redirect(socket, reason)
   end
 
   # A 3xx answer to the upgrade request is NervesHub pointing this device at
@@ -877,7 +894,7 @@ defmodule NervesHubLink.Socket do
 
   # Giving up rather than reconnecting: past this many hops the server is
   # redirecting in a loop, and retrying it only hides that.
-  defp follow_redirect(%{assigns: %{redirect_count: count}} = socket, _headers, reason)
+  defp follow_redirect(%State{redirect_count: count} = socket, _headers, reason)
        when count >= @max_redirects do
     Logger.error("[NervesHubLink] maximum redirect count reached : #{inspect(reason)}")
     {:ok, socket}
@@ -888,12 +905,13 @@ defmodule NervesHubLink.Socket do
       {:ok, uri} ->
         Logger.info("[NervesHubLink] redirect received : #{URI.to_string(uri)}")
 
-        socket
-        |> put_connection(
-          Connection.put_endpoint(socket.connection, uri, socket.connection.headers)
-        )
-        |> update(:redirect_count, &(&1 + 1))
-        |> reconnect()
+        connection = Connection.put_endpoint(socket.connection, uri, socket.connection.headers)
+
+        reconnect(%{
+          socket
+          | connection: connection,
+            redirect_count: socket.redirect_count + 1
+        })
 
       :error ->
         # A 3xx with nothing to redirect to. Nothing to follow, so this is
@@ -1065,11 +1083,11 @@ defmodule NervesHubLink.Socket do
   # unanswered one is how a connection that is dead without either end noticing
   # gets found out.
   defp schedule_heartbeat(socket) do
-    case socket.assigns.config.heartbeat_interval_msec do
+    case socket.config.heartbeat_interval_msec do
       interval when is_integer(interval) and interval > 0 ->
-        socket
-        |> cancel_heartbeat()
-        |> assign(heartbeat_timer: Process.send_after(self(), :heartbeat, interval))
+        socket = cancel_heartbeat(socket)
+
+        %{socket | heartbeat_timer: Process.send_after(self(), :heartbeat, interval)}
 
       _ ->
         socket
@@ -1077,26 +1095,14 @@ defmodule NervesHubLink.Socket do
   end
 
   defp cancel_heartbeat(socket) do
-    maybe_cancel_timer(socket.assigns[:heartbeat_timer])
+    maybe_cancel_timer(socket.heartbeat_timer)
 
-    assign(socket, heartbeat_timer: nil)
+    %{socket | heartbeat_timer: nil}
   end
 
   ##
   # State
   #
-
-  defp assign(%State{} = socket, attrs) do
-    %{socket | assigns: Enum.into(attrs, socket.assigns)}
-  end
-
-  defp assign(%State{} = socket, key, value) when is_atom(key) do
-    %{socket | assigns: Map.put(socket.assigns, key, value)}
-  end
-
-  defp update(%State{assigns: assigns} = socket, key, fun) when is_atom(key) do
-    %{socket | assigns: Map.put(assigns, key, fun.(Map.fetch!(assigns, key)))}
-  end
 
   defp joined?(%State{} = socket, topic), do: Connection.joined?(socket.connection, topic)
 
@@ -1176,7 +1182,7 @@ defmodule NervesHubLink.Socket do
       not joined?(socket, @device_topic) ->
         {:reply, {:error, :disconnected}, socket}
 
-      Map.has_key?(socket.assigns.pending_update_requests, kind) ->
+      Map.has_key?(socket.pending_update_requests, kind) ->
         {:reply, {:error, :already_in_progress}, socket}
 
       true ->
@@ -1185,9 +1191,9 @@ defmodule NervesHubLink.Socket do
             timer =
               Process.send_after(self(), {:update_request_timeout, kind}, @update_request_timeout)
 
-            pending = Map.put(socket.assigns.pending_update_requests, kind, {from, timer})
+            pending = Map.put(socket.pending_update_requests, kind, {from, timer})
 
-            {:noreply, assign(socket, pending_update_requests: pending)}
+            {:noreply, %{socket | pending_update_requests: pending}}
 
           {{:error, reason}, socket} ->
             {:reply, {:error, reason}, socket}
@@ -1196,14 +1202,14 @@ defmodule NervesHubLink.Socket do
   end
 
   defp resolve_update_request(socket, kind, result) do
-    case Map.pop(socket.assigns.pending_update_requests, kind) do
+    case Map.pop(socket.pending_update_requests, kind) do
       {nil, _pending} ->
         socket
 
       {{from, timer}, pending} ->
         _ = Process.cancel_timer(timer)
         GenServer.reply(from, result)
-        assign(socket, pending_update_requests: pending)
+        %{socket | pending_update_requests: pending}
     end
   end
 
@@ -1318,20 +1324,20 @@ defmodule NervesHubLink.Socket do
   end
 
   defp schedule_firmware_validation_status_check(socket) do
-    if socket.assigns.params["meta"]["firmware_validated"] == true do
+    if socket.params["meta"]["firmware_validated"] == true do
       Logger.debug("[NervesHubLink] Firmware validated and information sent during connection")
       socket
     else
-      maybe_cancel_timer(socket.assigns[:firmware_validation_timer_pid])
+      maybe_cancel_timer(socket.firmware_validation_timer)
 
-      pid =
+      timer =
         Process.send_after(
           self(),
           :firmware_validation_status_check,
           @firmware_validation_check_interval
         )
 
-      assign(socket, :firmware_validation_timer_pid, pid)
+      %{socket | firmware_validation_timer: timer}
     end
   end
 
@@ -1341,25 +1347,25 @@ defmodule NervesHubLink.Socket do
   @console_join_params ["console_version", "device_api_version"]
 
   defp maybe_join_console(socket) do
-    if socket.assigns.remote_iex do
-      join(socket, @console_topic, Map.take(socket.assigns.params, @console_join_params))
+    if socket.remote_iex do
+      join(socket, @console_topic, Map.take(socket.params, @console_join_params))
     else
       socket
     end
   end
 
   defp set_iex_timer(socket) do
-    timeout = socket.assigns.config.remote_iex_timeout * 1000
+    timeout = socket.config.remote_iex_timeout * 1000
 
-    maybe_cancel_timer(socket.assigns[:iex_timer])
+    maybe_cancel_timer(socket.iex_timer)
 
-    assign(socket, iex_timer: Process.send_after(self(), :iex_timeout, timeout))
+    %{socket | iex_timer: Process.send_after(self(), :iex_timeout, timeout)}
   end
 
   defp start_iex(socket) do
     shell_opts = [[dot_iex_path: dot_iex_path()]]
     {:ok, iex_pid} = ExTTY.start_link(handler: self(), type: :elixir, shell_opts: shell_opts)
-    assign(socket, iex_pid: iex_pid)
+    %{socket | iex_pid: iex_pid}
   end
 
   defp dot_iex_path() do
@@ -1368,12 +1374,12 @@ defmodule NervesHubLink.Socket do
     |> Enum.find("", &File.regular?/1)
   end
 
-  defp stop_iex(%{assigns: %{iex_pid: nil}} = socket), do: socket
+  defp stop_iex(%State{iex_pid: nil} = socket), do: socket
 
-  defp stop_iex(%{assigns: %{iex_pid: iex}} = socket) do
+  defp stop_iex(%State{iex_pid: iex} = socket) do
     _ = Process.unlink(iex)
     GenServer.stop(iex, :normal, 10_000)
-    assign(socket, iex_pid: nil)
+    %{socket | iex_pid: nil}
   end
 
   defp maybe_cancel_timer(nil), do: :ok

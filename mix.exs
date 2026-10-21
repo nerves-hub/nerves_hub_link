@@ -75,6 +75,13 @@ defmodule NervesHubLink.MixProject do
           NervesHubLink.Client,
           NervesHubLink.Client.Default
         ],
+        Connection: [
+          NervesHubLink.Connection,
+          NervesHubLink.Connection.Message,
+          NervesHubLink.Connection.Serializer,
+          NervesHubLink.Connection.Serializer.JSON,
+          NervesHubLink.Connection.Serializer.MsgPack
+        ],
         Configuration: [
           NervesHubLink.Supervisor,
           NervesHubLink.Configurator,

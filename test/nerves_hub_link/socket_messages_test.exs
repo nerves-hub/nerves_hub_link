@@ -317,7 +317,7 @@ defmodule NervesHubLink.SocketMessagesTest do
       server_push(@device_topic, "archive_public_keys", %{"keys" => ["archive key from server"]})
 
       assert_eventually(
-        :sys.get_state(socket).assigns.config.archive_public_keys == [
+        :sys.get_state(socket).config.archive_public_keys == [
           "archive key from server"
         ]
       )
@@ -331,7 +331,7 @@ defmodule NervesHubLink.SocketMessagesTest do
       server_push(@device_topic, "fwup_public_keys", %{"keys" => []})
       assert_handled_in_order()
 
-      assert :sys.get_state(socket).assigns.config.fwup_public_keys == ["configured fwup key"]
+      assert :sys.get_state(socket).config.fwup_public_keys == ["configured fwup key"]
     end
 
     test "an empty key list from the server does not clear the configured archive keys", %{
@@ -340,7 +340,7 @@ defmodule NervesHubLink.SocketMessagesTest do
       server_push(@device_topic, "archive_public_keys", %{"keys" => []})
       assert_handled_in_order()
 
-      assert :sys.get_state(socket).assigns.config.archive_public_keys == [
+      assert :sys.get_state(socket).config.archive_public_keys == [
                "configured archive key"
              ]
     end
@@ -350,7 +350,7 @@ defmodule NervesHubLink.SocketMessagesTest do
 
       assert NervesHubLink.socket_connected?(socket)
 
-      assert :sys.get_state(socket).assigns.config.fwup_public_keys == ["configured fwup key"]
+      assert :sys.get_state(socket).config.fwup_public_keys == ["configured fwup key"]
     end
 
     test "an extensions:get message asks to join the extensions topic" do
