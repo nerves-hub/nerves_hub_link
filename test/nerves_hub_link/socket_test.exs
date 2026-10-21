@@ -182,21 +182,21 @@ defmodule NervesHubLink.SocketTest do
     test "JSON asks for the v2 protocol" do
       assert {uri, serializer} = Socket.serializer_for(config(serializer: :json))
 
-      assert serializer == Slipstream.Serializer.PhoenixSocketV2Serializer
+      assert serializer == NervesHubLink.Connection.Serializer.JSON
       assert uri.query == "vsn=2.0.0"
     end
 
     test "msgpack asks for the v3 protocol" do
       assert {uri, serializer} = Socket.serializer_for(config(serializer: :msgpack))
 
-      assert serializer == NervesHubLink.MsgPackSerializer
+      assert serializer == NervesHubLink.Connection.Serializer.MsgPack
       assert uri.query == "vsn=3.0.0"
     end
 
     test "an unknown serializer falls back to JSON rather than refusing to connect" do
       assert {uri, serializer} = Socket.serializer_for(config(serializer: :something_else))
 
-      assert serializer == Slipstream.Serializer.PhoenixSocketV2Serializer
+      assert serializer == NervesHubLink.Connection.Serializer.JSON
       assert uri.query == "vsn=2.0.0"
     end
 

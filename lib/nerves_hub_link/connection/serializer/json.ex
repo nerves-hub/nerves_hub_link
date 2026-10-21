@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-defmodule NervesHubLink.Channel.Serializer.JSON do
+defmodule NervesHubLink.Connection.Serializer.JSON do
   @moduledoc """
   The default serializer, matching Phoenix's `Phoenix.Socket.V2.JSONSerializer`.
 
@@ -18,11 +18,11 @@ defmodule NervesHubLink.Channel.Serializer.JSON do
   Corresponds to `vsn=2.0.0`.
   """
 
-  @behaviour NervesHubLink.Channel.Serializer
+  @behaviour NervesHubLink.Connection.Serializer
 
-  alias NervesHubLink.Channel.Message
-  alias NervesHubLink.Channel.Serializer.DecodeError
-  alias NervesHubLink.Channel.Serializer.EncodeError
+  alias NervesHubLink.Connection.Message
+  alias NervesHubLink.Connection.Serializer.DecodeError
+  alias NervesHubLink.Connection.Serializer.EncodeError
 
   # The first byte of a binary frame says which kind of message it is. The
   # device only ever sends pushes; the other two are what the server sends.
@@ -33,8 +33,8 @@ defmodule NervesHubLink.Channel.Serializer.JSON do
   # Each envelope field's length is one byte of the header.
   @max_field_size 255
 
-  @impl NervesHubLink.Channel.Serializer
-  @spec encode!(Message.t()) :: NervesHubLink.Channel.Serializer.frame()
+  @impl NervesHubLink.Connection.Serializer
+  @spec encode!(Message.t()) :: NervesHubLink.Connection.Serializer.frame()
   def encode!(%Message{payload: {:binary, data}} = message) do
     join_ref = to_string(message.join_ref)
     ref = to_string(message.ref)
@@ -67,8 +67,8 @@ defmodule NervesHubLink.Channel.Serializer.JSON do
     end
   end
 
-  @impl NervesHubLink.Channel.Serializer
-  @spec decode!(binary(), NervesHubLink.Channel.Serializer.opcode()) :: Message.t()
+  @impl NervesHubLink.Connection.Serializer
+  @spec decode!(binary(), NervesHubLink.Connection.Serializer.opcode()) :: Message.t()
   def decode!(payload, :text) do
     case Jason.decode(payload) do
       {:ok, [join_ref, ref, topic, event, payload]} ->

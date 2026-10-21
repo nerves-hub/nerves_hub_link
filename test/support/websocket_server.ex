@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-defmodule NervesHubLink.Support.ChannelServer do
+defmodule NervesHubLink.Support.WebSocketServer do
   @moduledoc """
   A websocket server that does whatever a test needs it to.
 
@@ -46,7 +46,7 @@ defmodule NervesHubLink.Support.ChannelServer do
         send_resp(conn, Keyword.get(opts, :status, 403), "")
 
       :silent ->
-        send(test_pid, {:channel_test, :silent})
+        send(test_pid, {:connection_test, :silent})
         Process.sleep(:infinity)
         conn
     end
@@ -60,21 +60,21 @@ defmodule NervesHubLink.Support.ChannelServer do
     @impl WebSock
     def init(opts) do
       test_pid = Keyword.fetch!(opts, :test_pid)
-      send(test_pid, {:channel_test, {:server, self()}})
+      send(test_pid, {:connection_test, {:server, self()}})
 
       {:ok, %{test_pid: test_pid}}
     end
 
     @impl WebSock
     def handle_in({payload, opcode: opcode}, state) do
-      send(state.test_pid, {:channel_test, {:frame, opcode, payload}})
+      send(state.test_pid, {:connection_test, {:frame, opcode, payload}})
 
       {:ok, state}
     end
 
     @impl WebSock
     def handle_control({payload, opcode: opcode}, state) do
-      send(state.test_pid, {:channel_test, {:frame, opcode, payload}})
+      send(state.test_pid, {:connection_test, {:frame, opcode, payload}})
 
       {:ok, state}
     end
@@ -88,7 +88,7 @@ defmodule NervesHubLink.Support.ChannelServer do
 
     @impl WebSock
     def terminate(_reason, state) do
-      send(state.test_pid, {:channel_test, :terminated})
+      send(state.test_pid, {:connection_test, :terminated})
 
       :ok
     end

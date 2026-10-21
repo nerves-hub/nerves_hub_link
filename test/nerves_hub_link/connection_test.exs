@@ -2,22 +2,22 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-defmodule NervesHubLink.ChannelTest do
+defmodule NervesHubLink.ConnectionTest do
   @moduledoc """
-  Drives the channel against a real websocket server.
+  Drives the connection against a real websocket server.
 
-  The channel is a data structure, so the test process owns the connection
-  itself and feeds the channel what arrives. Everything here therefore goes
+  The connection is a data structure, so the test process owns the connection
+  itself and feeds the connection what arrives. Everything here therefore goes
   over a real socket: a real upgrade, real frames, a real close.
   """
 
   use ExUnit.Case, async: true
 
   alias Mint.WebSocket.UpgradeFailureError
-  alias NervesHubLink.Channel
-  alias NervesHubLink.Channel.Message
-  alias NervesHubLink.Channel.Serializer.JSON
-  alias NervesHubLink.Support.ChannelHarness, as: Harness
+  alias NervesHubLink.Connection
+  alias NervesHubLink.Connection.Message
+  alias NervesHubLink.Connection.Serializer.JSON
+  alias NervesHubLink.Support.ConnectionHarness, as: Harness
 
   @device_topic "device"
 
@@ -26,29 +26,29 @@ defmodule NervesHubLink.ChannelTest do
       harness = Harness.connected()
 
       assert :connected in harness.events
-      assert Channel.connected?(harness.channel)
+      assert Connection.connected?(harness.connection)
     end
 
     test "the upgrade request asks for the path and protocol version in the URL" do
       port = Harness.start_server()
 
-      channel =
-        Channel.new(
+      connection =
+        Connection.new(
           uri: URI.parse("ws://localhost:#{port}/socket/websocket?vsn=2.0.0"),
           serializer: JSON
         )
 
-      assert {:ok, _channel} = Channel.connect(channel)
+      assert {:ok, _channel} = Connection.connect(connection)
     end
 
     test "a connection that cannot be opened at all is an error, with nothing left open" do
       # Port 1 on loopback: nothing listens there, and binding it needs root.
-      channel =
-        Channel.new(uri: URI.parse("ws://localhost:1/socket/websocket"), serializer: JSON)
+      connection =
+        Connection.new(uri: URI.parse("ws://localhost:1/socket/websocket"), serializer: JSON)
 
-      assert {:error, %Mint.TransportError{}, channel} = Channel.connect(channel)
-      refute Channel.connected?(channel)
-      assert channel.conn == nil
+      assert {:error, %Mint.TransportError{}, connection} = Connection.connect(connection)
+      refute Connection.connected?(connection)
+      assert connection.conn == nil
     end
 
     test "a refused upgrade disconnects, carrying the status and headers" do
@@ -62,7 +62,7 @@ defmodule NervesHubLink.ChannelTest do
                Enum.filter(harness.events, &match?({:disconnected, _}, &1))
 
       assert error.status_code == 403
-      refute Channel.connected?(harness.channel)
+      refute Connection.connected?(harness.connection)
     end
 
     # The headers have to survive, because a redirect is followed by reading
@@ -86,23 +86,26 @@ defmodule NervesHubLink.ChannelTest do
 
     test "a server that accepts the connection and never answers times out" do
       harness =
-        [server: [mode: :silent], channel: [upgrade_timeout_msec: 200]]
+        [server: [mode: :silent], connection: [upgrade_timeout_msec: 200]]
         |> Harness.start()
         |> Harness.connect()
         |> Harness.await(&(&1 == {:disconnected, :upgrade_timeout}))
 
-      refute Channel.connected?(harness.channel)
+      refute Connection.connected?(harness.connection)
     end
 
     test "an upgrade timer from an earlier attempt is ignored" do
-      harness = Harness.connected(channel: [upgrade_timeout_msec: 60_000])
+      harness = Harness.connected(connection: [upgrade_timeout_msec: 60_000])
 
       # The ref this names belongs to no attempt, so it must not be taken for
       # the current one.
       assert :unknown =
-               Channel.handle_transport(harness.channel, {:channel_upgrade_timeout, make_ref()})
+               Connection.handle_transport(
+                 harness.connection,
+                 {:connection_upgrade_timeout, make_ref()}
+               )
 
-      assert Channel.connected?(harness.channel)
+      assert Connection.connected?(harness.connection)
     end
   end
 
@@ -110,8 +113,10 @@ defmodule NervesHubLink.ChannelTest do
     test "an accepted join reports the server's response" do
       harness = Harness.connected()
 
-      assert {:ok, channel} = Channel.join(harness.channel, @device_topic, %{"id" => "abc"})
-      harness = %{harness | channel: channel}
+      assert {:ok, connection} =
+               Connection.join(harness.connection, @device_topic, %{"id" => "abc"})
+
+      harness = %{harness | connection: connection}
 
       {message, harness} = Harness.await_received(harness, @device_topic, "phx_join")
 
@@ -127,14 +132,14 @@ defmodule NervesHubLink.ChannelTest do
       assert {:joined, @device_topic, %{"extensions" => ["health"]}} =
                Enum.find(harness.events, &match?({:joined, _, _}, &1))
 
-      assert Channel.joined?(harness.channel, @device_topic)
+      assert Connection.joined?(harness.connection, @device_topic)
     end
 
     test "a refused join reports why, and the topic is not joined" do
       harness = Harness.connected()
 
-      assert {:ok, channel} = Channel.join(harness.channel, @device_topic)
-      harness = %{harness | channel: channel}
+      assert {:ok, connection} = Connection.join(harness.connection, @device_topic)
+      harness = %{harness | connection: connection}
 
       {message, harness} = Harness.await_received(harness, @device_topic, "phx_join")
 
@@ -146,32 +151,33 @@ defmodule NervesHubLink.ChannelTest do
       assert {:join_failed, @device_topic, {:failed_to_join, %{"reason" => "unauthorized"}}} =
                Enum.find(harness.events, &match?({:join_failed, _, _}, &1))
 
-      refute Channel.joined?(harness.channel, @device_topic)
-      assert Channel.join_status(harness.channel, @device_topic) == :closed
+      refute Connection.joined?(harness.connection, @device_topic)
+      assert Connection.join_status(harness.connection, @device_topic) == :closed
     end
 
     test "joining a topic that is already joined is left alone" do
       harness = Harness.connected() |> Harness.join(@device_topic)
 
-      before = harness.channel.ref
+      before = harness.connection.ref
 
-      assert {:ok, channel} = Channel.join(harness.channel, @device_topic)
+      assert {:ok, connection} = Connection.join(harness.connection, @device_topic)
 
       # No new ref was taken, so nothing was sent.
-      assert channel.ref == before
+      assert connection.ref == before
     end
 
     test "joining before the connection is up is an error" do
       harness = Harness.start()
 
-      assert {:error, :not_connected, _channel} = Channel.join(harness.channel, @device_topic)
+      assert {:error, :not_connected, _channel} =
+               Connection.join(harness.connection, @device_topic)
     end
 
     test "a topic never joined has no join status" do
       harness = Harness.connected()
 
-      assert Channel.join_status(harness.channel, "nope") == nil
-      refute Channel.joined?(harness.channel, "nope")
+      assert Connection.join_status(harness.connection, "nope") == nil
+      refute Connection.joined?(harness.connection, "nope")
     end
 
     test "rejoining repeats the parameters the topic was joined with" do
@@ -180,10 +186,10 @@ defmodule NervesHubLink.ChannelTest do
         |> Harness.join(@device_topic, %{"id" => "abc"})
         |> close_topic(@device_topic)
 
-      assert {:ok, channel} = Channel.rejoin(harness.channel, @device_topic)
+      assert {:ok, connection} = Connection.rejoin(harness.connection, @device_topic)
 
       # The stored params went out again, under a new ref.
-      harness = Harness.drain(%{harness | channel: channel})
+      harness = Harness.drain(%{harness | connection: connection})
 
       joins = Enum.filter(Harness.received(harness), &(&1.event == "phx_join"))
 
@@ -199,16 +205,16 @@ defmodule NervesHubLink.ChannelTest do
     test "rejoining a topic that is still joined does nothing" do
       harness = Harness.connected() |> Harness.join(@device_topic)
 
-      before = harness.channel.ref
+      before = harness.connection.ref
 
-      assert {:ok, channel} = Channel.rejoin(harness.channel, @device_topic)
-      assert channel.ref == before
+      assert {:ok, connection} = Connection.rejoin(harness.connection, @device_topic)
+      assert connection.ref == before
     end
 
     test "rejoining a topic that was never joined has no parameters to repeat" do
       harness = Harness.connected()
 
-      assert {:error, :never_joined, _channel} = Channel.rejoin(harness.channel, "nope")
+      assert {:error, :never_joined, _channel} = Connection.rejoin(harness.connection, "nope")
     end
   end
 
@@ -216,10 +222,12 @@ defmodule NervesHubLink.ChannelTest do
     test "a push is sent on the joined topic and answered by ref" do
       harness = Harness.connected() |> Harness.join(@device_topic)
 
-      assert {:ok, ref, channel} =
-               Channel.push(harness.channel, @device_topic, "status_update", %{status: "received"})
+      assert {:ok, ref, connection} =
+               Connection.push(harness.connection, @device_topic, "status_update", %{
+                 status: "received"
+               })
 
-      harness = %{harness | channel: channel}
+      harness = %{harness | connection: connection}
 
       {message, harness} = Harness.await_received(harness, @device_topic, "status_update")
 
@@ -237,8 +245,10 @@ defmodule NervesHubLink.ChannelTest do
     test "a reply carrying a response keeps it" do
       harness = Harness.connected() |> Harness.join(@device_topic)
 
-      assert {:ok, ref, channel} = Channel.push(harness.channel, @device_topic, "check", %{})
-      harness = %{harness | channel: channel}
+      assert {:ok, ref, connection} =
+               Connection.push(harness.connection, @device_topic, "check", %{})
+
+      harness = %{harness | connection: connection}
 
       {message, harness} = Harness.await_received(harness, @device_topic, "check")
 
@@ -254,10 +264,10 @@ defmodule NervesHubLink.ChannelTest do
     test "a binary payload goes out as a binary frame" do
       harness = Harness.connected() |> Harness.join(@device_topic)
 
-      assert {:ok, _ref, channel} =
-               Channel.push(harness.channel, @device_topic, "up", {:binary, <<7, 8, 9>>})
+      assert {:ok, _ref, connection} =
+               Connection.push(harness.connection, @device_topic, "up", {:binary, <<7, 8, 9>>})
 
-      harness = Harness.drain(%{harness | channel: channel})
+      harness = Harness.drain(%{harness | connection: connection})
 
       assert Enum.any?(harness.frames, fn
                {:binary, payload} -> String.ends_with?(payload, <<7, 8, 9>>)
@@ -269,32 +279,32 @@ defmodule NervesHubLink.ChannelTest do
       harness = Harness.connected()
 
       assert {:error, :not_joined, _channel} =
-               Channel.push(harness.channel, @device_topic, "nope", %{})
+               Connection.push(harness.connection, @device_topic, "nope", %{})
     end
 
     test "pushing before the connection is up is an error" do
       harness = Harness.start()
 
       assert {:error, :not_connected, _channel} =
-               Channel.push(harness.channel, @device_topic, "nope", %{})
+               Connection.push(harness.connection, @device_topic, "nope", %{})
     end
 
     test "a payload that cannot be encoded is reported without losing the connection" do
       harness = Harness.connected() |> Harness.join(@device_topic)
 
-      assert {:error, {:encode_failure, _}, channel} =
-               Channel.push(harness.channel, @device_topic, "bad", %{pid: self()})
+      assert {:error, {:encode_failure, _}, connection} =
+               Connection.push(harness.connection, @device_topic, "bad", %{pid: self()})
 
-      assert Channel.connected?(channel)
+      assert Connection.connected?(connection)
     end
 
     test "refs increase, so a reply can only belong to one push" do
       harness = Harness.connected() |> Harness.join(@device_topic)
 
       {refs, _channel} =
-        Enum.map_reduce(1..3, harness.channel, fn _i, channel ->
-          assert {:ok, ref, channel} = Channel.push(channel, @device_topic, "ping", %{})
-          {ref, channel}
+        Enum.map_reduce(1..3, harness.connection, fn _i, connection ->
+          assert {:ok, ref, connection} = Connection.push(connection, @device_topic, "ping", %{})
+          {ref, connection}
         end)
 
       assert refs == Enum.uniq(refs)
@@ -325,7 +335,7 @@ defmodule NervesHubLink.ChannelTest do
     test "a topic the server closes with an error is reported as closed" do
       harness = Harness.connected() |> Harness.join(@device_topic)
 
-      join_ref = harness.channel.joins[@device_topic].ref
+      join_ref = harness.connection.joins[@device_topic].ref
 
       harness =
         harness
@@ -338,15 +348,15 @@ defmodule NervesHubLink.ChannelTest do
         })
         |> Harness.await(&match?({:topic_closed, @device_topic, _}, &1))
 
-      refute Channel.joined?(harness.channel, @device_topic)
+      refute Connection.joined?(harness.connection, @device_topic)
       # The connection itself is still up; only the topic went.
-      assert Channel.connected?(harness.channel)
+      assert Connection.connected?(harness.connection)
     end
 
     test "a topic the server closes normally is reported as left" do
       harness = Harness.connected() |> Harness.join(@device_topic)
 
-      join_ref = harness.channel.joins[@device_topic].ref
+      join_ref = harness.connection.joins[@device_topic].ref
 
       harness =
         harness
@@ -359,8 +369,8 @@ defmodule NervesHubLink.ChannelTest do
         })
         |> Harness.await(&(&1 == {:topic_left, @device_topic}))
 
-      refute Channel.joined?(harness.channel, @device_topic)
-      assert Channel.connected?(harness.channel)
+      refute Connection.joined?(harness.connection, @device_topic)
+      assert Connection.connected?(harness.connection)
     end
 
     test "a frame that cannot be decoded is dropped, not fatal" do
@@ -379,7 +389,7 @@ defmodule NervesHubLink.ChannelTest do
 
       # The message after the bad frame still arrived, so the connection
       # survived the bad one.
-      assert Channel.connected?(harness.channel)
+      assert Connection.connected?(harness.connection)
       refute Enum.any?(harness.events, &match?({:disconnected, _}, &1))
     end
 
@@ -391,7 +401,7 @@ defmodule NervesHubLink.ChannelTest do
         |> Harness.server_close()
         |> Harness.await(&(&1 == {:disconnected, :closed_by_remote}))
 
-      refute Channel.connected?(harness.channel)
+      refute Connection.connected?(harness.connection)
     end
   end
 
@@ -399,10 +409,10 @@ defmodule NervesHubLink.ChannelTest do
     test "a heartbeat is sent on its own topic and acknowledged by ref" do
       harness = Harness.connected()
 
-      assert {:ok, channel} = Channel.send_heartbeat(harness.channel)
-      assert is_binary(channel.heartbeat_ref)
+      assert {:ok, connection} = Connection.send_heartbeat(harness.connection)
+      assert is_binary(connection.heartbeat_ref)
 
-      harness = %{harness | channel: channel}
+      harness = %{harness | connection: connection}
 
       {message, harness} = Harness.await_received(harness, "phoenix", "heartbeat")
 
@@ -415,39 +425,39 @@ defmodule NervesHubLink.ChannelTest do
 
       # The ack clears the outstanding heartbeat, and is not an event the
       # owner has to care about.
-      assert harness.channel.heartbeat_ref == nil
+      assert harness.connection.heartbeat_ref == nil
       refute Enum.any?(harness.events, &match?({:reply, _, _}, &1))
     end
 
     test "an unacknowledged heartbeat closes the connection on the next one" do
       harness = Harness.connected()
 
-      assert {:ok, channel} = Channel.send_heartbeat(harness.channel)
+      assert {:ok, connection} = Connection.send_heartbeat(harness.connection)
 
       # The server was never told to reply, so the second heartbeat finds the
       # first still outstanding.
-      assert {:error, :heartbeat_timeout, channel} = Channel.send_heartbeat(channel)
+      assert {:error, :heartbeat_timeout, connection} = Connection.send_heartbeat(connection)
 
-      refute Channel.connected?(channel)
+      refute Connection.connected?(connection)
     end
 
     test "heartbeats can be sent one after another once acknowledged" do
       harness = Harness.connected()
 
-      assert {:ok, channel} = Channel.send_heartbeat(harness.channel)
-      harness = %{harness | channel: channel}
+      assert {:ok, connection} = Connection.send_heartbeat(harness.connection)
+      harness = %{harness | connection: connection}
 
       {first, harness} = Harness.await_received(harness, "phoenix", "heartbeat")
       harness = harness |> Harness.server_reply(first, "ok") |> Harness.drain()
 
-      assert {:ok, channel} = Channel.send_heartbeat(harness.channel)
-      assert channel.heartbeat_ref != first.ref
+      assert {:ok, connection} = Connection.send_heartbeat(harness.connection)
+      assert connection.heartbeat_ref != first.ref
     end
 
     test "a heartbeat before the connection is up is an error" do
       harness = Harness.start()
 
-      assert {:error, :not_connected, _channel} = Channel.send_heartbeat(harness.channel)
+      assert {:error, :not_connected, _channel} = Connection.send_heartbeat(harness.connection)
     end
   end
 
@@ -461,7 +471,7 @@ defmodule NervesHubLink.ChannelTest do
         |> Harness.drain()
 
       assert {:pong, "are you there"} in harness.frames
-      assert Channel.connected?(harness.channel)
+      assert Connection.connected?(harness.connection)
     end
   end
 
@@ -469,25 +479,25 @@ defmodule NervesHubLink.ChannelTest do
     test "closing reports nothing, because the caller asked for it" do
       harness = Harness.connected() |> Harness.join(@device_topic)
 
-      channel = Channel.close(harness.channel)
+      connection = Connection.close(harness.connection)
 
-      refute Channel.connected?(channel)
-      refute Channel.joined?(channel, @device_topic)
-      assert channel.conn == nil
+      refute Connection.connected?(connection)
+      refute Connection.joined?(connection, @device_topic)
+      assert connection.conn == nil
     end
 
-    test "a closed channel ignores messages rather than claiming them" do
+    test "a closed connection ignores messages rather than claiming them" do
       harness = Harness.connected()
 
-      channel = Channel.close(harness.channel)
+      connection = Connection.close(harness.connection)
 
-      assert :unknown = Channel.handle_transport(channel, {:tcp, :fake_socket, "nonsense"})
+      assert :unknown = Connection.handle_transport(connection, {:tcp, :fake_socket, "nonsense"})
     end
 
     test "a message that belongs to nothing here is left for the owner" do
       harness = Harness.connected()
 
-      assert :unknown = Channel.handle_transport(harness.channel, :some_other_message)
+      assert :unknown = Connection.handle_transport(harness.connection, :some_other_message)
     end
   end
 
@@ -499,11 +509,11 @@ defmodule NervesHubLink.ChannelTest do
       port = raw_upgrade_server(split: true, then_send: nil)
 
       harness =
-        [channel: [uri: URI.parse("ws://localhost:#{port}/socket/websocket?vsn=2.0.0")]]
+        [connection: [uri: URI.parse("ws://localhost:#{port}/socket/websocket?vsn=2.0.0")]]
         |> start_against_raw_server()
         |> Harness.await(&(&1 == :connected))
 
-      assert Channel.connected?(harness.channel)
+      assert Connection.connected?(harness.connection)
     end
 
     test "a frame in the same packet as the end of the response is still decoded" do
@@ -513,7 +523,7 @@ defmodule NervesHubLink.ChannelTest do
       port = raw_upgrade_server(split: true, then_send: text_frame(encoded))
 
       harness =
-        [channel: [uri: URI.parse("ws://localhost:#{port}/socket/websocket?vsn=2.0.0")]]
+        [connection: [uri: URI.parse("ws://localhost:#{port}/socket/websocket?vsn=2.0.0")]]
         |> start_against_raw_server()
         |> Harness.await(&match?({:message, @device_topic, "identify", _}, &1))
 
@@ -523,60 +533,60 @@ defmodule NervesHubLink.ChannelTest do
 
   describe "backoff" do
     test "each reconnect waits one step further along the list" do
-      channel = Channel.new(uri: uri(), serializer: JSON, reconnect_after_msec: [1, 2, 3])
+      connection = Connection.new(uri: uri(), serializer: JSON, reconnect_after_msec: [1, 2, 3])
 
-      {delays, channel} =
-        Enum.map_reduce(1..5, channel, fn _i, channel ->
-          {delay, channel} = Channel.reconnect_delay(channel)
-          {delay, channel}
+      {delays, connection} =
+        Enum.map_reduce(1..5, connection, fn _i, connection ->
+          {delay, connection} = Connection.reconnect_delay(connection)
+          {delay, connection}
         end)
 
       # Past the end of the list the longest wait repeats.
       assert delays == [1, 2, 3, 3, 3]
-      assert channel.reconnect_count == 5
+      assert connection.reconnect_count == 5
     end
 
     test "connecting successfully starts the reconnect backoff over" do
-      harness = Harness.connected(channel: [reconnect_after_msec: [1, 2, 3]])
+      harness = Harness.connected(connection: [reconnect_after_msec: [1, 2, 3]])
 
-      assert harness.channel.reconnect_count == 0
+      assert harness.connection.reconnect_count == 0
 
-      {_delay, channel} = Channel.reconnect_delay(harness.channel)
-      assert channel.reconnect_count == 1
+      {_delay, connection} = Connection.reconnect_delay(harness.connection)
+      assert connection.reconnect_count == 1
     end
 
     test "each rejoin of a topic waits one step further along its own list" do
-      harness = Harness.connected(channel: [rejoin_after_msec: [5, 10]])
+      harness = Harness.connected(connection: [rejoin_after_msec: [5, 10]])
       harness = Harness.join(harness, @device_topic)
 
-      {first, channel} = Channel.rejoin_delay(harness.channel, @device_topic)
-      {second, channel} = Channel.rejoin_delay(channel, @device_topic)
-      {third, _channel} = Channel.rejoin_delay(channel, @device_topic)
+      {first, connection} = Connection.rejoin_delay(harness.connection, @device_topic)
+      {second, connection} = Connection.rejoin_delay(connection, @device_topic)
+      {third, _channel} = Connection.rejoin_delay(connection, @device_topic)
 
       assert [first, second, third] == [5, 10, 10]
     end
 
     test "topics back off independently of each other" do
-      harness = Harness.connected(channel: [rejoin_after_msec: [5, 10]])
+      harness = Harness.connected(connection: [rejoin_after_msec: [5, 10]])
       harness = Harness.join(harness, @device_topic)
       harness = Harness.join(harness, "console")
 
-      {_first, channel} = Channel.rejoin_delay(harness.channel, @device_topic)
-      {console, _channel} = Channel.rejoin_delay(channel, "console")
+      {_first, connection} = Connection.rejoin_delay(harness.connection, @device_topic)
+      {console, _channel} = Connection.rejoin_delay(connection, "console")
 
       assert console == 5
     end
 
     test "joining successfully starts that topic's backoff over" do
-      harness = Harness.connected(channel: [rejoin_after_msec: [5, 10]])
+      harness = Harness.connected(connection: [rejoin_after_msec: [5, 10]])
       harness = harness |> Harness.join(@device_topic) |> close_topic(@device_topic)
 
-      {_delay, channel} = Channel.rejoin_delay(harness.channel, @device_topic)
-      assert channel.joins[@device_topic].rejoin_count == 1
+      {_delay, connection} = Connection.rejoin_delay(harness.connection, @device_topic)
+      assert connection.joins[@device_topic].rejoin_count == 1
 
       # Rejoining and being accepted puts it back to the shortest wait.
-      assert {:ok, channel} = Channel.rejoin(channel, @device_topic)
-      harness = Harness.forget(%{harness | channel: channel})
+      assert {:ok, connection} = Connection.rejoin(connection, @device_topic)
+      harness = Harness.forget(%{harness | connection: connection})
 
       {message, harness} = Harness.await_received(harness, @device_topic, "phx_join")
 
@@ -585,7 +595,7 @@ defmodule NervesHubLink.ChannelTest do
         |> Harness.server_reply(message, "ok")
         |> Harness.await(&match?({:joined, @device_topic, _}, &1))
 
-      assert harness.channel.joins[@device_topic].rejoin_count == 0
+      assert harness.connection.joins[@device_topic].rejoin_count == 0
     end
   end
 
@@ -596,7 +606,7 @@ defmodule NervesHubLink.ChannelTest do
   # Has the server close a joined topic, which is the state a rejoin starts
   # from. The connection itself stays up.
   defp close_topic(harness, topic) do
-    join_ref = harness.channel.joins[topic].ref
+    join_ref = harness.connection.joins[topic].ref
 
     harness
     |> Harness.server_push(%Message{

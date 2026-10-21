@@ -6,12 +6,10 @@ defmodule NervesHubLink.SocketConnectionTest do
   @moduledoc """
   Checks that the device actually opens a connection.
 
-  Every other socket test runs Slipstream in test mode, which skips connection
-  setup entirely, so none of them can tell whether the device can reach a server
-  at all. This one points the real socket at a plain TCP listener and reads the
-  HTTP upgrade request off the wire. That covers the configuration handed to
-  Slipstream - the URI, the serializer, the headers - which is otherwise only
-  exercised in production.
+  Other socket tests answer the upgrade and get on with the protocol. This one
+  stops at the upgrade request itself, reading it off a plain TCP listener, so
+  that what goes into it - the URI, the protocol version, the headers - is
+  checked rather than assumed.
   """
 
   use ExUnit.Case, async: false

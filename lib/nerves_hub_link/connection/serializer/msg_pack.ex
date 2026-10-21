@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 if Code.ensure_loaded?(Msgpax) do
-  defmodule NervesHubLink.MsgPackSerializer do
+  defmodule NervesHubLink.Connection.Serializer.MsgPack do
     @moduledoc """
     A Msgpack based serializer for Phoenix Channels messages.
 
@@ -24,16 +24,19 @@ if Code.ensure_loaded?(Msgpax) do
 
     Your NervesHub server must support Msgpack for this to work. If it doesn't,
     the device will fail to connect.
+
+    Corresponds to `vsn=3.0.0`.
     """
 
-    @behaviour Slipstream.Serializer
+    @behaviour NervesHubLink.Connection.Serializer
 
-    alias Slipstream.Message
-    alias Slipstream.Serializer
+    alias NervesHubLink.Connection.Message
+    alias NervesHubLink.Connection.Serializer.DecodeError
+    alias NervesHubLink.Connection.Serializer.EncodeError
 
-    @impl Slipstream.Serializer
-    @spec encode!(Message.t(), Keyword.t()) :: {:binary, binary()}
-    def encode!(%Message{} = message, _opts) do
+    @impl NervesHubLink.Connection.Serializer
+    @spec encode!(Message.t()) :: {:binary, binary()}
+    def encode!(%Message{} = message) do
       envelope = [message.join_ref, message.ref, message.topic, message.event, message.payload]
 
       case Msgpax.pack(envelope, iodata: false) do
@@ -41,38 +44,35 @@ if Code.ensure_loaded?(Msgpax) do
           {:binary, packed}
 
         {:error, reason} ->
-          raise Serializer.EncodeError,
+          raise EncodeError,
             message: "could not encode #{inspect(message.event)}: #{inspect(reason)}"
       end
     end
 
-    @impl Slipstream.Serializer
-    @spec decode!(binary(), Keyword.t()) :: Message.t()
-    def decode!(binary, opts) do
-      # Anything the server sends could be malformed, and a serializer that
-      # raises something other than a DecodeError takes the connection down with
-      # it - Slipstream only rescues DecodeError.
-      with :binary <- Keyword.fetch!(opts, :opcode),
-           {:ok, [join_ref, ref, topic, event, payload]} <- Msgpax.unpack(binary) do
-        %Message{
-          join_ref: to_ref_string(join_ref),
-          ref: to_ref_string(ref),
-          topic: topic,
-          event: event,
-          payload: payload
-        }
-      else
-        opcode when is_atom(opcode) ->
-          raise Serializer.DecodeError,
-            message: "expected a binary frame, got a #{inspect(opcode)} frame"
+    @impl NervesHubLink.Connection.Serializer
+    @spec decode!(binary(), NervesHubLink.Connection.Serializer.opcode()) :: Message.t()
+    def decode!(payload, :binary) do
+      case Msgpax.unpack(payload) do
+        {:ok, [join_ref, ref, topic, event, payload]} ->
+          %Message{
+            join_ref: to_ref_string(join_ref),
+            ref: to_ref_string(ref),
+            topic: topic,
+            event: event,
+            payload: payload
+          }
 
         {:ok, other} ->
-          raise Serializer.DecodeError,
+          raise DecodeError,
             message: "expected a five element envelope, got: #{inspect(other)}"
 
         {:error, reason} ->
-          raise Serializer.DecodeError, message: "could not decode frame: #{inspect(reason)}"
+          raise DecodeError, message: "could not decode frame: #{inspect(reason)}"
       end
+    end
+
+    def decode!(_payload, opcode) do
+      raise DecodeError, message: "expected a binary frame, got a #{inspect(opcode)} frame"
     end
 
     defp to_ref_string(nil), do: nil

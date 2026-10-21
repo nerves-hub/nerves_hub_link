@@ -2,13 +2,13 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-defmodule NervesHubLink.Channel.Serializer.JSONTest do
+defmodule NervesHubLink.Connection.Serializer.JSONTest do
   use ExUnit.Case, async: true
 
-  alias NervesHubLink.Channel.Message
-  alias NervesHubLink.Channel.Serializer.DecodeError
-  alias NervesHubLink.Channel.Serializer.EncodeError
-  alias NervesHubLink.Channel.Serializer.JSON
+  alias NervesHubLink.Connection.Message
+  alias NervesHubLink.Connection.Serializer.DecodeError
+  alias NervesHubLink.Connection.Serializer.EncodeError
+  alias NervesHubLink.Connection.Serializer.JSON
 
   describe "encode!/1" do
     test "a message becomes the five element envelope, in a text frame" do

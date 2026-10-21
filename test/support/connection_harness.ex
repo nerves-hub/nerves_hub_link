@@ -2,35 +2,35 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-defmodule NervesHubLink.Support.ChannelHarness do
+defmodule NervesHubLink.Support.ConnectionHarness do
   @moduledoc """
-  Drives a `NervesHubLink.Channel` from a test process.
+  Drives a `NervesHubLink.Connection` from a test process.
 
-  The channel is a data structure, so the test process can be the process that
-  owns it: it holds the connection, feeds the channel every message that
+  The connection is a data structure, so the test process can be the process that
+  owns it: it holds the connection, feeds the connection every message that
   arrives and collects the events that come back. That means these tests
   exercise the real connection - a real upgrade, real frames, real close -
   rather than a stand-in for one.
 
-  The struct accumulates as the test goes: `events` is everything the channel
+  The struct accumulates as the test goes: `events` is everything the connection
   has produced, and `frames` is everything the server has received.
   """
 
   import ExUnit.Assertions
 
-  alias NervesHubLink.Channel
-  alias NervesHubLink.Channel.Message
-  alias NervesHubLink.Channel.Serializer.JSON
-  alias NervesHubLink.Support.ChannelServer
+  alias NervesHubLink.Connection
+  alias NervesHubLink.Connection.Message
+  alias NervesHubLink.Connection.Serializer.JSON
   alias NervesHubLink.Support.Utils
+  alias NervesHubLink.Support.WebSocketServer
 
-  defstruct [:channel, :server, :port, events: [], frames: []]
+  defstruct [:connection, :server, :port, events: [], frames: []]
 
   @type t :: %__MODULE__{
-          channel: Channel.t() | nil,
+          connection: Connection.t() | nil,
           server: pid() | nil,
           port: non_neg_integer() | nil,
-          events: [Channel.event()],
+          events: [Connection.event()],
           frames: [{atom(), binary()}]
         }
 
@@ -42,10 +42,10 @@ defmodule NervesHubLink.Support.ChannelHarness do
   @dialyzer :no_contracts
 
   @doc """
-  Start a server and build a channel pointed at it, without connecting.
+  Start a server and build a connection pointed at it, without connecting.
 
-  `:server` is passed to `NervesHubLink.Support.ChannelServer` and `:channel`
-  to `NervesHubLink.Channel.new/1`.
+  `:server` is passed to `NervesHubLink.Support.WebSocketServer` and `:connection`
+  to `NervesHubLink.Connection.new/1`.
   """
   @spec start(keyword()) :: t()
   def start(opts \\ []) do
@@ -61,17 +61,17 @@ defmodule NervesHubLink.Support.ChannelHarness do
           reconnect_after_msec: [10],
           rejoin_after_msec: [10]
         ],
-        Keyword.get(opts, :channel, [])
+        Keyword.get(opts, :connection, [])
       )
 
-    %__MODULE__{channel: Channel.new(channel_opts), port: port}
+    %__MODULE__{connection: Connection.new(channel_opts), port: port}
   end
 
-  @doc "Start a server on its own, for a channel the test builds itself."
+  @doc "Start a server on its own, for a connection the test builds itself."
   @spec start_server(keyword()) :: non_neg_integer()
   def start_server(opts \\ []) do
     {:ok, _pid, port} =
-      Utils.supervise_plug(ChannelServer, Keyword.put_new(opts, :test_pid, self()))
+      Utils.supervise_plug(WebSocketServer, Keyword.put_new(opts, :test_pid, self()))
 
     port
   end
@@ -85,9 +85,9 @@ defmodule NervesHubLink.Support.ChannelHarness do
   @doc "Open the connection, asserting that the attempt got off the ground."
   @spec connect(t()) :: t()
   def connect(%__MODULE__{} = harness) do
-    {:ok, channel} = Channel.connect(harness.channel)
+    {:ok, connection} = Connection.connect(harness.connection)
 
-    %{harness | channel: channel}
+    %{harness | connection: connection}
   end
 
   @doc """
@@ -98,9 +98,9 @@ defmodule NervesHubLink.Support.ChannelHarness do
   """
   @spec join(t(), String.t(), term()) :: t()
   def join(%__MODULE__{} = harness, topic, params \\ %{}) do
-    {:ok, channel} = Channel.join(harness.channel, topic, params)
+    {:ok, connection} = Connection.join(harness.connection, topic, params)
 
-    harness = %{harness | channel: channel}
+    harness = %{harness | connection: connection}
 
     {message, harness} = await_received(harness, topic, "phx_join")
 
@@ -110,18 +110,18 @@ defmodule NervesHubLink.Support.ChannelHarness do
   end
 
   @doc """
-  Feed the channel messages until one of its events matches, then stop.
+  Feed the connection messages until one of its events matches, then stop.
 
   Fails the test if nothing matches in time.
   """
-  @spec await(t(), (Channel.event() -> boolean()), timeout()) :: t()
+  @spec await(t(), (Connection.event() -> boolean()), timeout()) :: t()
   def await(%__MODULE__{} = harness, matcher, timeout \\ 2_000) do
     pump_until(
       harness,
       &Enum.any?(&1.events, matcher),
       fn harness ->
         """
-        timed out waiting for a channel event to match.
+        timed out waiting for a connection event to match.
 
         events so far: #{inspect(harness.events)}
         """
@@ -131,14 +131,14 @@ defmodule NervesHubLink.Support.ChannelHarness do
   end
 
   @doc """
-  Feed the channel everything that arrives until it has been quiet for a while.
+  Feed the connection everything that arrives until it has been quiet for a while.
 
   For when a test wants whatever happened rather than one particular event.
   """
   @spec drain(t(), timeout()) :: t()
   def drain(%__MODULE__{} = harness, quiet \\ 150) do
     receive do
-      {:channel_test, info} ->
+      {:connection_test, info} ->
         harness |> put_info(info) |> drain(quiet)
 
       message ->
@@ -148,13 +148,13 @@ defmodule NervesHubLink.Support.ChannelHarness do
     end
   end
 
-  @doc "Send a message to the channel, as NervesHub would."
+  @doc "Send a message to the connection, as NervesHub would."
   @spec server_push(t(), Message.t()) :: t()
   def server_push(%__MODULE__{} = harness, %Message{} = message) do
     server_send(harness, JSON.encode!(message))
   end
 
-  @doc "Reply to a message the channel sent."
+  @doc "Reply to a message the connection sent."
   @spec server_reply(t(), Message.t(), String.t(), term()) :: t()
   def server_reply(%__MODULE__{} = harness, %Message{} = to, status, response \\ %{}) do
     server_push(harness, %Message{
@@ -166,7 +166,7 @@ defmodule NervesHubLink.Support.ChannelHarness do
     })
   end
 
-  @doc "Send a raw frame to the channel, for frames a serializer would not produce."
+  @doc "Send a raw frame to the connection, for frames a serializer would not produce."
   @spec server_send(t(), WebSock.message()) :: t()
   def server_send(%__MODULE__{} = harness, frame) do
     harness = await_server(harness)
@@ -190,7 +190,7 @@ defmodule NervesHubLink.Support.ChannelHarness do
   Wait until the server side has said which process it is.
 
   The server reports itself as it accepts the upgrade, which races with the
-  upgrade response the channel is waiting for, so being connected is not on
+  upgrade response the connection is waiting for, so being connected is not on
   its own enough to know who to tell to send something.
   """
   @spec await_server(t(), timeout()) :: t()
@@ -255,7 +255,7 @@ defmodule NervesHubLink.Support.ChannelHarness do
 
   ## Internals
 
-  # One loop behind every wait: feed the channel what arrives, record what the
+  # One loop behind every wait: feed the connection what arrives, record what the
   # server tells us, and stop when `done?` says so or the deadline passes.
   defp pump_until(harness, done?, describe, deadline) do
     if done?.(harness) do
@@ -266,7 +266,7 @@ defmodule NervesHubLink.Support.ChannelHarness do
       if remaining <= 0, do: flunk(describe.(harness))
 
       receive do
-        {:channel_test, info} ->
+        {:connection_test, info} ->
           harness |> put_info(info) |> pump_until(done?, describe, deadline)
 
         message ->
@@ -280,9 +280,9 @@ defmodule NervesHubLink.Support.ChannelHarness do
   defp deadline(timeout), do: System.monotonic_time(:millisecond) + timeout
 
   defp handle(harness, message) do
-    case Channel.handle_transport(harness.channel, message) do
-      {:ok, channel, events} ->
-        %{harness | channel: channel, events: harness.events ++ events}
+    case Connection.handle_transport(harness.connection, message) do
+      {:ok, connection, events} ->
+        %{harness | connection: connection, events: harness.events ++ events}
 
       :unknown ->
         harness

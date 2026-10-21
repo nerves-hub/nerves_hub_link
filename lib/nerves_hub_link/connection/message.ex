@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-defmodule NervesHubLink.Channel.Message do
+defmodule NervesHubLink.Connection.Message do
   @moduledoc """
   One message on a Phoenix channel, in either direction.
 

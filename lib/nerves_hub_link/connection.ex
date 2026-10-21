@@ -2,18 +2,24 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-defmodule NervesHubLink.Channel do
+defmodule NervesHubLink.Connection do
   @moduledoc """
-  A Phoenix channel client, over a `Mint.WebSocket` connection.
+  The device's one websocket connection to NervesHub.
+
+  A Phoenix socket connection carries any number of channels - the topics a
+  client joins, which here are `device`, `console` and `extensions` - and this
+  owns the connection itself: the upgrade, the framing, the refs that pair a
+  reply with what it answers, the heartbeats, and the joins of each channel
+  over it.
 
   This is a data structure, not a process. The process that owns it passes it
   the messages it receives and acts on the events it gets back:
 
-      {:ok, channel} = Channel.connect(Channel.new(opts))
+      {:ok, connection} = Connection.connect(Connection.new(opts))
 
       # in handle_info/2
-      case Channel.handle_transport(channel, message) do
-        {:ok, channel, events} -> Enum.reduce(events, channel, &handle_event/2)
+      case Connection.handle_transport(connection, message) do
+        {:ok, connection, events} -> Enum.reduce(events, connection, &handle_event/2)
         :unknown -> # not ours, handle it yourself
       end
 
@@ -31,16 +37,16 @@ defmodule NervesHubLink.Channel do
 
   ## Failing to send
 
-  `join/3`, `push/4` and `send_heartbeat/1` return `{:error, reason, channel}`
+  `join/3`, `push/4` and `send_heartbeat/1` return `{:error, reason, connection}`
   when a message cannot be sent. A write that fails has taken the connection
-  with it, so check `connected?/1` on the returned channel: when it is false
+  with it, so check `connected?/1` on the returned connection: when it is false
   the caller should run whatever it does on `{:disconnected, reason}`, because
   no such event will arrive separately.
   """
 
   alias Mint.WebSocket.UpgradeFailureError
   alias NervesHubLink.Backoff
-  alias NervesHubLink.Channel.Message
+  alias NervesHubLink.Connection.Message
 
   require Logger
 
@@ -85,7 +91,7 @@ defmodule NervesHubLink.Channel do
       with `response`.
     * `{:join_failed, topic, reason}` - the server refused a join.
     * `{:topic_closed, topic, reason}` - the server closed a joined topic,
-      usually because the channel process crashed. The connection is still up.
+      usually because the connection process crashed. The connection is still up.
     * `{:topic_left, topic}` - the server closed a topic normally.
     * `{:message, topic, event, payload}` - the server sent a message.
     * `{:reply, ref, reply}` - the server replied to the push sent with `ref`.
@@ -128,7 +134,7 @@ defmodule NervesHubLink.Channel do
   ]
 
   @doc """
-  Build a channel.
+  Build a connection.
 
   Required options are `:uri` (whose `vsn` query parameter has to name the
   protocol version `:serializer` implements) and `:serializer`. The rest -
@@ -152,34 +158,61 @@ defmodule NervesHubLink.Channel do
   the process that will receive the connection's messages.
   """
   @spec connect(t()) :: {:ok, t()} | {:error, reason :: term(), t()}
-  def connect(%__MODULE__{} = channel) do
-    uri = channel.uri
+  def connect(%__MODULE__{} = connection) do
+    uri = connection.uri
 
     with {:ok, conn} <-
-           Mint.HTTP.connect(http_scheme(uri), uri.host, uri.port, channel.mint_opts),
+           Mint.HTTP.connect(http_scheme(uri), uri.host, uri.port, connection.mint_opts),
          {:ok, conn, request_ref} <-
-           Mint.WebSocket.upgrade(ws_scheme(uri), conn, path(uri), channel.headers,
-             extensions: channel.extensions
+           Mint.WebSocket.upgrade(ws_scheme(uri), conn, path(uri), connection.headers,
+             extensions: connection.extensions
            ) do
       {:ok,
        %{
-         channel
+         connection
          | conn: conn,
            request_ref: request_ref,
            status: :connecting,
-           upgrade_timer: schedule_upgrade_timeout(channel, request_ref)
+           upgrade_timer: schedule_upgrade_timeout(connection, request_ref)
        }}
     else
       # `Mint.HTTP.connect/4` reports a failure to open the connection with
       # nothing to close; the upgrade reports one with a connection to clean up.
       {:error, reason} ->
-        {:error, reason, reset(channel)}
+        {:error, reason, reset(connection)}
 
       {:error, conn, reason} ->
         _ = Mint.HTTP.close(conn)
-        {:error, reason, reset(channel)}
+        {:error, reason, reset(connection)}
     end
   end
+
+  @doc """
+  Point the connection at a URL, with the headers to connect with.
+
+  Both are settled per attempt rather than once, because both can change
+  between attempts: a redirect moves the URL, and a signature in a header has
+  to be made close to the moment it is sent or the server will have aged it
+  out by the time it arrives.
+  """
+  @spec put_endpoint(t(), URI.t(), [{String.t(), String.t()}]) :: t()
+  def put_endpoint(%__MODULE__{} = connection, %URI{} = uri, headers) when is_list(headers) do
+    %{connection | uri: uri, headers: headers}
+  end
+
+  @doc """
+  Replace the delays `reconnect_delay/1` works through.
+
+  How long to wait is the owner's to decide and can change while running, but
+  where in the list we are belongs with the connection, so it stays here and
+  is left alone by this.
+  """
+  @spec put_reconnect_after_msec(t(), [non_neg_integer()]) :: t()
+  def put_reconnect_after_msec(%__MODULE__{} = connection, [_ | _] = delays) do
+    %{connection | reconnect_after_msec: delays}
+  end
+
+  def put_reconnect_after_msec(%__MODULE__{} = connection, _delays), do: connection
 
   @doc """
   Close the connection.
@@ -188,10 +221,10 @@ defmodule NervesHubLink.Channel do
   it already knows.
   """
   @spec close(t()) :: t()
-  def close(%__MODULE__{} = channel) do
-    _ = if channel.conn, do: Mint.HTTP.close(channel.conn)
+  def close(%__MODULE__{} = connection) do
+    _ = if connection.conn, do: Mint.HTTP.close(connection.conn)
 
-    reset(channel)
+    reset(connection)
   end
 
   @doc """
@@ -202,30 +235,30 @@ defmodule NervesHubLink.Channel do
   arrives through `handle_transport/2`.
   """
   @spec join(t(), String.t(), term()) :: {:ok, t()} | {:error, reason :: term(), t()}
-  def join(%__MODULE__{} = channel, topic, params \\ %{}) when is_binary(topic) do
+  def join(%__MODULE__{} = connection, topic, params \\ %{}) when is_binary(topic) do
     cond do
-      not connected?(channel) ->
-        {:error, :not_connected, channel}
+      not connected?(connection) ->
+        {:error, :not_connected, connection}
 
-      join_status(channel, topic) in [:requested, :joined] ->
-        {:ok, channel}
+      join_status(connection, topic) in [:requested, :joined] ->
+        {:ok, connection}
 
       true ->
-        send_join(channel, topic, params)
+        send_join(connection, topic, params)
     end
   end
 
   @doc """
   Ask to join a topic again, with the parameters it was joined with before.
 
-  Returns `{:error, :never_joined, channel}` for a topic that has not been
+  Returns `{:error, :never_joined, connection}` for a topic that has not been
   joined, since there are no parameters to repeat.
   """
   @spec rejoin(t(), String.t()) :: {:ok, t()} | {:error, reason :: term(), t()}
-  def rejoin(%__MODULE__{} = channel, topic) when is_binary(topic) do
-    case Map.fetch(channel.joins, topic) do
-      {:ok, %{params: params}} -> join(channel, topic, params)
-      :error -> {:error, :never_joined, channel}
+  def rejoin(%__MODULE__{} = connection, topic) when is_binary(topic) do
+    case Map.fetch(connection.joins, topic) do
+      {:ok, %{params: params}} -> join(connection, topic, params)
+      :error -> {:error, :never_joined, connection}
     end
   end
 
@@ -236,29 +269,29 @@ defmodule NervesHubLink.Channel do
   """
   @spec push(t(), String.t(), String.t(), term()) ::
           {:ok, String.t(), t()} | {:error, reason :: term(), t()}
-  def push(%__MODULE__{} = channel, topic, event, payload)
+  def push(%__MODULE__{} = connection, topic, event, payload)
       when is_binary(topic) and is_binary(event) do
     cond do
-      not connected?(channel) ->
-        {:error, :not_connected, channel}
+      not connected?(connection) ->
+        {:error, :not_connected, connection}
 
-      not joined?(channel, topic) ->
-        {:error, :not_joined, channel}
+      not joined?(connection, topic) ->
+        {:error, :not_joined, connection}
 
       true ->
-        {ref, channel} = next_ref(channel)
+        {ref, connection} = next_ref(connection)
 
         message = %Message{
           topic: topic,
           event: event,
           payload: payload,
           ref: ref,
-          join_ref: channel.joins[topic].ref
+          join_ref: connection.joins[topic].ref
         }
 
-        case send_message(channel, message) do
-          {:ok, channel} -> {:ok, ref, channel}
-          {:error, reason, channel} -> {:error, reason, channel}
+        case send_message(connection, message) do
+          {:ok, connection} -> {:ok, ref, connection}
+          {:error, reason, connection} -> {:error, reason, connection}
         end
     end
   end
@@ -266,28 +299,28 @@ defmodule NervesHubLink.Channel do
   @doc """
   Send a heartbeat.
 
-  Returns `{:error, :heartbeat_timeout, channel}`, with the connection closed,
+  Returns `{:error, :heartbeat_timeout, connection}`, with the connection closed,
   when the previous heartbeat has not been answered. That is the point of
   sending them: an idle TCP connection can be dead for a long time without
   either end noticing, and an unanswered heartbeat is how this one finds out.
   """
   @spec send_heartbeat(t()) :: {:ok, t()} | {:error, reason :: term(), t()}
-  def send_heartbeat(%__MODULE__{heartbeat_ref: ref} = channel) when is_binary(ref) do
-    {:error, :heartbeat_timeout, close(channel)}
+  def send_heartbeat(%__MODULE__{heartbeat_ref: ref} = connection) when is_binary(ref) do
+    {:error, :heartbeat_timeout, close(connection)}
   end
 
-  def send_heartbeat(%__MODULE__{} = channel) do
-    if connected?(channel) do
-      {ref, channel} = next_ref(channel)
+  def send_heartbeat(%__MODULE__{} = connection) do
+    if connected?(connection) do
+      {ref, connection} = next_ref(connection)
 
       message = %Message{topic: @heartbeat_topic, event: "heartbeat", payload: %{}, ref: ref}
 
-      case send_message(channel, message) do
-        {:ok, channel} -> {:ok, %{channel | heartbeat_ref: ref}}
-        {:error, reason, channel} -> {:error, reason, channel}
+      case send_message(connection, message) do
+        {:ok, connection} -> {:ok, %{connection | heartbeat_ref: ref}}
+        {:error, reason, connection} -> {:error, reason, connection}
       end
     else
-      {:error, :not_connected, channel}
+      {:error, :not_connected, connection}
     end
   end
 
@@ -298,26 +331,29 @@ defmodule NervesHubLink.Channel do
   connection, so the caller can go on and handle its own.
   """
   @spec handle_transport(t(), term()) :: {:ok, t(), [event()]} | :unknown
-  def handle_transport(channel, message)
+  def handle_transport(connection, message)
 
   # A timer from an earlier connection attempt carries that attempt's ref, so
   # it is ignored rather than taken for this one's.
-  def handle_transport(%__MODULE__{request_ref: ref} = channel, {:channel_upgrade_timeout, ref})
+  def handle_transport(
+        %__MODULE__{request_ref: ref} = connection,
+        {:connection_upgrade_timeout, ref}
+      )
       when not is_nil(ref) do
-    {:ok, close(channel), [{:disconnected, :upgrade_timeout}]}
+    {:ok, close(connection), [{:disconnected, :upgrade_timeout}]}
   end
 
   def handle_transport(%__MODULE__{conn: nil}, _message), do: :unknown
 
-  def handle_transport(%__MODULE__{} = channel, message) do
-    case Mint.WebSocket.stream(channel.conn, message) do
+  def handle_transport(%__MODULE__{} = connection, message) do
+    case Mint.WebSocket.stream(connection.conn, message) do
       {:ok, conn, responses} ->
-        {channel, events} = handle_responses(%{channel | conn: conn}, responses, [])
-        {:ok, channel, events}
+        {connection, events} = handle_responses(%{connection | conn: conn}, responses, [])
+        {:ok, connection, events}
 
       {:error, conn, reason, _responses} ->
-        channel = close(%{channel | conn: conn})
-        {:ok, channel, [{:disconnected, transport_reason(reason)}]}
+        connection = close(%{connection | conn: conn})
+        {:ok, connection, [{:disconnected, transport_reason(reason)}]}
 
       :unknown ->
         :unknown
@@ -330,7 +366,7 @@ defmodule NervesHubLink.Channel do
 
   @doc "Whether a topic has been joined."
   @spec joined?(t(), String.t()) :: boolean()
-  def joined?(%__MODULE__{} = channel, topic), do: join_status(channel, topic) == :joined
+  def joined?(%__MODULE__{} = connection, topic), do: join_status(connection, topic) == :joined
 
   @doc "How far a topic's join has got, or `nil` for one never joined."
   @spec join_status(t(), String.t()) :: :requested | :joined | :closed | nil
@@ -351,41 +387,41 @@ defmodule NervesHubLink.Channel do
   def mint_socket(%__MODULE__{conn: conn}), do: Mint.HTTP.get_socket(conn)
 
   @doc """
-  How long to wait before connecting again, and the channel to carry on with.
+  How long to wait before connecting again, and the connection to carry on with.
 
   Each call moves one step along `:reconnect_after_msec`. Connecting
   successfully starts again from the beginning.
   """
   @spec reconnect_delay(t()) :: {non_neg_integer(), t()}
-  def reconnect_delay(%__MODULE__{} = channel) do
-    delay = Backoff.at(channel.reconnect_after_msec, channel.reconnect_count)
+  def reconnect_delay(%__MODULE__{} = connection) do
+    delay = Backoff.at(connection.reconnect_after_msec, connection.reconnect_count)
 
-    {delay, %{channel | reconnect_count: channel.reconnect_count + 1}}
+    {delay, %{connection | reconnect_count: connection.reconnect_count + 1}}
   end
 
   @doc """
-  How long to wait before joining a topic again, and the channel to carry on with.
+  How long to wait before joining a topic again, and the connection to carry on with.
 
   Each call moves one step along `:rejoin_after_msec`. Joining successfully
   starts that topic again from the beginning.
   """
   @spec rejoin_delay(t(), String.t()) :: {non_neg_integer(), t()}
-  def rejoin_delay(%__MODULE__{} = channel, topic) do
+  def rejoin_delay(%__MODULE__{} = connection, topic) do
     count =
-      case channel.joins do
+      case connection.joins do
         %{^topic => %{rejoin_count: count}} -> count
         _ -> 0
       end
 
-    delay = Backoff.at(channel.rejoin_after_msec, count)
+    delay = Backoff.at(connection.rejoin_after_msec, count)
 
-    {delay, update_join(channel, topic, &%{&1 | rejoin_count: count + 1})}
+    {delay, update_join(connection, topic, &%{&1 | rejoin_count: count + 1})}
   end
 
   ## Sending
 
-  defp send_join(channel, topic, params) do
-    {ref, channel} = next_ref(channel)
+  defp send_join(connection, topic, params) do
+    {ref, connection} = next_ref(connection)
 
     message = %Message{
       topic: topic,
@@ -395,34 +431,34 @@ defmodule NervesHubLink.Channel do
       join_ref: ref
     }
 
-    case send_message(channel, message) do
-      {:ok, channel} ->
+    case send_message(connection, message) do
+      {:ok, connection} ->
         join = %{
           ref: ref,
           params: params,
           status: :requested,
-          rejoin_count: rejoin_count(channel, topic)
+          rejoin_count: rejoin_count(connection, topic)
         }
 
-        {:ok, %{channel | joins: Map.put(channel.joins, topic, join)}}
+        {:ok, %{connection | joins: Map.put(connection.joins, topic, join)}}
 
-      {:error, reason, channel} ->
-        {:error, reason, channel}
+      {:error, reason, connection} ->
+        {:error, reason, connection}
     end
   end
 
-  defp send_message(channel, message) do
-    case encode(channel, message) do
-      {:ok, frame} -> send_frame(channel, frame)
-      {:error, reason} -> {:error, reason, channel}
+  defp send_message(connection, message) do
+    case encode(connection, message) do
+      {:ok, frame} -> send_frame(connection, frame)
+      {:error, reason} -> {:error, reason, connection}
     end
   end
 
   # A payload that cannot be encoded is this device's own bug, but taking the
   # connection down over it would also take away the way to ship the fix, so
   # it is reported to the caller and the connection left alone.
-  defp encode(channel, message) do
-    {:ok, channel.serializer.encode!(message)}
+  defp encode(connection, message) do
+    {:ok, connection.serializer.encode!(message)}
   rescue
     exception ->
       Logger.error(
@@ -435,39 +471,39 @@ defmodule NervesHubLink.Channel do
 
   # Nested rather than one `with`, because both steps report failure as
   # `{:error, _, reason}` and only their position says which of the two it is.
-  defp send_frame(channel, frame) do
-    case Mint.WebSocket.encode(channel.websocket, frame) do
+  defp send_frame(connection, frame) do
+    case Mint.WebSocket.encode(connection.websocket, frame) do
       {:ok, websocket, data} ->
-        channel = %{channel | websocket: websocket}
+        connection = %{connection | websocket: websocket}
 
-        case Mint.WebSocket.stream_request_body(channel.conn, channel.request_ref, data) do
+        case Mint.WebSocket.stream_request_body(connection.conn, connection.request_ref, data) do
           {:ok, conn} ->
-            {:ok, %{channel | conn: conn}}
+            {:ok, %{connection | conn: conn}}
 
           {:error, conn, reason} ->
-            {:error, {:send_failure, transport_reason(reason)}, close(%{channel | conn: conn})}
+            {:error, {:send_failure, transport_reason(reason)}, close(%{connection | conn: conn})}
         end
 
       {:error, websocket, reason} ->
         {:error, {:send_failure, transport_reason(reason)},
-         close(%{channel | websocket: websocket})}
+         close(%{connection | websocket: websocket})}
     end
   end
 
   ## Receiving
 
-  defp handle_responses(channel, [], events), do: {channel, Enum.reverse(events)}
+  defp handle_responses(connection, [], events), do: {connection, Enum.reverse(events)}
 
   # Nothing after the connection has gone can be acted on, and the responses
   # that follow a close belong to a connection that no longer exists.
-  defp handle_responses(%{status: :closed} = channel, _responses, events) do
-    {channel, Enum.reverse(events)}
+  defp handle_responses(%{status: :closed} = connection, _responses, events) do
+    {connection, Enum.reverse(events)}
   end
 
-  defp handle_responses(channel, [response | rest], events) do
-    {channel, new_events} = handle_response(channel, response)
+  defp handle_responses(connection, [response | rest], events) do
+    {connection, new_events} = handle_response(connection, response)
 
-    handle_responses(channel, rest, Enum.reverse(new_events) ++ events)
+    handle_responses(connection, rest, Enum.reverse(new_events) ++ events)
   end
 
   # The answer to the upgrade request can be split across as many messages as
@@ -475,59 +511,59 @@ defmodule NervesHubLink.Channel do
   # status and the headers are both in. Frames that arrive in the same packet
   # as the end of the response are kept too, and decoded once there is a
   # websocket to decode them with.
-  defp handle_response(%{websocket: nil, request_ref: ref} = channel, {:status, ref, status}) do
-    maybe_upgrade(%{channel | upgrade_status: status})
+  defp handle_response(%{websocket: nil, request_ref: ref} = connection, {:status, ref, status}) do
+    maybe_upgrade(%{connection | upgrade_status: status})
   end
 
-  defp handle_response(%{websocket: nil, request_ref: ref} = channel, {:headers, ref, headers}) do
-    maybe_upgrade(%{channel | upgrade_headers: headers})
+  defp handle_response(%{websocket: nil, request_ref: ref} = connection, {:headers, ref, headers}) do
+    maybe_upgrade(%{connection | upgrade_headers: headers})
   end
 
-  defp handle_response(%{websocket: nil, request_ref: ref} = channel, {:data, ref, data}) do
-    maybe_upgrade(%{channel | upgrade_data: [data | channel.upgrade_data]})
+  defp handle_response(%{websocket: nil, request_ref: ref} = connection, {:data, ref, data}) do
+    maybe_upgrade(%{connection | upgrade_data: [data | connection.upgrade_data]})
   end
 
   # The server finished answering without upgrading. Whatever it said, this is
   # not a websocket.
-  defp handle_response(%{websocket: nil, request_ref: ref} = channel, {:done, ref}) do
-    {close(channel), [{:disconnected, :upgrade_failure}]}
+  defp handle_response(%{websocket: nil, request_ref: ref} = connection, {:done, ref}) do
+    {close(connection), [{:disconnected, :upgrade_failure}]}
   end
 
-  defp handle_response(%{request_ref: ref} = channel, {:data, ref, data}) do
-    decode_frames(channel, data)
+  defp handle_response(%{request_ref: ref} = connection, {:data, ref, data}) do
+    decode_frames(connection, data)
   end
 
   # The upgrade response is a completed HTTP response as well as the start of
   # a websocket, so Mint reports it done. There is nothing to do about that.
-  defp handle_response(%{request_ref: ref} = channel, {:done, ref}) do
-    {channel, []}
+  defp handle_response(%{request_ref: ref} = connection, {:done, ref}) do
+    {connection, []}
   end
 
-  defp handle_response(%{request_ref: ref} = channel, {:error, ref, reason}) do
-    {close(channel), [{:disconnected, transport_reason(reason)}]}
+  defp handle_response(%{request_ref: ref} = connection, {:error, ref, reason}) do
+    {close(connection), [{:disconnected, transport_reason(reason)}]}
   end
 
-  defp handle_response(channel, response) do
+  defp handle_response(connection, response) do
     Logger.debug("[NervesHubLink] ignoring an unexpected response : #{inspect(response)}")
 
-    {channel, []}
+    {connection, []}
   end
 
-  defp maybe_upgrade(%{upgrade_status: nil} = channel), do: {channel, []}
-  defp maybe_upgrade(%{upgrade_headers: nil} = channel), do: {channel, []}
+  defp maybe_upgrade(%{upgrade_status: nil} = connection), do: {connection, []}
+  defp maybe_upgrade(%{upgrade_headers: nil} = connection), do: {connection, []}
 
-  defp maybe_upgrade(channel) do
+  defp maybe_upgrade(connection) do
     case Mint.WebSocket.new(
-           channel.conn,
-           channel.request_ref,
-           channel.upgrade_status,
-           channel.upgrade_headers
+           connection.conn,
+           connection.request_ref,
+           connection.upgrade_status,
+           connection.upgrade_headers
          ) do
       {:ok, conn, websocket} ->
-        buffered = channel.upgrade_data |> Enum.reverse() |> IO.iodata_to_binary()
+        buffered = connection.upgrade_data |> Enum.reverse() |> IO.iodata_to_binary()
 
-        channel = %{
-          channel
+        connection = %{
+          connection
           | conn: conn,
             websocket: websocket,
             status: :connected,
@@ -535,82 +571,84 @@ defmodule NervesHubLink.Channel do
             upgrade_status: nil,
             upgrade_headers: nil,
             upgrade_data: [],
-            upgrade_timer: cancel_timer(channel.upgrade_timer)
+            upgrade_timer: cancel_timer(connection.upgrade_timer)
         }
 
-        {channel, events} = decode_frames(channel, buffered)
+        {connection, events} = decode_frames(connection, buffered)
 
-        {channel, [:connected | events]}
+        {connection, [:connected | events]}
 
       {:error, conn, reason} ->
-        {close(%{channel | conn: conn}), [{:disconnected, upgrade_failure(reason)}]}
+        {close(%{connection | conn: conn}), [{:disconnected, upgrade_failure(reason)}]}
     end
   end
 
-  defp decode_frames(channel, "") do
-    {channel, []}
+  defp decode_frames(connection, "") do
+    {connection, []}
   end
 
-  defp decode_frames(channel, data) do
-    case Mint.WebSocket.decode(channel.websocket, data) do
+  defp decode_frames(connection, data) do
+    case Mint.WebSocket.decode(connection.websocket, data) do
       {:ok, websocket, frames} ->
-        handle_frames(%{channel | websocket: websocket}, frames, [])
+        handle_frames(%{connection | websocket: websocket}, frames, [])
 
       # Bytes that do not form frames mean the stream itself is no longer
       # trustworthy, so this one takes the connection rather than being
       # dropped the way a single unreadable frame is.
       {:error, websocket, reason} ->
-        channel = close(%{channel | websocket: websocket})
+        connection = close(%{connection | websocket: websocket})
 
-        {channel, [{:disconnected, {:decode_failure, reason}}]}
+        {connection, [{:disconnected, {:decode_failure, reason}}]}
     end
   end
 
-  defp handle_frames(channel, [], events), do: {channel, Enum.reverse(events)}
+  defp handle_frames(connection, [], events), do: {connection, Enum.reverse(events)}
 
-  defp handle_frames(%{status: :closed} = channel, _frames, events) do
-    {channel, Enum.reverse(events)}
+  defp handle_frames(%{status: :closed} = connection, _frames, events) do
+    {connection, Enum.reverse(events)}
   end
 
-  defp handle_frames(channel, [frame | rest], events) do
-    {channel, new_events} = handle_frame(channel, frame)
+  defp handle_frames(connection, [frame | rest], events) do
+    {connection, new_events} = handle_frame(connection, frame)
 
-    handle_frames(channel, rest, Enum.reverse(new_events) ++ events)
+    handle_frames(connection, rest, Enum.reverse(new_events) ++ events)
   end
 
-  defp handle_frame(channel, {:text, payload}), do: handle_payload(channel, payload, :text)
-  defp handle_frame(channel, {:binary, payload}), do: handle_payload(channel, payload, :binary)
+  defp handle_frame(connection, {:text, payload}), do: handle_payload(connection, payload, :text)
 
-  defp handle_frame(channel, {:ping, data}) do
-    case send_frame(channel, {:pong, data}) do
-      {:ok, channel} -> {channel, []}
-      {:error, reason, channel} -> {channel, [{:disconnected, reason}]}
+  defp handle_frame(connection, {:binary, payload}),
+    do: handle_payload(connection, payload, :binary)
+
+  defp handle_frame(connection, {:ping, data}) do
+    case send_frame(connection, {:pong, data}) do
+      {:ok, connection} -> {connection, []}
+      {:error, reason, connection} -> {connection, [{:disconnected, reason}]}
     end
   end
 
-  defp handle_frame(channel, {:pong, _data}), do: {channel, []}
+  defp handle_frame(connection, {:pong, _data}), do: {connection, []}
 
-  defp handle_frame(channel, {:close, _code, _reason}) do
-    {close(channel), [{:disconnected, :closed_by_remote}]}
+  defp handle_frame(connection, {:close, _code, _reason}) do
+    {close(connection), [{:disconnected, :closed_by_remote}]}
   end
 
-  defp handle_frame(channel, frame) do
+  defp handle_frame(connection, frame) do
     Logger.warning("[NervesHubLink] ignoring an unexpected websocket frame : #{inspect(frame)}")
 
-    {channel, []}
+    {connection, []}
   end
 
-  defp handle_payload(channel, payload, opcode) do
-    case decode(channel, payload, opcode) do
-      {:ok, message} -> map_message(channel, message)
-      :error -> {channel, []}
+  defp handle_payload(connection, payload, opcode) do
+    case decode(connection, payload, opcode) do
+      {:ok, message} -> map_message(connection, message)
+      :error -> {connection, []}
     end
   end
 
   # One frame the device cannot read is not a reason to lose the connection:
   # the next one may well be the update that fixes whatever sent it.
-  defp decode(channel, payload, opcode) do
-    {:ok, channel.serializer.decode!(payload, opcode)}
+  defp decode(connection, payload, opcode) do
+    {:ok, connection.serializer.decode!(payload, opcode)}
   rescue
     exception ->
       Logger.warning(
@@ -623,17 +661,17 @@ defmodule NervesHubLink.Channel do
 
   ## Mapping messages to events
 
-  defp map_message(%{heartbeat_ref: ref} = channel, %Message{ref: ref}) when is_binary(ref) do
-    {%{channel | heartbeat_ref: nil}, []}
+  defp map_message(%{heartbeat_ref: ref} = connection, %Message{ref: ref}) when is_binary(ref) do
+    {%{connection | heartbeat_ref: nil}, []}
   end
 
-  defp map_message(channel, %Message{event: "phx_error", topic: topic} = message) do
-    {put_join_status(channel, topic, :closed),
+  defp map_message(connection, %Message{event: "phx_error", topic: topic} = message) do
+    {put_join_status(connection, topic, :closed),
      [{:topic_closed, topic, {:error, message.payload}}]}
   end
 
-  defp map_message(channel, %Message{event: "phx_close", topic: topic}) do
-    {put_join_status(channel, topic, :closed), [{:topic_left, topic}]}
+  defp map_message(connection, %Message{event: "phx_close", topic: topic}) do
+    {put_join_status(connection, topic, :closed), [{:topic_left, topic}]}
   end
 
   # A reply sent with the ref that asked to join is the answer to that join -
@@ -641,55 +679,55 @@ defmodule NervesHubLink.Channel do
   # joined again has a new ref, and a late reply to the old one says nothing
   # about the new one, so taking it for an answer would report a topic joined
   # when its join is still unanswered.
-  defp map_message(channel, %Message{event: "phx_reply", ref: ref, join_ref: ref} = message)
+  defp map_message(connection, %Message{event: "phx_reply", ref: ref, join_ref: ref} = message)
        when is_binary(ref) do
     topic = message.topic
 
-    if current_join_ref?(channel, topic, ref) do
-      map_join_reply(channel, topic, message)
+    if current_join_ref?(connection, topic, ref) do
+      map_join_reply(connection, topic, message)
     else
       Logger.debug(
         "[NervesHubLink] ignoring a reply to a join of #{topic} that has been superseded"
       )
 
-      {channel, []}
+      {connection, []}
     end
   end
 
-  defp map_message(channel, %Message{event: "phx_reply", ref: ref} = message)
+  defp map_message(connection, %Message{event: "phx_reply", ref: ref} = message)
        when is_binary(ref) do
     case status_and_response(message.payload) do
-      {status, response} -> {channel, [{:reply, ref, reply(status, response)}]}
-      :error -> {channel, []}
+      {status, response} -> {connection, [{:reply, ref, reply(status, response)}]}
+      :error -> {connection, []}
     end
   end
 
-  defp map_message(channel, %Message{ref: nil} = message) do
-    {channel, [{:message, message.topic, message.event, message.payload}]}
+  defp map_message(connection, %Message{ref: nil} = message) do
+    {connection, [{:message, message.topic, message.event, message.payload}]}
   end
 
-  defp map_message(channel, %Message{} = message) do
+  defp map_message(connection, %Message{} = message) do
     Logger.debug("[NervesHubLink] ignoring an unexpected message : #{inspect(message)}")
 
-    {channel, []}
+    {connection, []}
   end
 
-  defp map_join_reply(channel, topic, message) do
+  defp map_join_reply(connection, topic, message) do
     case status_and_response(message.payload) do
       {"ok", response} ->
-        channel =
-          channel
+        connection =
+          connection
           |> put_join_status(topic, :joined)
           |> update_join(topic, &%{&1 | rejoin_count: 0})
 
-        {channel, [{:joined, topic, response}]}
+        {connection, [{:joined, topic, response}]}
 
       {_status, response} ->
-        {put_join_status(channel, topic, :closed),
+        {put_join_status(connection, topic, :closed),
          [{:join_failed, topic, {:failed_to_join, response}}]}
 
       :error ->
-        {channel, []}
+        {connection, []}
     end
   end
 
@@ -709,14 +747,14 @@ defmodule NervesHubLink.Channel do
 
   ## Joins
 
-  defp put_join_status(channel, topic, status) do
-    update_join(channel, topic, &%{&1 | status: status})
+  defp put_join_status(connection, topic, status) do
+    update_join(connection, topic, &%{&1 | status: status})
   end
 
-  defp update_join(%{joins: joins} = channel, topic, fun) do
+  defp update_join(%{joins: joins} = connection, topic, fun) do
     case joins do
-      %{^topic => join} -> %{channel | joins: Map.put(joins, topic, fun.(join))}
-      _ -> channel
+      %{^topic => join} -> %{connection | joins: Map.put(joins, topic, fun.(join))}
+      _ -> connection
     end
   end
 
@@ -736,19 +774,19 @@ defmodule NervesHubLink.Channel do
 
   ## Connection plumbing
 
-  defp reset(channel) do
+  defp reset(connection) do
     joins =
-      Map.new(channel.joins, fn {topic, join} -> {topic, %{join | status: :closed}} end)
+      Map.new(connection.joins, fn {topic, join} -> {topic, %{join | status: :closed}} end)
 
     %{
-      channel
+      connection
       | conn: nil,
         websocket: nil,
         request_ref: nil,
         upgrade_status: nil,
         upgrade_headers: nil,
         upgrade_data: [],
-        upgrade_timer: cancel_timer(channel.upgrade_timer),
+        upgrade_timer: cancel_timer(connection.upgrade_timer),
         heartbeat_ref: nil,
         status: :closed,
         joins: joins
@@ -761,7 +799,7 @@ defmodule NervesHubLink.Channel do
     do: nil
 
   defp schedule_upgrade_timeout(%{upgrade_timeout_msec: timeout}, ref) do
-    Process.send_after(self(), {:channel_upgrade_timeout, ref}, timeout)
+    Process.send_after(self(), {:connection_upgrade_timeout, ref}, timeout)
   end
 
   defp cancel_timer(nil), do: nil
@@ -771,10 +809,10 @@ defmodule NervesHubLink.Channel do
     nil
   end
 
-  defp next_ref(%{ref: ref} = channel) do
+  defp next_ref(%{ref: ref} = connection) do
     next = ref + 1
 
-    {Integer.to_string(next), %{channel | ref: next}}
+    {Integer.to_string(next), %{connection | ref: next}}
   end
 
   defp upgrade_failure(%UpgradeFailureError{} = error), do: {:upgrade_failure, error}

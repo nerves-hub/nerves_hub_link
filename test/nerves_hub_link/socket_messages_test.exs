@@ -6,17 +6,16 @@ defmodule NervesHubLink.SocketMessagesTest do
   @moduledoc """
   Drives `NervesHubLink.Socket` as if this test were the NervesHub server.
 
-  `Slipstream.SocketTest` puts the test process in the place of the websocket
-  connection, so messages can be pushed to the device and everything the device
-  pushes back can be asserted on. That covers the device/server protocol and the
-  routing of each message to its collaborator, neither of which was previously
-  exercised.
+  The socket connects over a real websocket to a server in this test, so what
+  is covered here is the device's half of the protocol as it goes over the
+  wire, and the routing of each message to its collaborator.
 
-  Note that pushes from the client block until the matching `assert_push`, so
-  every push a test triggers has to be asserted.
+  Payloads are therefore what JSON carries: a map the device builds with atom
+  keys is asserted on here with string keys and string values.
   """
 
-  use Slipstream.SocketTest
+  use ExUnit.Case, async: false
+  use NervesHubLink.Support.SocketHarness
 
   import Mox
 
@@ -71,7 +70,7 @@ defmodule NervesHubLink.SocketMessagesTest do
 
     socket = start_socket(data_path, Map.get(context, :socket_config, []))
 
-    accept_connect(socket)
+    await_connected(socket)
 
     {:ok, socket: socket, data_path: data_path}
   end
@@ -83,18 +82,17 @@ defmodule NervesHubLink.SocketMessagesTest do
       assert Socket.update_mode(socket) == nil
       refute Socket.managed_updates_allowed?(socket)
 
-      push(socket, @device_topic, "update_mode", %{
+      server_push(@device_topic, "update_mode", %{
         "mode" => "device_managed",
         "managed_updates_allowed" => true
       })
 
-      # push/4 and this call arrive at the socket in order, so no waiting is needed.
-      assert Socket.update_mode(socket) == :device_managed
+      assert_eventually(Socket.update_mode(socket) == :device_managed)
       assert Socket.managed_updates_allowed?(socket)
     end
 
     test "a mode this version does not know is ignored rather than stored", %{socket: socket} do
-      push(socket, @device_topic, "update_mode", %{
+      server_push(@device_topic, "update_mode", %{
         "mode" => "whenever",
         "managed_updates_allowed" => false
       })
@@ -107,9 +105,9 @@ defmodule NervesHubLink.SocketMessagesTest do
     test "setting the mode is answered by NervesHub's report of it", %{socket: socket} do
       task = Task.async(fn -> Socket.set_update_mode(socket, :device_managed) end)
 
-      assert_push(@device_topic, "set_update_mode", %{mode: :device_managed})
+      assert_push(@device_topic, "set_update_mode", %{"mode" => "device_managed"})
 
-      push(socket, @device_topic, "update_mode", %{
+      server_push(@device_topic, "update_mode", %{
         "mode" => "device_managed",
         "managed_updates_allowed" => true
       })
@@ -121,9 +119,9 @@ defmodule NervesHubLink.SocketMessagesTest do
     test "a refused change reports why, and the mode NervesHub still has", %{socket: socket} do
       task = Task.async(fn -> Socket.set_update_mode(socket, :device_managed) end)
 
-      assert_push(@device_topic, "set_update_mode", %{mode: :device_managed})
+      assert_push(@device_topic, "set_update_mode", %{"mode" => "device_managed"})
 
-      push(socket, @device_topic, "update_mode", %{
+      server_push(@device_topic, "update_mode", %{
         "mode" => "automatic",
         "managed_updates_allowed" => false,
         "error" => "not_permitted"
@@ -142,7 +140,7 @@ defmodule NervesHubLink.SocketMessagesTest do
 
       assert_push(@device_topic, "check_update", %{})
 
-      push(socket, @device_topic, "update_available", %{
+      server_push(@device_topic, "update_available", %{
         "available" => true,
         "firmware_meta" => %{"version" => "1.2.0"}
       })
@@ -155,7 +153,7 @@ defmodule NervesHubLink.SocketMessagesTest do
 
       assert_push(@device_topic, "check_update", %{})
 
-      push(socket, @device_topic, "update_available", %{
+      server_push(@device_topic, "update_available", %{
         "available" => false,
         "firmware_meta" => nil
       })
@@ -177,14 +175,14 @@ defmodule NervesHubLink.SocketMessagesTest do
 
       # NervesHub answers a request with the same "update" message a deployment
       # group sends, so nothing new applies the firmware.
-      push(socket, @device_topic, "update", update_payload())
+      server_push(@device_topic, "update", update_payload())
 
       assert Task.await(task) == :ok
       assert_receive {:start_update, %UpdateInfo{}}
 
       # Applying an update reports itself, and every push has to be asserted or
       # the socket blocks on it.
-      assert_push(@device_topic, "status_update", %{status: :received})
+      assert_push(@device_topic, "status_update", %{"status" => "received"})
     end
 
     test "a refused request reports how long to wait", %{socket: socket} do
@@ -192,7 +190,7 @@ defmodule NervesHubLink.SocketMessagesTest do
 
       assert_push(@device_topic, "request_update", %{})
 
-      push(socket, @device_topic, "update_rejected", %{"reason" => "busy", "delay_for" => 5})
+      server_push(@device_topic, "update_rejected", %{"reason" => "busy", "delay_for" => 5})
 
       assert Task.await(task) == {:error, {:busy, 5}}
     end
@@ -204,7 +202,7 @@ defmodule NervesHubLink.SocketMessagesTest do
 
       assert_push(@device_topic, "request_update", %{})
 
-      push(socket, @device_topic, "update_rejected", %{"reason" => "some_future_reason"})
+      server_push(@device_topic, "update_rejected", %{"reason" => "some_future_reason"})
 
       # The caller must never be left parked on a reason we cannot name.
       assert Task.await(task) == {:error, :error}
@@ -215,11 +213,11 @@ defmodule NervesHubLink.SocketMessagesTest do
         {:ok, spawn(fn -> Process.sleep(:infinity) end)}
       end)
 
-      push(socket, @device_topic, "update", update_payload())
+      server_push(@device_topic, "update", update_payload())
 
       # The update is applied before this is pushed, so asserting it is also how
       # the test knows UpdateManager has been told.
-      assert_push(@device_topic, "status_update", %{status: :received})
+      assert_push(@device_topic, "status_update", %{"status" => "received"})
       assert UpdateManager.status() == :updating
 
       # Asking for another firmware URL would only waste a deployment slot.
@@ -228,7 +226,7 @@ defmodule NervesHubLink.SocketMessagesTest do
   end
 
   describe "device messages" do
-    test "an update message starts an update with the configured firmware keys", %{socket: socket} do
+    test "an update message starts an update with the configured firmware keys" do
       test_pid = self()
 
       expect(UpdaterMock, :start_update, fn update_info, _fwup_config, fwup_public_keys ->
@@ -236,7 +234,7 @@ defmodule NervesHubLink.SocketMessagesTest do
         {:ok, spawn(fn -> Process.sleep(:infinity) end)}
       end)
 
-      push(socket, @device_topic, "update", update_payload())
+      server_push(@device_topic, "update", update_payload())
 
       assert_receive {:start_update, %UpdateInfo{} = update_info, ["configured fwup key"]}
       assert URI.to_string(update_info.firmware_url) == @firmware_url
@@ -249,7 +247,7 @@ defmodule NervesHubLink.SocketMessagesTest do
     end
 
     test "an update message carries the size and checksums of the firmware file",
-         %{socket: socket} do
+         _context do
       test_pid = self()
 
       expect(UpdaterMock, :start_update, fn update_info, _fwup_config, _fwup_public_keys ->
@@ -263,7 +261,7 @@ defmodule NervesHubLink.SocketMessagesTest do
         |> Map.put("checksum", String.duplicate("A", 64))
         |> Map.put("partials_checksums", [String.duplicate("B", 64), String.duplicate("C", 64)])
 
-      push(socket, @device_topic, "update", payload)
+      server_push(@device_topic, "update", payload)
 
       assert_receive {:start_update, %UpdateInfo{} = update_info}
       assert update_info.size == 2_097_152
@@ -277,14 +275,14 @@ defmodule NervesHubLink.SocketMessagesTest do
 
     test "an update message that can not be parsed is ignored", %{socket: socket} do
       # UpdaterMock has no expectation, so starting an update would fail the test
-      push(socket, @device_topic, "update", %{"firmware_url" => @firmware_url})
+      server_push(@device_topic, "update", %{"firmware_url" => @firmware_url})
 
       assert Process.alive?(socket)
       refute_receive {:start_update, _, _}, 100
     end
 
-    test "an archive message hands the parsed archive to the client", %{socket: socket} do
-      push(socket, @device_topic, "archive", %{
+    test "an archive message hands the parsed archive to the client" do
+      server_push(@device_topic, "archive", %{
         "url" => "http://localhost:4000/archive.fw",
         "uuid" => @uuid,
         "version" => "1.0.0"
@@ -295,13 +293,13 @@ defmodule NervesHubLink.SocketMessagesTest do
       assert archive_info.url == "http://localhost:4000/archive.fw"
     end
 
-    test "an identify message calls the client", %{socket: socket} do
-      push(socket, @device_topic, "identify", %{})
+    test "an identify message calls the client" do
+      server_push(@device_topic, "identify", %{})
 
       assert_receive :identified
     end
 
-    test "firmware public keys sent by the server are used for the next update", %{socket: socket} do
+    test "firmware public keys sent by the server are used for the next update" do
       test_pid = self()
 
       expect(UpdaterMock, :start_update, fn _update_info, _fwup_config, fwup_public_keys ->
@@ -309,21 +307,20 @@ defmodule NervesHubLink.SocketMessagesTest do
         {:ok, spawn(fn -> Process.sleep(:infinity) end)}
       end)
 
-      push(socket, @device_topic, "fwup_public_keys", %{"keys" => ["key from the server"]})
-      push(socket, @device_topic, "update", update_payload())
+      server_push(@device_topic, "fwup_public_keys", %{"keys" => ["key from the server"]})
+      server_push(@device_topic, "update", update_payload())
 
       assert_receive {:start_update, ["key from the server"]}
     end
 
     test "archive public keys sent by the server replace the configured ones", %{socket: socket} do
-      push(socket, @device_topic, "archive_public_keys", %{"keys" => ["archive key from server"]})
+      server_push(@device_topic, "archive_public_keys", %{"keys" => ["archive key from server"]})
 
-      # Round-trip a call so the message above has been handled
-      assert NervesHubLink.socket_connected?(socket)
-
-      assert :sys.get_state(socket).assigns.config.archive_public_keys == [
-               "archive key from server"
-             ]
+      assert_eventually(
+        :sys.get_state(socket).assigns.config.archive_public_keys == [
+          "archive key from server"
+        ]
+      )
     end
 
     test "an empty key list from the server does not clear the configured firmware keys", %{
@@ -331,9 +328,8 @@ defmodule NervesHubLink.SocketMessagesTest do
     } do
       # NervesHub supplies the firmware as well as the keys that verify it, so a
       # server that sends no keys must not be able to disable signature checking.
-      push(socket, @device_topic, "fwup_public_keys", %{"keys" => []})
-
-      assert NervesHubLink.socket_connected?(socket)
+      server_push(@device_topic, "fwup_public_keys", %{"keys" => []})
+      assert_handled_in_order()
 
       assert :sys.get_state(socket).assigns.config.fwup_public_keys == ["configured fwup key"]
     end
@@ -341,9 +337,8 @@ defmodule NervesHubLink.SocketMessagesTest do
     test "an empty key list from the server does not clear the configured archive keys", %{
       socket: socket
     } do
-      push(socket, @device_topic, "archive_public_keys", %{"keys" => []})
-
-      assert NervesHubLink.socket_connected?(socket)
+      server_push(@device_topic, "archive_public_keys", %{"keys" => []})
+      assert_handled_in_order()
 
       assert :sys.get_state(socket).assigns.config.archive_public_keys == [
                "configured archive key"
@@ -351,15 +346,15 @@ defmodule NervesHubLink.SocketMessagesTest do
     end
 
     test "keys from the server that are not binaries are discarded", %{socket: socket} do
-      push(socket, @device_topic, "fwup_public_keys", %{"keys" => [nil, 42]})
+      server_push(@device_topic, "fwup_public_keys", %{"keys" => [nil, 42]})
 
       assert NervesHubLink.socket_connected?(socket)
 
       assert :sys.get_state(socket).assigns.config.fwup_public_keys == ["configured fwup key"]
     end
 
-    test "an extensions:get message asks to join the extensions topic", %{socket: socket} do
-      push(socket, @device_topic, "extensions:get", %{})
+    test "an extensions:get message asks to join the extensions topic" do
+      server_push(@device_topic, "extensions:get", %{})
 
       assert_join("extensions", available_extensions, :error)
 
@@ -367,11 +362,11 @@ defmodule NervesHubLink.SocketMessagesTest do
       assert Map.has_key?(available_extensions, "health")
     end
 
-    test "only the extensions the platform advertised are offered", %{socket: socket} do
+    test "only the extensions the platform advertised are offered" do
       # The platform names what it has and at which versions, so this device
       # never declares a version nothing can serve, and never declares an
       # extension an operator switched off.
-      push(socket, @device_topic, "extensions:get", %{
+      server_push(@device_topic, "extensions:get", %{
         "extensions" => %{"health" => ["0.0.1"]}
       })
 
@@ -380,8 +375,8 @@ defmodule NervesHubLink.SocketMessagesTest do
       assert offered == %{"health" => "0.0.1"}
     end
 
-    test "an extension the platform has at another version is not offered", %{socket: socket} do
-      push(socket, @device_topic, "extensions:get", %{
+    test "an extension the platform has at another version is not offered" do
+      server_push(@device_topic, "extensions:get", %{
         "extensions" => %{"health" => ["9.0.0"], "geo" => ["0.0.1"]}
       })
 
@@ -393,7 +388,7 @@ defmodule NervesHubLink.SocketMessagesTest do
     test "a join reply that doesn't name extensions doesn't take the socket down", %{
       socket: socket
     } do
-      push(socket, @device_topic, "extensions:get", %{})
+      server_push(@device_topic, "extensions:get", %{})
 
       # An `:ok` reply carries `%{}`, which is not the list of extension names
       # the attach path is expecting
@@ -404,7 +399,8 @@ defmodule NervesHubLink.SocketMessagesTest do
     end
 
     test "an unknown message is ignored", %{socket: socket} do
-      push(socket, @device_topic, "who_knows", %{})
+      server_push(@device_topic, "who_knows", %{})
+      assert_handled_in_order()
 
       assert NervesHubLink.socket_connected?(socket)
       assert Process.alive?(socket)
@@ -417,27 +413,27 @@ defmodule NervesHubLink.SocketMessagesTest do
     test "download progress is pushed as fwup_progress", %{socket: socket} do
       NervesHubLink.send_update_status(socket, {:downloading, 42})
 
-      assert_push(@device_topic, "fwup_progress", %{stage: :downloading, value: 42})
+      assert_push(@device_topic, "fwup_progress", %{"stage" => "downloading", "value" => 42})
     end
 
     test "update progress is pushed as fwup_progress", %{socket: socket} do
       NervesHubLink.send_update_status(socket, {:updating, 99})
 
-      assert_push(@device_topic, "fwup_progress", %{stage: :updating, value: 99})
+      assert_push(@device_topic, "fwup_progress", %{"stage" => "updating", "value" => 99})
     end
 
     test "a received update is pushed as a status update", %{socket: socket} do
       NervesHubLink.send_update_status(socket, :received)
 
-      assert_push(@device_topic, "status_update", %{status: :received})
+      assert_push(@device_topic, "status_update", %{"status" => "received"})
     end
 
     test "a started download reports the network interface", %{socket: socket} do
       NervesHubLink.send_update_status(socket, {:started, "eth0"})
 
       assert_push(@device_topic, "status_update", %{
-        status: :started,
-        downloader_network_interface: "eth0"
+        "status" => "started",
+        "downloader_network_interface" => "eth0"
       })
     end
 
@@ -445,29 +441,32 @@ defmodule NervesHubLink.SocketMessagesTest do
       NervesHubLink.send_update_status(socket, :completed)
 
       # Older versions of NervesHub rely on this final progress message
-      assert_push(@device_topic, "fwup_progress", %{stage: :updating, value: 100})
-      assert_push(@device_topic, "status_update", %{status: :completed})
+      assert_push(@device_topic, "fwup_progress", %{"stage" => "updating", "value" => 100})
+      assert_push(@device_topic, "status_update", %{"status" => "completed"})
     end
 
     test "an ignored update reports the reason", %{socket: socket} do
       NervesHubLink.send_update_status(socket, {:ignored, "on battery"})
 
-      assert_push(@device_topic, "status_update", %{status: :ignored, reason: "on battery"})
+      assert_push(@device_topic, "status_update", %{
+        "status" => "ignored",
+        "reason" => "on battery"
+      })
     end
 
     test "a rescheduled update reports the delay", %{socket: socket} do
       NervesHubLink.send_update_status(socket, {:reschedule, 15})
 
-      assert_push(@device_topic, "status_update", %{status: :rescheduled, delay_for: 15})
+      assert_push(@device_topic, "status_update", %{"status" => "rescheduled", "delay_for" => 15})
     end
 
     test "a rescheduled update reports the delay and reason", %{socket: socket} do
       NervesHubLink.send_update_status(socket, {:reschedule, 15, "busy"})
 
       assert_push(@device_topic, "status_update", %{
-        status: :rescheduled,
-        delay_for: 15,
-        reason: "busy"
+        "status" => "rescheduled",
+        "delay_for" => 15,
+        "reason" => "busy"
       })
     end
 
@@ -475,8 +474,8 @@ defmodule NervesHubLink.SocketMessagesTest do
       NervesHubLink.send_update_status(socket, {:failed, "FWUP error : bad signature"})
 
       assert_push(@device_topic, "status_update", %{
-        status: :failed,
-        reason: "FWUP error : bad signature"
+        "status" => "failed",
+        "reason" => "FWUP error : bad signature"
       })
     end
   end
@@ -484,71 +483,68 @@ defmodule NervesHubLink.SocketMessagesTest do
   describe "running support scripts" do
     setup :join_device_topic
 
-    test "the script output and return value are sent back", %{socket: socket} do
-      push(socket, @device_topic, "scripts/run", %{
+    test "the script output and return value are sent back" do
+      server_push(@device_topic, "scripts/run", %{
         "ref" => "script-1",
         "text" => ~s|IO.puts("working"); 6 * 7|,
         "timeout" => 5_000
       })
 
       assert_push(@device_topic, "scripts/run", %{
-        ref: "script-1",
-        result: "completed",
-        output: output,
-        return: "42"
+        "ref" => "script-1",
+        "result" => "completed",
+        "output" => output,
+        "return" => "42"
       })
 
       assert output =~ "working"
     end
 
-    test "a script that runs too long is killed and reported", %{socket: socket} do
-      push(socket, @device_topic, "scripts/run", %{
+    test "a script that runs too long is killed and reported" do
+      server_push(@device_topic, "scripts/run", %{
         "ref" => "script-2",
         "text" => "Process.sleep(:infinity)",
         "timeout" => 50
       })
 
       assert_push(@device_topic, "scripts/run", %{
-        ref: "script-2",
-        result: "error",
-        reason: "timeout"
+        "ref" => "script-2",
+        "result" => "error",
+        "reason" => "timeout"
       })
     end
 
-    test "a script that raises reports the error in its output", %{socket: socket} do
-      push(socket, @device_topic, "scripts/run", %{
+    test "a script that raises reports the error in its output" do
+      server_push(@device_topic, "scripts/run", %{
         "ref" => "script-3",
         "text" => ~s|raise "boom"|,
         "timeout" => 5_000
       })
 
-      assert_push(@device_topic, "scripts/run", %{ref: "script-3", output: output})
+      assert_push(@device_topic, "scripts/run", %{"ref" => "script-3", "output" => output})
 
       assert output =~ "boom"
     end
   end
 
   describe "receiving a file over the console" do
-    test "the file is written to the data path", %{socket: socket, data_path: data_path} do
+    test "the file is written to the data path", %{data_path: data_path} do
       filename = "notes.txt"
 
-      push(socket, @console_topic, "file-data/start", %{"filename" => filename})
-      push(socket, @console_topic, "file-data", file_chunk(filename, "hello "))
-      push(socket, @console_topic, "file-data", file_chunk(filename, "world"))
-      push(socket, @console_topic, "file-data/stop", %{"filename" => filename})
+      server_push(@console_topic, "file-data/start", %{"filename" => filename})
+      server_push(@console_topic, "file-data", file_chunk(filename, "hello "))
+      server_push(@console_topic, "file-data", file_chunk(filename, "world"))
+      server_push(@console_topic, "file-data/stop", %{"filename" => filename})
 
-      # A call round-trips, so every message above has been handled by now
-      assert NervesHubLink.socket_connected?(socket)
-
-      assert File.read!(Path.join(data_path, filename)) == "hello world"
+      assert_eventually(File.read(Path.join(data_path, filename)) == {:ok, "hello world"})
     end
 
     test "a console message starts a console session", %{socket: socket} do
       refute NervesHubLink.console_active?(socket)
 
-      push(socket, @console_topic, "file-data/start", %{"filename" => "notes.txt"})
+      server_push(@console_topic, "file-data/start", %{"filename" => "notes.txt"})
 
-      assert NervesHubLink.console_active?(socket)
+      assert_eventually(NervesHubLink.console_active?(socket))
     end
   end
 
@@ -566,9 +562,15 @@ defmodule NervesHubLink.SocketMessagesTest do
 
       assert NervesHubLink.send_file(socket, path) == :ok
 
-      assert_push(@console_topic, "file-data/start", %{filename: ^filename})
-      assert_push(@console_topic, "file-data", %{filename: ^filename, chunk: 0, data: data})
-      assert_push(@console_topic, "file-data/stop", %{filename: ^filename})
+      assert_push(@console_topic, "file-data/start", %{"filename" => ^filename})
+
+      assert_push(@console_topic, "file-data", %{
+        "filename" => ^filename,
+        "chunk" => 0,
+        "data" => data
+      })
+
+      assert_push(@console_topic, "file-data/stop", %{"filename" => ^filename})
 
       assert Base.decode64!(data) == "hello from the device"
     end
@@ -613,7 +615,7 @@ defmodule NervesHubLink.SocketMessagesTest do
   describe "a reboot request" do
     setup :join_device_topic
 
-    test "tells NervesHub and reboots through the client", %{socket: socket} do
+    test "tells NervesHub and reboots through the client" do
       test_pid = self()
 
       stub(ClientMock, :reboot, fn ->
@@ -621,7 +623,7 @@ defmodule NervesHubLink.SocketMessagesTest do
         :ok
       end)
 
-      push(socket, @device_topic, "reboot", %{})
+      server_push(@device_topic, "reboot", %{})
 
       assert_push(@device_topic, "rebooting", %{})
       assert_receive :reboot
@@ -658,75 +660,61 @@ defmodule NervesHubLink.SocketMessagesTest do
   end
 
   describe "reporting the network interface" do
-    # Joining the device topic makes the client inspect the connection process
-    # with `:sys.get_state/2`. Under test that process is this one, which
-    # doesn't speak the sys protocol - the same position the client is in when
-    # the real connection process is busy or has died.
-
-    test "a connection process that never answers doesn't take the socket down", %{socket: socket} do
+    # The connection is held by the socket itself, so the interface is a plain
+    # read rather than the look into another process's state it used to be.
+    test "the interface the connection is using is reported after joining", %{socket: socket} do
       assert_join(@device_topic, _params, :ok)
 
-      # Take the probe out of the mailbox and leave it unanswered, so the client
-      # is definitely waiting on it
-      assert_receive {:system, _from, _request}, 1_000
+      assert_push(@device_topic, "report_network_interface", %{"interface" => interface})
 
-      # This call queues behind the probe, so it only returns once the client
-      # has given up on it
-      assert NervesHubLink.socket_connected?(socket)
-      assert Process.alive?(socket)
-    end
-
-    test "an unexpected answer doesn't take the socket down", %{socket: socket} do
-      assert_join(@device_topic, _params, :ok)
-
-      receive do
-        {:system, from, _request} -> GenServer.reply(from, :not_a_valid_sys_reply)
-      after
-        1_000 -> flunk("expected the client to ask for the connection state")
-      end
-
-      assert NervesHubLink.socket_connected?(socket)
+      assert is_binary(interface)
       assert Process.alive?(socket)
     end
   end
 
   describe "disconnecting" do
-    test "the client is told about the error and the alarm is raised", %{socket: socket} do
-      disconnect(socket, :heartbeat_timeout)
+    test "a close from NervesHub tells the client and raises the alarm", %{socket: socket} do
+      server_close()
 
-      assert_receive {:handle_error, :heartbeat_timeout}
+      assert_receive {:handle_error, :closed_by_remote}
+      assert alarm_eventually_set?(NervesHubLink.Disconnected)
+      assert Process.alive?(socket)
+    end
+
+    # An idle TCP connection can be dead for a long time without either end
+    # noticing, and an unanswered heartbeat is how the device finds out. This
+    # server is told to answer nothing, so the second heartbeat finds the first
+    # outstanding.
+    @tag socket_config: [heartbeat_interval_msec: 50]
+    test "an unanswered heartbeat tells the client and raises the alarm", %{socket: socket} do
+      assert_push("phoenix", "heartbeat", %{})
+
+      assert_receive {:handle_error, :heartbeat_timeout}, 2_000
       assert alarm_eventually_set?(NervesHubLink.Disconnected)
       assert Process.alive?(socket)
     end
   end
 
+  # Frames are handled in the order they arrive, so a message whose effect can
+  # be seen marks everything sent before it as handled. Needed where a test
+  # asserts that a message changed nothing, which cannot be waited for.
+  defp assert_handled_in_order() do
+    server_push(@device_topic, "identify", %{})
+
+    assert_receive :identified, 2_000
+  end
+
   # A topic has to be joined before the client will push to it.
-  defp join_device_topic(%{socket: _socket}) do
+  defp join_device_topic(%{socket: socket}) do
     assert_join(@device_topic, _params, :ok)
-    answer_network_interface_probe()
+    await_joined(socket, :device)
     :ok
   end
 
-  defp join_console_topic(%{socket: _socket}) do
+  defp join_console_topic(%{socket: socket}) do
     assert_join(@console_topic, _params, :ok)
+    await_joined(socket, :console)
     :ok
-  end
-
-  # Joining the device topic makes the client work out which network interface
-  # it connected over by calling `:sys.get_state/1` on the connection process.
-  # Under `Slipstream.SocketTest` that process is this test, which doesn't speak
-  # the sys protocol, so answer the probe with something the client discards
-  # (it logs and retries later). Left unanswered, the client would block for the
-  # full 5s `:sys.get_state/1` timeout and then crash.
-  defp answer_network_interface_probe(timeout \\ 1_000) do
-    receive do
-      # `{:ok, state}` is the reply shape `:sys.get_state/1` expects. The state
-      # itself is deliberately not a `%{conn: _}`, so the client falls through
-      # to its "couldn't determine the interface" branch.
-      {:system, from, _request} -> GenServer.reply(from, {:ok, :no_connection_information})
-    after
-      timeout -> :ok
-    end
   end
 
   defp start_collaborators(data_path) do
@@ -773,9 +761,8 @@ defmodule NervesHubLink.SocketMessagesTest do
           remote_iex: false,
           remote_iex_timeout: 300,
           socket: [
-            url: URI.parse("ws://localhost:4000/socket/websocket"),
-            reconnect_after_msec: [1_000],
-            test_mode?: true
+            url: URI.parse("ws://localhost:#{start_server()}/socket/websocket"),
+            reconnect_after_msec: [1_000]
           ],
           ssl: []
         },

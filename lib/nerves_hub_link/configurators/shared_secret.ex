@@ -86,9 +86,9 @@ defmodule NervesHubLink.Configurator.SharedSecret do
   end
 
   @doc """
-  Extract a server-time hint from a Slipstream disconnect reason.
+  Extract a server-time hint from a disconnect reason.
 
-  Slipstream surfaces Mint's WebSocket upgrade failures as
+  A failed WebSocket upgrade is reported as
   `{:error, {:upgrade_failure, %{reason: %UpgradeFailureError{headers: ...}}}}`.
   When that's the shape we get, parse the server's RFC 9110 `Date`
   header (e.g. `Sun, 06 Nov 1994 08:49:37 GMT`) into a `DateTime` and

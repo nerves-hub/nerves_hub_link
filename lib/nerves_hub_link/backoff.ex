@@ -8,7 +8,7 @@ defmodule NervesHubLink.Backoff do
   Functions for computing network connect backoff intervals
   """
 
-  # Compute retry backoff intervals used by Slipstream
+  # Compute retry backoff intervals for reconnecting and rejoining
 
   @doc """
   Produce a list of integer backoff delays with jitter
