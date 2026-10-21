@@ -49,6 +49,20 @@ defmodule NervesHubLink.Socket do
 
   @max_redirects 2
 
+  # The protocol version is part of the URL rather than of the serializer
+  # module, because the server picks its serializer from the `vsn` query
+  # parameter. The two are decided together so they cannot disagree.
+  @json_vsn "2.0.0"
+  @msgpack_vsn "3.0.0"
+
+  # A payload to push over the socket: either a term the configured serializer
+  # can encode, or an already encoded binary frame.
+  @type push_payload :: term() | {:binary, binary()}
+
+  # The `ref` a push was sent with. The server's reply to that push carries the
+  # same ref, which is how the two are matched up.
+  @type push_ref :: String.t()
+
   @spec start_link(Configurator.Config.t(), GenServer.options()) :: GenServer.on_start()
   def start_link(config, opts \\ []) do
     opts = Keyword.put_new(opts, :name, __MODULE__)
@@ -160,8 +174,8 @@ defmodule NervesHubLink.Socket do
   @spec push_extensions_message(
           GenServer.server(),
           event :: String.t(),
-          message :: Slipstream.json_serializable() | {:binary, binary()}
-        ) :: {:ok, Slipstream.push_reference()} | {:error, reason :: term()}
+          message :: push_payload()
+        ) :: {:ok, push_ref()} | {:error, reason :: term()}
   def push_extensions_message(server \\ __MODULE__, event, message) do
     GenServer.call(server, {:push, @extensions_topic, event, message})
   end
@@ -797,41 +811,77 @@ defmodule NervesHubLink.Socket do
     |> handle_redirect(reason)
   end
 
-  defp handle_redirect(
-         %{assigns: %{redirect_count: redirect_count}} = socket,
-         {:error,
-          {:upgrade_failure,
-           %{reason: %UpgradeFailureError{status_code: status, headers: headers}}}} = error
-       )
-       when status >= 300 and status < 400 do
-    if redirect_count < @max_redirects do
-      {_, location} = Enum.find(headers, fn {k, _v} -> k == "location" end)
-
-      uri = URI.merge(socket.channel_config.uri, URI.parse(location))
-
-      uri =
-        case uri.scheme do
-          "http" -> %{uri | scheme: "ws"}
-          "https" -> %{uri | scheme: "wss"}
-          _ -> uri
-        end
-
-      channel_config = %{socket.channel_config | uri: uri}
-
-      Logger.info("[NervesHubLink] redirect received : #{URI.to_string(uri)}")
-
-      %{socket | channel_config: channel_config}
-      |> update(:redirect_count, &(&1 + 1))
-      |> reconnect()
+  # A 3xx answer to the upgrade request is NervesHub pointing this device at
+  # another host. Anything else is an ordinary disconnect, and just reconnects.
+  defp handle_redirect(socket, reason) do
+    with {:ok, status, headers} <- upgrade_failure(reason),
+         true <- redirect_status?(status) do
+      follow_redirect(socket, headers, reason)
     else
-      Logger.error("[NervesHubLink] maximum redirect count reached : #{inspect(error)}")
-      {:ok, socket}
+      _ -> reconnect(socket)
     end
   end
 
-  defp handle_redirect(socket, _reason) do
-    reconnect(socket)
+  # Giving up rather than reconnecting: past this many hops the server is
+  # redirecting in a loop, and retrying it only hides that.
+  defp follow_redirect(%{assigns: %{redirect_count: count}} = socket, _headers, reason)
+       when count >= @max_redirects do
+    Logger.error("[NervesHubLink] maximum redirect count reached : #{inspect(reason)}")
+    {:ok, socket}
   end
+
+  defp follow_redirect(socket, headers, _reason) do
+    case redirect_uri(socket.channel_config.uri, headers) do
+      {:ok, uri} ->
+        Logger.info("[NervesHubLink] redirect received : #{URI.to_string(uri)}")
+
+        %{socket | channel_config: %{socket.channel_config | uri: uri}}
+        |> update(:redirect_count, &(&1 + 1))
+        |> reconnect()
+
+      :error ->
+        # A 3xx with nothing to redirect to. Nothing to follow, so this is
+        # treated as the plain disconnect it effectively is.
+        Logger.error("[NervesHubLink] redirect received without a usable location header")
+        reconnect(socket)
+    end
+  end
+
+  # The one place that knows how a failed HTTP upgrade is reported to us.
+  # Everything else works from `{:ok, status, headers}`.
+  @doc false
+  @spec upgrade_failure(term()) :: {:ok, non_neg_integer(), [{binary(), binary()}]} | :error
+  def upgrade_failure(
+        {:error,
+         {:upgrade_failure,
+          %{reason: %UpgradeFailureError{status_code: status, headers: headers}}}}
+      )
+      when is_integer(status) and is_list(headers) do
+    {:ok, status, headers}
+  end
+
+  def upgrade_failure(_reason), do: :error
+
+  defp redirect_status?(status), do: status >= 300 and status < 400
+
+  # `Location` is allowed to be relative, so it is merged onto the URL the
+  # device just tried. The redirect answers an HTTP request and so names an
+  # http(s) scheme, but the next attempt is still a websocket upgrade.
+  @doc false
+  @spec redirect_uri(URI.t(), [{binary(), binary()}]) :: {:ok, URI.t()} | :error
+  def redirect_uri(%URI{} = current_uri, headers) when is_list(headers) do
+    case List.keyfind(headers, "location", 0) do
+      {_name, location} when is_binary(location) and location != "" ->
+        {:ok, current_uri |> URI.merge(location) |> websocket_scheme()}
+
+      _ ->
+        :error
+    end
+  end
+
+  defp websocket_scheme(%URI{scheme: "http"} = uri), do: %{uri | scheme: "ws"}
+  defp websocket_scheme(%URI{scheme: "https"} = uri), do: %{uri | scheme: "wss"}
+  defp websocket_scheme(%URI{} = uri), do: uri
 
   @impl Slipstream
   def terminate(_reason, socket) do
@@ -855,10 +905,11 @@ defmodule NervesHubLink.Socket do
   # Falling back to JSON rather than raising: a serializer the device can't use
   # is a configuration mistake, and refusing to connect over it would leave the
   # device unreachable, including for the update that would fix the mistake.
-  defp serializer_for(%{serializer: :msgpack} = config) do
+  @doc false
+  @spec serializer_for(Configurator.Config.t()) :: {URI.t(), module()}
+  def serializer_for(%{serializer: :msgpack} = config) do
     if Code.ensure_loaded?(NervesHubLink.MsgPackSerializer) do
-      uri = %{config.socket[:url] | query: URI.encode_query(%{vsn: "3.0.0"})}
-      {uri, NervesHubLink.MsgPackSerializer}
+      {url_with_vsn(config, @msgpack_vsn), NervesHubLink.MsgPackSerializer}
     else
       Logger.error(
         "[NervesHubLink] the :msgpack serializer needs the :msgpax dependency, using JSON instead"
@@ -868,9 +919,9 @@ defmodule NervesHubLink.Socket do
     end
   end
 
-  defp serializer_for(%{serializer: :json} = config), do: json_serializer(config)
+  def serializer_for(%{serializer: :json} = config), do: json_serializer(config)
 
-  defp serializer_for(config) do
+  def serializer_for(config) do
     Logger.error(
       "[NervesHubLink] unknown serializer #{inspect(config.serializer)}, using JSON instead"
     )
@@ -879,7 +930,22 @@ defmodule NervesHubLink.Socket do
   end
 
   defp json_serializer(config) do
-    {config.socket[:url], Slipstream.Serializer.PhoenixSocketV2Serializer}
+    {url_with_vsn(config, @json_vsn), Slipstream.Serializer.PhoenixSocketV2Serializer}
+  end
+
+  # The `vsn` we ask for has to be the one matching the serializer we chose, so
+  # it is set here rather than left to a default further down, and it overrides
+  # a `vsn` in a configured URL. Any other query parameters are kept.
+  defp url_with_vsn(config, vsn) do
+    url = config.socket[:url]
+
+    query =
+      (url.query || "")
+      |> URI.decode_query()
+      |> Map.put("vsn", vsn)
+      |> URI.encode_query()
+
+    %{url | query: query}
   end
 
   # A device-initiated request is answered by a separate message rather than a

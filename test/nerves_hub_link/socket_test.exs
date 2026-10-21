@@ -5,6 +5,7 @@
 defmodule NervesHubLink.SocketTest do
   use ExUnit.Case, async: true
 
+  alias Mint.WebSocket.UpgradeFailureError
   alias NervesHubLink.Configurator.Config
   alias NervesHubLink.Socket
 
@@ -95,5 +96,121 @@ defmodule NervesHubLink.SocketTest do
       assert opts[:transport_opts][:verify] == :verify_none
       assert opts[:transport_opts][:cacerts] == [:fake_ca]
     end
+  end
+
+  describe "serializer_for/1" do
+    test "JSON asks for the v2 protocol" do
+      assert {uri, serializer} = Socket.serializer_for(config(serializer: :json))
+
+      assert serializer == Slipstream.Serializer.PhoenixSocketV2Serializer
+      assert uri.query == "vsn=2.0.0"
+    end
+
+    test "msgpack asks for the v3 protocol" do
+      assert {uri, serializer} = Socket.serializer_for(config(serializer: :msgpack))
+
+      assert serializer == NervesHubLink.MsgPackSerializer
+      assert uri.query == "vsn=3.0.0"
+    end
+
+    test "an unknown serializer falls back to JSON rather than refusing to connect" do
+      assert {uri, serializer} = Socket.serializer_for(config(serializer: :something_else))
+
+      assert serializer == Slipstream.Serializer.PhoenixSocketV2Serializer
+      assert uri.query == "vsn=2.0.0"
+    end
+
+    test "other query parameters on a configured URL are kept" do
+      config = config(serializer: :json, url: "wss://example.test/socket?region=eu")
+
+      assert {uri, _serializer} = Socket.serializer_for(config)
+
+      query = URI.decode_query(uri.query)
+      assert query["region"] == "eu"
+      assert query["vsn"] == "2.0.0"
+    end
+
+    test "a vsn in a configured URL does not override the one the serializer needs" do
+      config = config(serializer: :msgpack, url: "wss://example.test/socket?vsn=2.0.0")
+
+      assert {uri, _serializer} = Socket.serializer_for(config)
+
+      assert URI.decode_query(uri.query)["vsn"] == "3.0.0"
+    end
+  end
+
+  describe "upgrade_failure/1" do
+    test "reports the status and headers of a failed upgrade" do
+      headers = [{"location", "https://other.test/socket/websocket"}]
+
+      assert {:ok, 302, ^headers} = Socket.upgrade_failure(upgrade_failure(302, headers))
+    end
+
+    test "any other disconnect reason is not an upgrade failure" do
+      assert Socket.upgrade_failure(:closed) == :error
+      assert Socket.upgrade_failure(:heartbeat_timeout) == :error
+      assert Socket.upgrade_failure({:error, :nxdomain}) == :error
+      assert Socket.upgrade_failure({:error, {:upgrade_failure, %{reason: :something}}}) == :error
+    end
+  end
+
+  describe "redirect_uri/2" do
+    test "an absolute location replaces the URL, as a websocket scheme" do
+      headers = [{"location", "https://other.test/socket/websocket"}]
+
+      assert {:ok, uri} = Socket.redirect_uri(URI.parse("wss://old.test/socket"), headers)
+      assert URI.to_string(uri) == "wss://other.test/socket/websocket"
+    end
+
+    test "a relative location is merged onto the URL the device just tried" do
+      headers = [{"location", "/elsewhere/websocket"}]
+
+      assert {:ok, uri} = Socket.redirect_uri(URI.parse("wss://old.test/socket"), headers)
+      assert URI.to_string(uri) == "wss://old.test/elsewhere/websocket"
+    end
+
+    test "an http location becomes ws" do
+      headers = [{"location", "http://other.test/socket"}]
+
+      assert {:ok, uri} = Socket.redirect_uri(URI.parse("ws://old.test/socket"), headers)
+      assert uri.scheme == "ws"
+    end
+
+    test "a location that already names a websocket scheme is left alone" do
+      headers = [{"location", "wss://other.test/socket"}]
+
+      assert {:ok, uri} = Socket.redirect_uri(URI.parse("wss://old.test/socket"), headers)
+      assert uri.scheme == "wss"
+    end
+
+    test "other headers are ignored" do
+      headers = [{"date", "Sun, 06 Nov 1994 08:49:37 GMT"}, {"location", "https://other.test/"}]
+
+      assert {:ok, uri} = Socket.redirect_uri(URI.parse("wss://old.test/socket"), headers)
+      assert uri.host == "other.test"
+    end
+
+    # A redirect with nowhere to redirect to used to raise, taking the socket
+    # process down with it.
+    test "a redirect without a location is an error rather than a crash" do
+      assert Socket.redirect_uri(URI.parse("wss://old.test/socket"), []) == :error
+
+      assert Socket.redirect_uri(URI.parse("wss://old.test/socket"), [{"location", ""}]) ==
+               :error
+    end
+  end
+
+  defp config(opts) do
+    {url, opts} = Keyword.pop(opts, :url, "wss://example.test/socket/websocket")
+
+    struct(
+      %Config{socket: [url: URI.parse(url)], ssl: []},
+      opts
+    )
+  end
+
+  defp upgrade_failure(status, headers) do
+    {:error,
+     {:upgrade_failure, %{reason: %UpgradeFailureError{status_code: status, headers: headers}}}}
   end
 end

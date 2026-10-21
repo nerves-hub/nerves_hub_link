@@ -457,7 +457,8 @@ defmodule NervesHubLink.Extensions do
 
       @doc false
       @spec push(String.t(), map()) ::
-              {:ok, Slipstream.push_reference()} | {:error, reason :: :detached | term()}
+              {:ok, NervesHubLink.Socket.push_ref()}
+              | {:error, reason :: :detached | term()}
       def push(event, payload) do
         GenServer.call(NervesHubLink.Extensions, {:push, __name__(), event, payload})
       end
