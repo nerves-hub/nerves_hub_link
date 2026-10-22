@@ -58,13 +58,15 @@ defmodule NervesHubLink.Configurator do
               remote_iex_timeout: 5 * 60,
               request_archive_public_keys: false,
               request_fwup_public_keys: false,
+              send_timeout_msec: 30_000,
               shared_secret: [],
               serializer: :json,
               sni: nil,
               socket: [],
               ssl: [],
               tpm: [],
-              updater: StreamingUpdater
+              updater: StreamingUpdater,
+              upgrade_timeout_msec: 10_000
 
     @type t() :: %__MODULE__{
             archive_public_keys: [binary()],
@@ -88,13 +90,15 @@ defmodule NervesHubLink.Configurator do
             remote_iex_timeout: integer(),
             request_archive_public_keys: boolean(),
             request_fwup_public_keys: boolean(),
+            send_timeout_msec: non_neg_integer(),
             shared_secret: [product_key: String.t(), product_secret: String.t()],
             serializer: atom(),
             sni: String.t(),
             socket: any(),
             ssl: [:ssl.tls_client_option()],
             tpm: any(),
-            updater: NervesHubLink.UpdateManager.Updater.t()
+            updater: NervesHubLink.UpdateManager.Updater.t(),
+            upgrade_timeout_msec: non_neg_integer()
           }
   end
 

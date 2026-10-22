@@ -11,7 +11,7 @@ defmodule NervesHubLink.NetworkInterface do
   require Logger
 
   @doc """
-  Get the network interface from a Slipstream.Socket or Mint.HTTP struct. This is used to report the
+  Get the network interface from a socket. This is used to report the
   network interface being used for the connection to NervesHub and for firmware downloads.
   """
   @spec from_socket(:ssl.socket() | :inet.socket() | :socket.socket() | Mint.Types.socket()) ::

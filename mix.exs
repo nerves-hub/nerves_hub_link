@@ -75,6 +75,13 @@ defmodule NervesHubLink.MixProject do
           NervesHubLink.Client,
           NervesHubLink.Client.Default
         ],
+        Connection: [
+          NervesHubLink.Connection,
+          NervesHubLink.Connection.Message,
+          NervesHubLink.Connection.Serializer,
+          NervesHubLink.Connection.Serializer.JSON,
+          NervesHubLink.Connection.Serializer.MsgPack
+        ],
         Configuration: [
           NervesHubLink.Supervisor,
           NervesHubLink.Configurator,
@@ -162,6 +169,7 @@ defmodule NervesHubLink.MixProject do
       {:fwup, "~> 1.0"},
       {:jason, "~> 1.0"},
       {:mint, "~> 1.2"},
+      {:mint_web_socket, "~> 1.0"},
       {:mox, "~> 1.0", only: :test},
       {:msgpax, "~> 2.0", optional: true},
       {:nerves_key, "~> 1.0 or ~> 0.5", optional: true},
@@ -171,7 +179,6 @@ defmodule NervesHubLink.MixProject do
       {:nimble_options, "~> 1.0"},
       {:plug_crypto, "~> 2.0"},
       {:bandit, "~> 1.12.0", only: :test},
-      {:slipstream, "~> 1.0 or ~> 0.8"},
       {:tpm, "~> 0.2.0", optional: true},
       {:whenwhere, "~> 0.1.2"},
       {:x509, "~> 0.5"}
