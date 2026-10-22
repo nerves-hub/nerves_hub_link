@@ -30,6 +30,7 @@ defmodule NervesHubLink.SocketMessagesTest do
 
   @device_topic "device"
   @console_topic "console"
+  @extensions_topic "extensions"
 
   @firmware_url "http://localhost:4000/firmware.fw"
   @uuid "8a8b902c-d1a9-58aa-6111-04ab57c2f2a8"
@@ -672,6 +673,51 @@ defmodule NervesHubLink.SocketMessagesTest do
     end
   end
 
+  describe "the extensions handshake" do
+    setup :join_device_topic
+
+    # `Extensions` pushes back through this process, so a synchronous call from
+    # here closes a cycle: both wait on each other, both give up on a call
+    # timeout, and the device loses its connection and its extensions tree.
+    test "an extensions:get does not block the socket on Extensions", %{socket: socket} do
+      :sys.suspend(NervesHubLink.Extensions)
+
+      # Only a safety net for the assertions below failing; by teardown the
+      # process is usually gone already.
+      on_exit(fn ->
+        try do
+          :sys.resume(NervesHubLink.Extensions)
+        catch
+          :exit, _ -> :ok
+        end
+      end)
+
+      server_push(@device_topic, "extensions:get", %{})
+      Process.sleep(100)
+
+      # A call into the socket: it could not answer this if it were itself
+      # waiting on the suspended Extensions.
+      assert NervesHubLink.socket_connected?(socket)
+
+      :sys.resume(NervesHubLink.Extensions)
+
+      # And the offer still arrives, by message rather than by reply.
+      assert_join(@extensions_topic, _offered, {:ok, []})
+      await_joined(socket, :extensions)
+    end
+
+    test "a binary payload is pushed as a binary frame", %{socket: socket} do
+      server_push(@device_topic, "extensions:get", %{})
+      assert_join(@extensions_topic, _offered, {:ok, []})
+      await_joined(socket, :extensions)
+
+      assert {:ok, _ref} =
+               Socket.push_extensions_message(socket, "thing", {:binary, <<7, 8, 9>>})
+
+      assert_push(@extensions_topic, "thing", {:binary, <<7, 8, 9>>})
+    end
+  end
+
   describe "recovering" do
     setup :join_device_topic
 
@@ -756,6 +802,16 @@ defmodule NervesHubLink.SocketMessagesTest do
     # Nothing can answer a parked request once the connection has gone, and
     # waiting out the 30s timeout would report it as a timeout rather than as
     # the disconnect it was.
+    # More than one path can decide the connection has gone, and each used to
+    # schedule its own attempt.
+    test "two reconnect requests open one connection, not two", %{socket: socket} do
+      NervesHubLink.reconnect(socket)
+      NervesHubLink.reconnect(socket)
+
+      assert_receive {:connection_test, {:server, _}}, 3_000
+      refute_receive {:connection_test, {:server, _}}, 1_500
+    end
+
     test "a parked update request is answered rather than left to time out" do
       task = Task.async(fn -> NervesHubLink.check_for_update(Socket) end)
 

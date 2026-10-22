@@ -279,7 +279,7 @@ defmodule NervesHubLink.Support.SocketHarness do
 
     receive do
       {:connection_test, {:frame, opcode, payload}} when opcode in [:text, :binary] ->
-        message = JSON.decode!(payload, opcode)
+        message = decode_device_frame(payload, opcode)
 
         if message.topic == topic and message.event == event do
           message
@@ -295,6 +295,25 @@ defmodule NervesHubLink.Support.SocketHarness do
         frames kept so far: #{inspect(kept())}
         """)
     end
+  end
+
+  # The device's own envelope, which is not the one `JSON.decode!/2` reads: a
+  # push from a client carries a `ref`, and none of the three server-to-device
+  # shapes has one. Text is the same in both directions, so that part defers.
+  defp decode_device_frame(payload, :text), do: JSON.decode!(payload, :text)
+
+  defp decode_device_frame(payload, :binary) do
+    <<0::8, join_ref_size::8, ref_size::8, topic_size::8, event_size::8,
+      join_ref::binary-size(join_ref_size), ref::binary-size(ref_size),
+      topic::binary-size(topic_size), event::binary-size(event_size), data::binary>> = payload
+
+    %Message{
+      join_ref: join_ref,
+      ref: ref,
+      topic: topic,
+      event: event,
+      payload: {:binary, data}
+    }
   end
 
   defp kept(), do: Process.get(:socket_harness_frames, [])

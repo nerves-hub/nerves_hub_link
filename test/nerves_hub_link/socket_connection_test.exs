@@ -147,6 +147,24 @@ defmodule NervesHubLink.SocketConnectionTest do
     assert_receive {:handle_error, :upgrade_timeout}, 2_000
   end
 
+  # The notification this poll exists to send can only go over a connection, so
+  # a timer outliving one fires while disconnected, fails to push, and clears
+  # itself - spending the notification on nothing.
+  test "the firmware validation poll does not outlive the connection" do
+    stub(NervesHubLink.ClientMock, :firmware_validated?, fn -> false end)
+    stub(NervesHubLink.ClientMock, :handle_error, fn _ -> :ok end)
+
+    port = start_server()
+    socket = start_socket(port)
+
+    assert_join("device", _params, :ok)
+    assert_eventually(is_reference(:sys.get_state(socket).firmware_validation_timer))
+
+    server_close()
+
+    assert_eventually(:sys.get_state(socket).firmware_validation_timer == nil)
+  end
+
   # `UpdateManager` is a sibling under the same supervisor, so its restart does
   # not restart the socket, and a connection can complete while the name is
   # momentarily unregistered. Nothing starts it in this file, which puts the

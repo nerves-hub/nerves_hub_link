@@ -44,6 +44,7 @@ defmodule NervesHubLink.Socket do
       :iex_pid,
       :iex_timer,
       :params,
+      :reconnect_timer,
       :remote_iex,
       :signing_time_hint,
       :update_mode,
@@ -62,6 +63,7 @@ defmodule NervesHubLink.Socket do
             iex_pid: pid() | nil,
             iex_timer: reference() | nil,
             params: map(),
+            reconnect_timer: reference() | nil,
             remote_iex: boolean(),
             signing_time_hint: DateTime.t() | nil,
             update_mode: NervesHubLink.update_mode() | nil,
@@ -626,7 +628,14 @@ defmodule NervesHubLink.Socket do
   # declares a version nothing can serve, and never declares an extension an
   # operator has switched off.
   defp handle_message(@device_topic, "extensions:get", payload, socket) do
-    {:ok, join(socket, @extensions_topic, Extensions.offer(payload["extensions"]))}
+    # Asked for rather than called. `NervesHubLink.Extensions` pushes back
+    # through this process, so calling it from here would be one half of a
+    # cycle: this process waiting on Extensions while Extensions waits on it,
+    # until both give up on a call timeout and exit. The answer arrives as
+    # `{:extensions_offered, chosen}` below.
+    :ok = Extensions.request_offer(payload["extensions"], self())
+
+    {:ok, socket}
   end
 
   ##
@@ -829,8 +838,12 @@ defmodule NervesHubLink.Socket do
     end
   end
 
+  def handle_info({:extensions_offered, chosen}, socket) do
+    {:noreply, join(socket, @extensions_topic, chosen)}
+  end
+
   def handle_info(:connect, socket) do
-    {:noreply, connect(socket)}
+    {:noreply, connect(%{socket | reconnect_timer: nil})}
   end
 
   def handle_info({:rejoin, topic}, socket) do
@@ -890,6 +903,7 @@ defmodule NervesHubLink.Socket do
     socket =
       socket
       |> cancel_heartbeat()
+      |> cancel_firmware_validation_check()
       |> fail_pending_update_requests()
 
     # When the failed upgrade response carried a `Date` header, the next
@@ -1081,12 +1095,17 @@ defmodule NervesHubLink.Socket do
   # The delay comes from the connection's own backoff, so repeated failures back
   # off and a connection that succeeds starts the next one over from the
   # shortest wait.
+  # Cancelling first, because more than one path can decide the connection has
+  # gone - a failed write and the heartbeat that follows it, say - and two
+  # pending timers mean opening a connection and dropping it an instant later.
   defp reconnect(socket) do
     {delay, connection} = Connection.reconnect_delay(socket.connection)
 
-    _ = Process.send_after(self(), :connect, delay)
+    maybe_cancel_timer(socket.reconnect_timer)
 
-    {:ok, put_connection(socket, connection)}
+    socket = put_connection(socket, connection)
+
+    {:ok, %{socket | reconnect_timer: Process.send_after(self(), :connect, delay)}}
   end
 
   defp rejoin(socket, topic) do
@@ -1124,6 +1143,16 @@ defmodule NervesHubLink.Socket do
       _ ->
         socket
     end
+  end
+
+  # The notification it exists to send can only go over a connection, so a
+  # timer left running past one fires while disconnected, fails to push, and
+  # clears itself - spending the notification. `handle_connect/1` schedules it
+  # again if the firmware still needs it.
+  defp cancel_firmware_validation_check(socket) do
+    maybe_cancel_timer(socket.firmware_validation_timer)
+
+    %{socket | firmware_validation_timer: nil}
   end
 
   defp cancel_heartbeat(socket) do
