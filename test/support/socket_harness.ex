@@ -61,15 +61,22 @@ defmodule NervesHubLink.Support.SocketHarness do
   """
   @spec await_connect(timeout()) :: pid()
   def await_connect(timeout \\ @default_timeout) do
+    # Liveness as well as presence: a socket that reconnects is served by a new
+    # process, and the one remembered here died with the connection it served.
     case Process.get(:socket_harness_server) do
       pid when is_pid(pid) ->
-        pid
+        if Process.alive?(pid), do: pid, else: receive_server(timeout)
 
       nil ->
-        _ = assert_receive {:connection_test, {:server, pid}}, timeout
-        _ = Process.put(:socket_harness_server, pid)
-        pid
+        receive_server(timeout)
     end
+  end
+
+  defp receive_server(timeout) do
+    _ = assert_receive {:connection_test, {:server, pid}}, timeout
+    _ = Process.put(:socket_harness_server, pid)
+
+    pid
   end
 
   @doc """

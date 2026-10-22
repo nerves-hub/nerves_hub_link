@@ -672,6 +672,50 @@ defmodule NervesHubLink.SocketMessagesTest do
     end
   end
 
+  describe "recovering" do
+    setup :join_device_topic
+
+    # The whole point of the library: after losing the connection it comes
+    # back, and joins again.
+    test "the device reconnects and rejoins after the server closes", %{socket: socket} do
+      server_close()
+
+      assert_receive {:handle_error, :closed_by_remote}
+
+      assert_join(@device_topic, _params, :ok)
+      await_joined(socket, :device)
+
+      assert NervesHubLink.connected?(socket)
+    end
+
+    test "a topic closed with an error is joined again, keeping the connection", %{socket: socket} do
+      join_ref = :sys.get_state(socket).connection.joins[@device_topic].ref
+
+      server_push(@device_topic, "phx_error", %{}, ref: join_ref, join_ref: join_ref)
+
+      assert_receive {:handle_error, {:error, %{}}}
+
+      assert_join(@device_topic, _params, :ok)
+      await_joined(socket, :device)
+
+      assert NervesHubLink.socket_connected?(socket)
+    end
+
+    test "a topic the server closes normally does not take the socket down", %{socket: socket} do
+      join_ref = :sys.get_state(socket).connection.joins[@device_topic].ref
+
+      server_push(@device_topic, "phx_close", %{}, ref: join_ref, join_ref: join_ref)
+      assert_handled_in_order()
+
+      assert Process.alive?(socket)
+      assert NervesHubLink.socket_connected?(socket)
+
+      # Nothing rejoins it, so the device is left on a healthy connection with
+      # no device channel. See the review note on `{:topic_left, topic}`.
+      refute NervesHubLink.connected?(socket)
+    end
+  end
+
   describe "replies to the device's own pushes" do
     setup :join_device_topic
 
