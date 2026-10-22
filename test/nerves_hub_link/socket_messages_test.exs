@@ -702,6 +702,23 @@ defmodule NervesHubLink.SocketMessagesTest do
   end
 
   describe "disconnecting" do
+    setup :join_device_topic
+
+    # Nothing can answer a parked request once the connection has gone, and
+    # waiting out the 30s timeout would report it as a timeout rather than as
+    # the disconnect it was.
+    test "a parked update request is answered rather than left to time out" do
+      task = Task.async(fn -> NervesHubLink.check_for_update(Socket) end)
+
+      assert_push(@device_topic, "check_update", %{})
+
+      server_close()
+
+      assert Task.await(task, 2_000) == {:error, :disconnected}
+    end
+  end
+
+  describe "disconnecting from the server" do
     test "a close from NervesHub tells the client and raises the alarm", %{socket: socket} do
       server_close()
 

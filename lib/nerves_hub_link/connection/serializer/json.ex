@@ -71,7 +71,10 @@ defmodule NervesHubLink.Connection.Serializer.JSON do
   @spec decode!(binary(), NervesHubLink.Connection.Serializer.opcode()) :: Message.t()
   def decode!(payload, :text) do
     case Jason.decode(payload) do
-      {:ok, [join_ref, ref, topic, event, payload]} ->
+      # Anything past the fifth field is something a later protocol version
+      # added. Refusing the envelope over it would leave the device reading
+      # none of its messages at all.
+      {:ok, [join_ref, ref, topic, event, payload | _later_additions]} ->
         %Message{
           join_ref: join_ref,
           ref: ref,
@@ -82,7 +85,7 @@ defmodule NervesHubLink.Connection.Serializer.JSON do
 
       {:ok, other} ->
         raise DecodeError,
-          message: "expected a five element envelope, got: #{inspect(other)}"
+          message: "expected an envelope of five or more elements, got: #{inspect(other)}"
 
       {:error, reason} ->
         raise DecodeError, message: "could not decode frame: #{inspect(reason)}"

@@ -38,6 +38,8 @@ defmodule NervesHubLink.Support.WebSocketServer do
         )
 
       :redirect ->
+        send(test_pid, {:connection_test, :redirected})
+
         conn
         |> put_resp_header("location", Keyword.fetch!(opts, :location))
         |> send_resp(Keyword.get(opts, :status, 302), "")

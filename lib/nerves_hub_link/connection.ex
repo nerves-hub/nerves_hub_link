@@ -53,6 +53,9 @@ defmodule NervesHubLink.Connection do
   # Heartbeats are not part of any topic, so Phoenix gives them their own.
   @heartbeat_topic "phoenix"
 
+  # How much of an unfinished upgrade response to hold. See `handle_response/2`.
+  @max_upgrade_data 64 * 1024
+
   @type t :: %__MODULE__{
           uri: URI.t(),
           headers: [{String.t(), String.t()}],
@@ -68,6 +71,7 @@ defmodule NervesHubLink.Connection do
           upgrade_status: Mint.Types.status() | nil,
           upgrade_headers: Mint.Types.headers() | nil,
           upgrade_data: [binary()],
+          upgrade_buffered: non_neg_integer(),
           upgrade_timer: reference() | nil,
           heartbeat_ref: String.t() | nil,
           status: :closed | :connecting | :connected,
@@ -132,6 +136,7 @@ defmodule NervesHubLink.Connection do
     reconnect_after_msec: [1_000],
     rejoin_after_msec: [5_000],
     upgrade_data: [],
+    upgrade_buffered: 0,
     status: :closed,
     ref: 0,
     reconnect_count: 0,
@@ -164,6 +169,11 @@ defmodule NervesHubLink.Connection do
   """
   @spec connect(t()) :: {:ok, t()} | {:error, reason :: term(), t()}
   def connect(%__MODULE__{} = connection) do
+    # Closing first makes this safe to call twice. Opening a second connection
+    # over the top of one that is still live would drop its socket without
+    # closing it, and the port stays owned by this process for good.
+    connection = close(connection)
+
     uri = connection.uri
 
     with {:ok, conn} <-
@@ -338,14 +348,22 @@ defmodule NervesHubLink.Connection do
   @spec handle_transport(t(), term()) :: {:ok, t(), [event()]} | :unknown
   def handle_transport(connection, message)
 
-  # A timer from an earlier connection attempt carries that attempt's ref, so
-  # it is ignored rather than taken for this one's.
+  # Only while the upgrade is still outstanding: `request_ref` lives on past it,
+  # so matching that alone would let a timer close a connection that had in
+  # fact succeeded.
   def handle_transport(
-        %__MODULE__{request_ref: ref} = connection,
+        %__MODULE__{websocket: nil, request_ref: ref} = connection,
         {:connection_upgrade_timeout, ref}
       )
       when not is_nil(ref) do
     {:ok, close(connection), [{:disconnected, :upgrade_timeout}]}
+  end
+
+  # Either the upgrade finished first, or this belongs to an earlier attempt.
+  # `Process.cancel_timer/1` cannot retract a message already delivered, so
+  # one arriving late is expected rather than a surprise.
+  def handle_transport(%__MODULE__{} = connection, {:connection_upgrade_timeout, _ref}) do
+    {:ok, connection, []}
   end
 
   def handle_transport(%__MODULE__{conn: nil}, _message), do: :unknown
@@ -525,7 +543,21 @@ defmodule NervesHubLink.Connection do
   end
 
   defp handle_response(%{websocket: nil, request_ref: ref} = connection, {:data, ref, data}) do
-    maybe_upgrade(%{connection | upgrade_data: [data | connection.upgrade_data]})
+    buffered = connection.upgrade_buffered + byte_size(data)
+
+    # Anything held here is only the frames that arrived in the same packet as
+    # the end of the response, so the cap is generous. A server that streams
+    # without ever completing the upgrade is refused rather than buffered
+    # until the device runs out of memory.
+    if buffered > @max_upgrade_data do
+      {close(connection), [{:disconnected, :upgrade_response_too_large}]}
+    else
+      maybe_upgrade(%{
+        connection
+        | upgrade_data: [data | connection.upgrade_data],
+          upgrade_buffered: buffered
+      })
+    end
   end
 
   # The server finished answering without upgrading. Whatever it said, this is
@@ -576,6 +608,7 @@ defmodule NervesHubLink.Connection do
             upgrade_status: nil,
             upgrade_headers: nil,
             upgrade_data: [],
+            upgrade_buffered: 0,
             upgrade_timer: cancel_timer(connection.upgrade_timer)
         }
 
@@ -797,6 +830,7 @@ defmodule NervesHubLink.Connection do
         upgrade_status: nil,
         upgrade_headers: nil,
         upgrade_data: [],
+        upgrade_buffered: 0,
         upgrade_timer: cancel_timer(connection.upgrade_timer),
         heartbeat_ref: nil,
         status: :closed,

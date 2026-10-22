@@ -877,7 +877,10 @@ defmodule NervesHubLink.Socket do
     _ = Client.handle_error(reason)
     :alarm_handler.set_alarm({NervesHubLink.Disconnected, [reason: reason]})
 
-    socket = cancel_heartbeat(socket)
+    socket =
+      socket
+      |> cancel_heartbeat()
+      |> fail_pending_update_requests()
 
     # When the failed upgrade response carried a `Date` header, the next
     # attempt signs with that time instead of the device clock, which recovers
@@ -899,12 +902,15 @@ defmodule NervesHubLink.Socket do
     end
   end
 
-  # Giving up rather than reconnecting: past this many hops the server is
-  # redirecting in a loop, and retrying it only hides that.
+  # Past this many hops the server is redirecting in a loop, so the redirect is
+  # not followed - but the device still has to keep trying, at backoff pace and
+  # against the URL it has. Going quiet instead leaves it off the air with
+  # nothing running that would ever bring it back.
   defp follow_redirect(%State{redirect_count: count} = socket, _headers, reason)
        when count >= @max_redirects do
     Logger.error("[NervesHubLink] maximum redirect count reached : #{inspect(reason)}")
-    {:ok, socket}
+
+    reconnect(socket)
   end
 
   defp follow_redirect(socket, headers, _reason) do
@@ -933,9 +939,7 @@ defmodule NervesHubLink.Socket do
   @doc false
   @spec upgrade_failure(term()) :: {:ok, non_neg_integer(), [{binary(), binary()}]} | :error
   def upgrade_failure(
-        {:error,
-         {:upgrade_failure,
-          %{reason: %UpgradeFailureError{status_code: status, headers: headers}}}}
+        {:upgrade_failure, %UpgradeFailureError{status_code: status, headers: headers}}
       )
       when is_integer(status) and is_list(headers) do
     {:ok, status, headers}
@@ -1029,8 +1033,24 @@ defmodule NervesHubLink.Socket do
   # error. Everything else uses `push/4`.
   defp push_message(socket, topic, event, payload) do
     case Connection.push(socket.connection, topic, event, payload) do
-      {:ok, ref, connection} -> {{:ok, ref}, put_connection(socket, connection)}
-      {:error, reason, connection} -> {{:error, reason}, put_connection(socket, connection)}
+      {:ok, ref, connection} ->
+        {{:ok, ref}, put_connection(socket, connection)}
+
+      {:error, reason, connection} ->
+        socket = put_connection(socket, connection)
+
+        # A write that failed has already taken the connection with it, and
+        # nothing arrived from the network to announce that, so the disconnect
+        # handling runs from here or not at all. It belongs here rather than in
+        # `push/4` so that the callers who want the error get it too.
+        socket =
+          if Connection.connected?(socket.connection) do
+            socket
+          else
+            disconnected(socket, reason)
+          end
+
+        {{:error, reason}, socket}
     end
   end
 
@@ -1042,14 +1062,7 @@ defmodule NervesHubLink.Socket do
       {{:error, reason}, socket} ->
         Logger.warning("[NervesHubLink] could not send #{topic}:#{event} : #{inspect(reason)}")
 
-        # A write that failed has already taken the connection with it, and
-        # nothing arrived from the network to announce that, so the disconnect
-        # handling runs from here or not at all.
-        if Connection.connected?(socket.connection) do
-          socket
-        else
-          disconnected(socket, reason)
-        end
+        socket
     end
   end
 
@@ -1206,6 +1219,21 @@ defmodule NervesHubLink.Socket do
             {:reply, {:error, reason}, socket}
         end
     end
+  end
+
+  # Nothing can answer these once the connection has gone, and waiting out the
+  # timeout would report one as a timeout rather than what it was.
+  defp fail_pending_update_requests(%State{pending_update_requests: pending} = socket)
+       when map_size(pending) == 0,
+       do: socket
+
+  defp fail_pending_update_requests(socket) do
+    Enum.each(socket.pending_update_requests, fn {_kind, {from, timer}} ->
+      _ = Process.cancel_timer(timer)
+      GenServer.reply(from, {:error, :disconnected})
+    end)
+
+    %{socket | pending_update_requests: %{}}
   end
 
   defp resolve_update_request(socket, kind, result) do

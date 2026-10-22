@@ -99,13 +99,45 @@ defmodule NervesHubLink.ConnectionTest do
 
       # The ref this names belongs to no attempt, so it must not be taken for
       # the current one.
-      assert :unknown =
+      assert {:ok, connection, []} =
                Connection.handle_transport(
                  harness.connection,
                  {:connection_upgrade_timeout, make_ref()}
                )
 
-      assert Connection.connected?(harness.connection)
+      assert Connection.connected?(connection)
+    end
+
+    # `Process.cancel_timer/1` cannot retract a message already delivered, so
+    # a timer that fired just as the upgrade landed is still in the mailbox.
+    # Matching on the request ref alone would close a connection that worked.
+    test "an upgrade timer that fired as the upgrade landed is ignored" do
+      harness = Harness.connected(connection: [upgrade_timeout_msec: 60_000])
+
+      assert {:ok, connection, []} =
+               Connection.handle_transport(
+                 harness.connection,
+                 {:connection_upgrade_timeout, harness.connection.request_ref}
+               )
+
+      assert Connection.connected?(connection)
+    end
+
+    test "connecting again closes the connection it replaces" do
+      harness = Harness.connected()
+
+      # The socket itself rather than the struct holding it: `Mint.HTTP.open?/1`
+      # reads a field, and the copy a test keeps would still say open.
+      first = Connection.mint_socket(harness.connection)
+      assert is_port(first)
+      assert Port.info(first) != nil
+
+      assert {:ok, connection} = Connection.connect(harness.connection)
+
+      # Closed rather than dropped, which would leave the port owned by this
+      # process for good.
+      assert Port.info(first) == nil
+      assert Connection.mint_socket(connection) != first
     end
   end
 

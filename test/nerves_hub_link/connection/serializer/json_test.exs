@@ -132,14 +132,26 @@ defmodule NervesHubLink.Connection.Serializer.JSONTest do
       end
     end
 
-    test "JSON that is not a five element envelope is a decode error" do
-      assert_raise DecodeError, ~r/five element envelope/, fn ->
+    test "JSON that is not an envelope at all is a decode error" do
+      assert_raise DecodeError, ~r/five or more elements/, fn ->
         JSON.decode!(Jason.encode!(%{"topic" => "device"}), :text)
       end
 
-      assert_raise DecodeError, ~r/five element envelope/, fn ->
+      assert_raise DecodeError, ~r/five or more elements/, fn ->
         JSON.decode!(Jason.encode!(["1", "2"]), :text)
       end
+    end
+
+    # A later protocol version adding a field should leave the device reading
+    # its messages, not refusing every one of them.
+    test "an envelope with more than five elements is still read" do
+      payload = Jason.encode!(["1", "2", "device", "update", %{"a" => 1}, "later", "additions"])
+
+      assert %Message{} = message = JSON.decode!(payload, :text)
+
+      assert message.topic == "device"
+      assert message.event == "update"
+      assert message.payload == %{"a" => 1}
     end
 
     test "a binary frame in none of the three shapes is a decode error" do

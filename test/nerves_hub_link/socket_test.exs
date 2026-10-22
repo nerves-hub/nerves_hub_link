@@ -230,7 +230,13 @@ defmodule NervesHubLink.SocketTest do
       assert Socket.upgrade_failure(:closed) == :error
       assert Socket.upgrade_failure(:heartbeat_timeout) == :error
       assert Socket.upgrade_failure({:error, :nxdomain}) == :error
-      assert Socket.upgrade_failure({:error, {:upgrade_failure, %{reason: :something}}}) == :error
+      assert Socket.upgrade_failure({:upgrade_failure, :something}) == :error
+
+      # The shape Slipstream used, which nothing emits any more. Matching it
+      # was why redirects stopped being followed at all.
+      assert Socket.upgrade_failure(
+               {:error, {:upgrade_failure, %{reason: %UpgradeFailureError{}}}}
+             ) == :error
     end
   end
 
@@ -289,8 +295,8 @@ defmodule NervesHubLink.SocketTest do
     )
   end
 
+  # The shape `NervesHubLink.Connection` emits.
   defp upgrade_failure(status, headers) do
-    {:error,
-     {:upgrade_failure, %{reason: %UpgradeFailureError{status_code: status, headers: headers}}}}
+    {:upgrade_failure, %UpgradeFailureError{status_code: status, headers: headers}}
   end
 end

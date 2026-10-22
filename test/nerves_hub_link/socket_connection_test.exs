@@ -13,6 +13,7 @@ defmodule NervesHubLink.SocketConnectionTest do
   """
 
   use ExUnit.Case, async: false
+  use NervesHubLink.Support.SocketHarness
 
   import Mox
 
@@ -144,6 +145,19 @@ defmodule NervesHubLink.SocketConnectionTest do
     start_socket(port, upgrade_timeout_msec: 200)
 
     assert_receive {:handle_error, :upgrade_timeout}, 2_000
+  end
+
+  # A redirect that points back at the same server, so the device is sent round
+  # the loop the hop limit is there to stop. Past that limit it must keep
+  # trying rather than go quiet: nothing on a device would ever bring it back.
+  test "a redirect loop does not leave the device off the air" do
+    port = start_server(mode: :redirect, location: "/socket/websocket")
+
+    start_socket(port, socket: [reconnect_after_msec: [10]])
+
+    # Two hops are followed, and the attempts after the limit prove it is
+    # still trying rather than sitting idle.
+    for _ <- 1..5, do: assert_receive({:connection_test, :redirected}, 2_000)
   end
 
   # Holds the connection open without answering. `listen_for_one_request/0`
