@@ -701,18 +701,23 @@ defmodule NervesHubLink.SocketMessagesTest do
       assert NervesHubLink.socket_connected?(socket)
     end
 
-    test "a topic the server closes normally does not take the socket down", %{socket: socket} do
+    # Phoenix sends `phx_close` whenever a channel terminates normally, so a
+    # graceful shutdown on NervesHub's side arrives this way rather than as an
+    # error. Left alone, the device sits on a healthy connection with no
+    # device channel - taking no updates and reporting no status, while
+    # looking connected - and nothing recovers it, because there is no
+    # disconnect to trigger a reconnect.
+    test "a topic the server closes normally is joined again", %{socket: socket} do
       join_ref = :sys.get_state(socket).connection.joins[@device_topic].ref
 
       server_push(@device_topic, "phx_close", %{}, ref: join_ref, join_ref: join_ref)
-      assert_handled_in_order()
+
+      assert_join(@device_topic, _params, :ok)
+      await_joined(socket, :device)
 
       assert Process.alive?(socket)
       assert NervesHubLink.socket_connected?(socket)
-
-      # Nothing rejoins it, so the device is left on a healthy connection with
-      # no device channel. See the review note on `{:topic_left, topic}`.
-      refute NervesHubLink.connected?(socket)
+      assert NervesHubLink.connected?(socket)
     end
   end
 

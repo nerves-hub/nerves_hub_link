@@ -865,7 +865,7 @@ defmodule NervesHubLink.Socket do
     {:ok, socket}
   end
 
-  defp handle_topic_close(topic, reason, socket) when reason != :left do
+  defp handle_topic_close(topic, reason, socket) do
     if topic == @device_topic do
       _ = Client.handle_error(reason)
     end
@@ -993,12 +993,14 @@ defmodule NervesHubLink.Socket do
   defp apply_event({:topic_closed, topic, reason}, socket),
     do: unwrap(handle_topic_close(topic, reason, socket))
 
-  # The server closing a topic normally is not something this device asks for,
-  # and there is nothing it needs to do about it beyond noticing.
+  # Phoenix sends this whenever a channel terminates normally, so a graceful
+  # shutdown on NervesHub's side arrives here rather than as an error. The
+  # device still has no channel until it joins again, and nothing else is going
+  # to notice: the connection itself is healthy, so no reconnect is coming.
   defp apply_event({:topic_left, topic}, socket) do
-    Logger.debug("[#{inspect(__MODULE__)}] #{topic} was closed by NervesHub")
+    Logger.info("[#{inspect(__MODULE__)}] #{topic} was closed by NervesHub, rejoining")
 
-    socket
+    unwrap(rejoin(socket, topic))
   end
 
   defp apply_event({:message, topic, event, payload}, socket),
