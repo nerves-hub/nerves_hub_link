@@ -168,6 +168,24 @@ defmodule NervesHubLink.Connection.Serializer.MsgPackTest do
         MsgPack.decode!(~s([null,"2","device","ping",{}]), :text)
       end
     end
+
+    test "a topic or event that is not a string is a decode error" do
+      assert_raise Serializer.DecodeError, ~r/string topic and event/, fn ->
+        MsgPack.decode!(pack(["1", nil, %{"not" => "a topic"}, "event", %{}]), :binary)
+      end
+    end
+
+    test "a ref that is neither a string nor a number is a decode error" do
+      assert_raise Serializer.DecodeError, ~r/string, a number or null/, fn ->
+        MsgPack.decode!(pack(["1", %{}, "device", "event", %{}]), :binary)
+      end
+    end
+
+    test "an envelope with more than five elements is still read" do
+      frame = pack([nil, "2", "device", "ping", %{}, "later"])
+
+      assert %Message{topic: "device", event: "ping"} = MsgPack.decode!(frame, :binary)
+    end
   end
 
   defp pack(term), do: Msgpax.pack!(term, iodata: false)

@@ -21,6 +21,7 @@ defmodule NervesHubLink.Connection.Serializer.JSON do
   @behaviour NervesHubLink.Connection.Serializer
 
   alias NervesHubLink.Connection.Message
+  alias NervesHubLink.Connection.Serializer
   alias NervesHubLink.Connection.Serializer.DecodeError
   alias NervesHubLink.Connection.Serializer.EncodeError
 
@@ -74,14 +75,23 @@ defmodule NervesHubLink.Connection.Serializer.JSON do
       # Anything past the fifth field is something a later protocol version
       # added. Refusing the envelope over it would leave the device reading
       # none of its messages at all.
-      {:ok, [join_ref, ref, topic, event, payload | _later_additions]} ->
+      {:ok, [join_ref, ref, topic, event, payload | _later_additions]}
+      when is_binary(topic) and is_binary(event) ->
         %Message{
-          join_ref: join_ref,
-          ref: ref,
+          join_ref: Serializer.to_ref(join_ref),
+          ref: Serializer.to_ref(ref),
           topic: topic,
           event: event,
           payload: payload
         }
+
+      # Refused here rather than carried: a topic or event that is not a string
+      # travels as far as being logged, and the log says it with string
+      # interpolation, which some of the types JSON allows do not survive.
+      {:ok, [_join_ref, _ref, topic, event, _payload | _later_additions]} ->
+        raise DecodeError,
+          message:
+            "expected a string topic and event, got: #{inspect(topic)} and #{inspect(event)}"
 
       {:ok, other} ->
         raise DecodeError,

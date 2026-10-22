@@ -31,6 +31,7 @@ if Code.ensure_loaded?(Msgpax) do
     @behaviour NervesHubLink.Connection.Serializer
 
     alias NervesHubLink.Connection.Message
+    alias NervesHubLink.Connection.Serializer
     alias NervesHubLink.Connection.Serializer.DecodeError
     alias NervesHubLink.Connection.Serializer.EncodeError
 
@@ -53,18 +54,24 @@ if Code.ensure_loaded?(Msgpax) do
     @spec decode!(binary(), NervesHubLink.Connection.Serializer.opcode()) :: Message.t()
     def decode!(payload, :binary) do
       case Msgpax.unpack(payload) do
-        {:ok, [join_ref, ref, topic, event, payload]} ->
+        {:ok, [join_ref, ref, topic, event, payload | _later_additions]}
+        when is_binary(topic) and is_binary(event) ->
           %Message{
-            join_ref: to_ref_string(join_ref),
-            ref: to_ref_string(ref),
+            join_ref: Serializer.to_ref(join_ref),
+            ref: Serializer.to_ref(ref),
             topic: topic,
             event: event,
             payload: payload
           }
 
+        {:ok, [_join_ref, _ref, topic, event, _payload | _later_additions]} ->
+          raise DecodeError,
+            message:
+              "expected a string topic and event, got: #{inspect(topic)} and #{inspect(event)}"
+
         {:ok, other} ->
           raise DecodeError,
-            message: "expected a five element envelope, got: #{inspect(other)}"
+            message: "expected an envelope of five or more elements, got: #{inspect(other)}"
 
         {:error, reason} ->
           raise DecodeError, message: "could not decode frame: #{inspect(reason)}"
@@ -74,8 +81,5 @@ if Code.ensure_loaded?(Msgpax) do
     def decode!(_payload, opcode) do
       raise DecodeError, message: "expected a binary frame, got a #{inspect(opcode)} frame"
     end
-
-    defp to_ref_string(nil), do: nil
-    defp to_ref_string(ref), do: to_string(ref)
   end
 end

@@ -154,6 +154,33 @@ defmodule NervesHubLink.Connection.Serializer.JSONTest do
       assert message.payload == %{"a" => 1}
     end
 
+    # The connection stores refs as strings and matches a reply to what it
+    # answers by comparing them, so a numeric ref would match nothing and the
+    # reply would be lost without a word.
+    test "a numeric ref becomes the string the connection stores" do
+      payload = Jason.encode!([3, 7, "phoenix", "phx_reply", %{}])
+
+      assert %Message{join_ref: "3", ref: "7"} = JSON.decode!(payload, :text)
+    end
+
+    # These travel as far as being logged, and that log says them with string
+    # interpolation, which not every type JSON allows survives.
+    test "a topic or event that is not a string is a decode error" do
+      assert_raise DecodeError, ~r/string topic and event/, fn ->
+        JSON.decode!(Jason.encode!(["1", nil, %{"not" => "a topic"}, "event", %{}]), :text)
+      end
+
+      assert_raise DecodeError, ~r/string topic and event/, fn ->
+        JSON.decode!(Jason.encode!(["1", nil, "device", %{"not" => "an event"}, %{}]), :text)
+      end
+    end
+
+    test "a ref that is neither a string nor a number is a decode error" do
+      assert_raise DecodeError, ~r/string, a number or null/, fn ->
+        JSON.decode!(Jason.encode!(["1", %{}, "device", "event", %{}]), :text)
+      end
+    end
+
     test "a binary frame in none of the three shapes is a decode error" do
       assert_raise DecodeError, ~r/could not decode binary frame/, fn ->
         JSON.decode!(<<9, 9, 9>>, :binary)

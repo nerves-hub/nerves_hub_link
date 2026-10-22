@@ -762,6 +762,52 @@ defmodule NervesHubLink.SocketMessagesTest do
     end
   end
 
+  # The serializer is this device's trust boundary with the network, and its
+  # answer to a malformed envelope should not be to lose the connection.
+  describe "an envelope the server should not have sent" do
+    setup :join_device_topic
+
+    test "a topic that is not a string does not take the socket down", %{socket: socket} do
+      server_send({:text, Jason.encode!(["1", nil, %{"not" => "a topic"}, "event", %{}])})
+      assert_handled_in_order()
+
+      assert Process.alive?(socket)
+      assert NervesHubLink.socket_connected?(socket)
+    end
+
+    test "an event that is not a string does not take the socket down", %{socket: socket} do
+      server_send({:text, Jason.encode!(["1", nil, @device_topic, %{"not" => "an event"}, %{}])})
+      assert_handled_in_order()
+
+      assert Process.alive?(socket)
+      assert NervesHubLink.socket_connected?(socket)
+    end
+
+    # A numeric ref used to match nothing, so the acknowledgement was dropped
+    # and the next heartbeat found this one still outstanding - closing a
+    # perfectly good connection, once per interval, indefinitely.
+    test "a heartbeat answered with a numeric ref is still acknowledged", %{socket: socket} do
+      send(socket, :heartbeat)
+
+      message = assert_push("phoenix", "heartbeat", %{})
+      assert is_binary(message.ref)
+
+      server_send(
+        {:text,
+         Jason.encode!([
+           nil,
+           String.to_integer(message.ref),
+           "phoenix",
+           "phx_reply",
+           %{"status" => "ok", "response" => %{}}
+         ])}
+      )
+
+      assert_eventually(:sys.get_state(socket).connection.heartbeat_ref == nil)
+      assert NervesHubLink.socket_connected?(socket)
+    end
+  end
+
   describe "the extensions handshake" do
     setup :join_device_topic
 
