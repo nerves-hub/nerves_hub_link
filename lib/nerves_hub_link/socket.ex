@@ -296,7 +296,7 @@ defmodule NervesHubLink.Socket do
   defp handle_connect(%State{config: config} = socket) do
     Logger.info("[NervesHubLink] connection to #{config.socket[:url].host} succeeded")
 
-    currently_downloading_uuid = UpdateManager.currently_downloading_uuid()
+    currently_downloading_uuid = currently_downloading_uuid()
 
     device_join_params =
       socket.params
@@ -337,6 +337,16 @@ defmodule NervesHubLink.Socket do
   defp handle_join(@extensions_topic, extensions, socket) do
     Extensions.attach(extensions)
     Logger.debug("[#{inspect(__MODULE__)}] Joined Extensions channel")
+    {:ok, socket}
+  end
+
+  # Only reachable by joining a topic this module has no clause for, which it
+  # cannot do today. Worth having anyway: without it the failure is losing the
+  # device's only connection process, at runtime on a device, rather than a
+  # line in the log.
+  defp handle_join(topic, _reply, socket) do
+    Logger.warning("[#{inspect(__MODULE__)}] Joined an unexpected topic : #{topic}")
+
     {:ok, socket}
   end
 
@@ -1266,6 +1276,22 @@ defmodule NervesHubLink.Socket do
   defp update_request_error("no_update"), do: :no_update
   defp update_request_error("no_deployment_group"), do: :no_deployment_group
   defp update_request_error(_other), do: :error
+
+  # `UpdateManager` is a sibling under the same supervisor, so its restart does
+  # not restart this process. Asking a name that is momentarily not there exits
+  # the caller, which would take the connection down over a question whose
+  # answer only asks NervesHub not to resend an update already in flight - and
+  # if the manager has just died, none is.
+  defp currently_downloading_uuid() do
+    UpdateManager.currently_downloading_uuid()
+  catch
+    :exit, reason ->
+      Logger.warning(
+        "[NervesHubLink] could not ask UpdateManager what it is downloading : #{inspect(reason)}"
+      )
+
+      nil
+  end
 
   defp alarm_if_firmware_auto_reverted() do
     if Client.firmware_auto_revert_detected?() do

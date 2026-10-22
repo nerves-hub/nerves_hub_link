@@ -147,6 +147,22 @@ defmodule NervesHubLink.SocketConnectionTest do
     assert_receive {:handle_error, :upgrade_timeout}, 2_000
   end
 
+  # `UpdateManager` is a sibling under the same supervisor, so its restart does
+  # not restart the socket, and a connection can complete while the name is
+  # momentarily unregistered. Nothing starts it in this file, which puts the
+  # socket in exactly that position.
+  test "connecting survives UpdateManager not being there" do
+    refute Process.whereis(NervesHubLink.UpdateManager)
+
+    port = start_server()
+    socket = start_socket(port)
+
+    # Getting as far as asking to join proves `handle_connect/1` finished.
+    assert_join("device", _params, :ok)
+
+    assert Process.alive?(socket)
+  end
+
   # A redirect that points back at the same server, so the device is sent round
   # the loop the hop limit is there to stop. Past that limit it must keep
   # trying rather than go quiet: nothing on a device would ever bring it back.
