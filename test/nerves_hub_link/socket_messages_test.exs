@@ -576,6 +576,49 @@ defmodule NervesHubLink.SocketMessagesTest do
       assert Base.decode64!(data) == "hello from the device"
     end
 
+    # The upload is the whole of that process's work, so it used to sit idle
+    # for the life of the firmware once it was done - one leaked process per
+    # file an operator ever sent.
+    test "the uploader stops once it has finished", %{socket: socket} do
+      path = Path.join(System.tmp_dir!(), "upload_#{System.unique_integer([:positive])}.txt")
+      File.write!(path, "hello from the device")
+      on_exit(fn -> File.rm(path) end)
+
+      filename = Path.basename(path)
+
+      assert NervesHubLink.send_file(socket, path) == :ok
+
+      uploader = :sys.get_state(socket).uploader_pid
+      assert is_pid(uploader)
+
+      assert_push(@console_topic, "file-data/start", %{"filename" => ^filename})
+      assert_push(@console_topic, "file-data", %{"filename" => ^filename})
+      assert_push(@console_topic, "file-data/stop", %{"filename" => ^filename})
+
+      assert_eventually(not Process.alive?(uploader))
+      assert_eventually(:sys.get_state(socket).uploader_pid == nil)
+      assert Process.alive?(socket)
+    end
+
+    # An uploader that crashes used to be reported as an unknown message, and
+    # left `uploader_pid` pointing at a dead process.
+    test "an uploader that crashes is noticed and forgotten", %{socket: socket} do
+      path = Path.join(System.tmp_dir!(), "upload_#{System.unique_integer([:positive])}.txt")
+      File.write!(path, "hello from the device")
+      on_exit(fn -> File.rm(path) end)
+
+      assert NervesHubLink.send_file(socket, path) == :ok
+
+      uploader = :sys.get_state(socket).uploader_pid
+      assert is_pid(uploader)
+
+      Process.exit(uploader, :boom)
+
+      assert_eventually(:sys.get_state(socket).uploader_pid == nil)
+      assert Process.alive?(socket)
+      assert NervesHubLink.socket_connected?(socket)
+    end
+
     test "a file that is too large is rejected", %{socket: socket} do
       path = Path.join(System.tmp_dir!(), "too_big_#{System.unique_integer([:positive])}")
       # Sparse file, so this doesn't actually write 10MB
@@ -669,6 +712,52 @@ defmodule NervesHubLink.SocketMessagesTest do
       assert_push(@device_topic, "report_network_interface", %{"interface" => interface})
 
       assert is_binary(interface)
+      assert Process.alive?(socket)
+    end
+  end
+
+  # `UpdateManager` and `ArchiveManager` are siblings of the socket under a
+  # `:one_for_one` supervisor, so a restart of either leaves the socket running
+  # and briefly unable to reach the name. Stopping them is that state.
+  describe "when a collaborator is away" do
+    setup :join_device_topic
+
+    test "an update message does not take the socket down", %{socket: socket} do
+      stop_supervised!(UpdateManager)
+      refute Process.whereis(UpdateManager)
+
+      server_push(@device_topic, "update", update_payload())
+      assert_handled_in_order()
+
+      assert Process.alive?(socket)
+      assert NervesHubLink.socket_connected?(socket)
+    end
+
+    test "an archive message does not take the socket down", %{socket: socket} do
+      stop_supervised!(NervesHubLink.ArchiveManager)
+      refute Process.whereis(NervesHubLink.ArchiveManager)
+
+      server_push(@device_topic, "archive", %{
+        "url" => "http://localhost:4000/archive.fw",
+        "uuid" => @uuid,
+        "version" => "1.0.0",
+        "description" => "",
+        "platform" => "host",
+        "architecture" => "x86_64",
+        "size" => 1,
+        "uploaded_at" => "2026-01-01T00:00:00Z"
+      })
+
+      assert_handled_in_order()
+
+      assert Process.alive?(socket)
+      assert NervesHubLink.socket_connected?(socket)
+    end
+
+    test "start_update says so rather than spending a deployment slot", %{socket: socket} do
+      stop_supervised!(UpdateManager)
+
+      assert NervesHubLink.start_update(socket) == {:error, :unavailable}
       assert Process.alive?(socket)
     end
   end
@@ -824,6 +913,30 @@ defmodule NervesHubLink.SocketMessagesTest do
   end
 
   describe "disconnecting from the server" do
+    # Every other alarm here goes through `NervesHubLink.Alarms`, which without
+    # the optional Alarmist dependency is what stops the default handler
+    # collecting a copy per disconnect.
+    #
+    # This cannot fail while `alarmist` is a dependency of the test build: the
+    # adapter delegates straight to `:alarm_handler` on that branch, so calling
+    # it and bypassing it are the same call, and Alarmist deduplicates either
+    # way. It is here for the invariant and for a build without Alarmist, not
+    # as cover for the bypass it was written against.
+    test "repeated disconnects do not collect copies of the alarm", %{socket: socket} do
+      for _ <- 1..3 do
+        NervesHubLink.reconnect(socket)
+        assert_receive {:handle_error, _}, 2_000
+      end
+
+      copies =
+        Enum.count(
+          NervesHubLink.Alarms.get_alarms(),
+          &(elem(&1, 0) == NervesHubLink.Disconnected)
+        )
+
+      assert copies <= 1
+    end
+
     test "a close from NervesHub tells the client and raises the alarm", %{socket: socket} do
       server_close()
 

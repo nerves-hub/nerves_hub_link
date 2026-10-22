@@ -55,7 +55,9 @@ defmodule NervesHubLink.UploadFile do
 
     :ok = Socket.finish_uploading(state.socket_pid, filename)
 
-    {:noreply, state}
+    # The upload is the whole of this process's work, so it stops rather than
+    # sitting idle for the life of the firmware.
+    {:stop, :normal, state}
   end
 
   if Version.match?(System.version(), ">= 1.16.0") do

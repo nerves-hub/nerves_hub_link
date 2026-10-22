@@ -298,7 +298,12 @@ defmodule NervesHubLink.Socket do
   defp handle_connect(%State{config: config} = socket) do
     Logger.info("[NervesHubLink] connection to #{config.socket[:url].host} succeeded")
 
-    currently_downloading_uuid = currently_downloading_uuid()
+    currently_downloading_uuid =
+      ask_sibling(
+        "ask UpdateManager what it is downloading",
+        &UpdateManager.currently_downloading_uuid/0,
+        nil
+      )
 
     device_join_params =
       socket.params
@@ -388,10 +393,17 @@ defmodule NervesHubLink.Socket do
   def handle_call(:start_update, from, socket) do
     # UpdateManager ignores a second update while one is in flight, so asking
     # NervesHub for another firmware URL would only waste a deployment slot.
-    if UpdateManager.status() == :updating do
-      {:reply, {:error, :updating}, socket}
-    else
-      start_update_request(socket, :start_update, from, "request_update", %{})
+    # When it cannot be asked at all, saying so is better than spending the
+    # slot on firmware nothing is in a position to apply.
+    case ask_sibling("ask UpdateManager for its status", &UpdateManager.status/0, :unavailable) do
+      :updating ->
+        {:reply, {:error, :updating}, socket}
+
+      :unavailable ->
+        {:reply, {:error, :unavailable}, socket}
+
+      _ ->
+        start_update_request(socket, :start_update, from, "request_update", %{})
     end
   end
 
@@ -564,14 +576,27 @@ defmodule NervesHubLink.Socket do
 
   defp handle_message(@device_topic, "archive", params, socket) do
     {:ok, info} = ArchiveInfo.parse(params)
-    _ = ArchiveManager.apply_archive(info, socket.config.archive_public_keys)
+
+    _ =
+      ask_sibling(
+        "hand the archive to ArchiveManager",
+        fn -> ArchiveManager.apply_archive(info, socket.config.archive_public_keys) end,
+        nil
+      )
+
     {:ok, socket}
   end
 
   defp handle_message(@device_topic, "update", update, socket) do
     case UpdateInfo.parse(update) do
       {:ok, %UpdateInfo{} = info} ->
-        _ = UpdateManager.apply_update(info, socket.config.fwup_public_keys)
+        _ =
+          ask_sibling(
+            "hand the update to UpdateManager",
+            fn -> UpdateManager.apply_update(info, socket.config.fwup_public_keys) end,
+            nil
+          )
+
         # The same message answers a `request_update` and carries a deployment's
         # own push; resolving is a no-op when nothing asked.
         {:ok, resolve_update_request(socket, :start_update, :ok)}
@@ -798,13 +823,26 @@ defmodule NervesHubLink.Socket do
     {:noreply, socket}
   end
 
-  def handle_info(
-        {:EXIT, uploader_pid, :killed},
-        %State{uploader_pid: uploader_pid} = socket
-      ) do
-    Logger.info("[#{inspect(__MODULE__)}] Upload cancelled")
+  # Only `:killed` used to be handled, so an uploader that crashed was reported
+  # as an unknown message and left behind a `uploader_pid` pointing at a dead
+  # process.
+  def handle_info({:EXIT, uploader_pid, reason}, %State{uploader_pid: uploader_pid} = socket) do
+    case reason do
+      :killed -> Logger.info("[#{inspect(__MODULE__)}] Upload cancelled")
+      :normal -> Logger.debug("[#{inspect(__MODULE__)}] Upload finished")
+      reason -> Logger.warning("[#{inspect(__MODULE__)}] Upload failed : #{inspect(reason)}")
+    end
 
     {:noreply, %{socket | uploader_pid: nil}}
+  end
+
+  # A linked process this socket no longer tracks: an uploader that has already
+  # reported itself finished, most often. Exits are trapped for the console and
+  # the uploader, so these arrive as messages and are not a surprise.
+  def handle_info({:EXIT, pid, reason}, socket) when is_pid(pid) do
+    Logger.debug("[#{inspect(__MODULE__)}] #{inspect(pid)} exited : #{inspect(reason)}")
+
+    {:noreply, socket}
   end
 
   def handle_info(:iex_timeout, socket) do
@@ -898,7 +936,7 @@ defmodule NervesHubLink.Socket do
 
   defp handle_disconnect(reason, socket) do
     _ = Client.handle_error(reason)
-    :alarm_handler.set_alarm({NervesHubLink.Disconnected, [reason: reason]})
+    Alarms.set_alarm({NervesHubLink.Disconnected, [reason: reason]})
 
     socket =
       socket
@@ -1306,20 +1344,18 @@ defmodule NervesHubLink.Socket do
   defp update_request_error("no_deployment_group"), do: :no_deployment_group
   defp update_request_error(_other), do: :error
 
-  # `UpdateManager` is a sibling under the same supervisor, so its restart does
-  # not restart this process. Asking a name that is momentarily not there exits
-  # the caller, which would take the connection down over a question whose
-  # answer only asks NervesHub not to resend an update already in flight - and
-  # if the manager has just died, none is.
-  defp currently_downloading_uuid() do
-    UpdateManager.currently_downloading_uuid()
+  # `UpdateManager` and `ArchiveManager` are siblings under a `:one_for_one`
+  # supervisor, so a restart of either does not restart this process. Calling a
+  # name that is momentarily not there exits the caller, which would take the
+  # connection down over something local - and losing the connection is how the
+  # device would have been told about it.
+  defp ask_sibling(description, fun, unavailable) do
+    fun.()
   catch
     :exit, reason ->
-      Logger.warning(
-        "[NervesHubLink] could not ask UpdateManager what it is downloading : #{inspect(reason)}"
-      )
+      Logger.warning("[NervesHubLink] could not #{description} : #{inspect(reason)}")
 
-      nil
+      unavailable
   end
 
   defp alarm_if_firmware_auto_reverted() do
