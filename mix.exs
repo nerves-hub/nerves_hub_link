@@ -164,7 +164,7 @@ defmodule NervesHubLink.MixProject do
       {:dialyxir, "~> 1.1", only: [:dev, :test], runtime: false},
       {:excoveralls, "~> 0.10", only: :test},
       {:ex_doc, "~> 0.18", only: :docs, runtime: false},
-      {:expty, "~> 0.2.1", optional: true},
+      {:expty, "~> 0.3.0", optional: true},
       {:extty, "~> 0.4.1"},
       {:fwup, "~> 1.0"},
       {:jason, "~> 1.0"},
@@ -178,7 +178,7 @@ defmodule NervesHubLink.MixProject do
       {:nerves_time, "~> 0.4"},
       {:nimble_options, "~> 1.0"},
       {:plug_crypto, "~> 2.0"},
-      {:bandit, "~> 1.12.0", only: :test},
+      {:bandit, "~> 1.13.1", only: :test},
       {:tpm, "~> 0.2.0", optional: true},
       {:whenwhere, "~> 0.1.2"},
       {:x509, "~> 0.5"}
