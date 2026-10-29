@@ -161,7 +161,7 @@ defmodule NervesHubLink.MixProject do
       {:extty, "~> 0.4.1"},
       {:fwup, "~> 1.0"},
       {:jason, "~> 1.0"},
-      {:mint, "~> 1.2"},
+      {:mint, "~> 1.9"},
       {:mox, "~> 1.0", only: :test},
       {:msgpax, "~> 2.0", optional: true},
       {:nerves_key, "~> 1.0 or ~> 0.5", optional: true},
