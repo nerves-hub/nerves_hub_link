@@ -139,18 +139,7 @@ defmodule NervesHubLink.UpdateManager.CachingUpdater do
   def handle_downloader_message({:data, data, percent}, state) do
     IO.binwrite(state.cached_download_pid, data)
 
-    percent = round(percent)
-
-    if send_update?(state, percent) do
-      NervesHubLink.send_update_status({:downloading, percent})
-
-      state
-      |> Map.put(:status, {:downloading, percent})
-      |> Map.put(:last_progress_message, System.monotonic_time(:millisecond))
-      |> then(&{:ok, &1})
-    else
-      {:ok, state}
-    end
+    {:ok, state.updater.handle_progress(:downloading, percent, state)}
   rescue
     error ->
       Logger.error(
