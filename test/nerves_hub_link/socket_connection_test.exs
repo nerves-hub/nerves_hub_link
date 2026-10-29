@@ -6,15 +6,14 @@ defmodule NervesHubLink.SocketConnectionTest do
   @moduledoc """
   Checks that the device actually opens a connection.
 
-  Every other socket test runs Slipstream in test mode, which skips connection
-  setup entirely, so none of them can tell whether the device can reach a server
-  at all. This one points the real socket at a plain TCP listener and reads the
-  HTTP upgrade request off the wire. That covers the configuration handed to
-  Slipstream - the URI, the serializer, the headers - which is otherwise only
-  exercised in production.
+  Other socket tests answer the upgrade and get on with the protocol. This one
+  stops at the upgrade request itself, reading it off a plain TCP listener, so
+  that what goes into it - the URI, the protocol version, the headers - is
+  checked rather than assumed.
   """
 
   use ExUnit.Case, async: false
+  use NervesHubLink.Support.SocketHarness
 
   import Mox
 
@@ -128,6 +127,90 @@ defmodule NervesHubLink.SocketConnectionTest do
           do: {String.downcase(name), value}
 
     %{method: method, path: path, headers: headers}
+  end
+
+  # The listener above accepts the connection and never answers, which is the
+  # failure this bounds: nothing below the socket notices, and the heartbeat
+  # that would is not running until the upgrade completes.
+  test "a server that accepts the connection and never answers is given up on" do
+    test_pid = self()
+
+    stub(NervesHubLink.ClientMock, :handle_error, fn reason ->
+      send(test_pid, {:handle_error, reason})
+      :ok
+    end)
+
+    port = listen_without_answering()
+
+    start_socket(port, upgrade_timeout_msec: 200)
+
+    assert_receive {:handle_error, :upgrade_timeout}, 2_000
+  end
+
+  # The notification this poll exists to send can only go over a connection, so
+  # a timer outliving one fires while disconnected, fails to push, and clears
+  # itself - spending the notification on nothing.
+  test "the firmware validation poll does not outlive the connection" do
+    stub(NervesHubLink.ClientMock, :firmware_validated?, fn -> false end)
+    stub(NervesHubLink.ClientMock, :handle_error, fn _ -> :ok end)
+
+    port = start_server()
+    socket = start_socket(port)
+
+    assert_join("device", _params, :ok)
+    assert_eventually(is_reference(:sys.get_state(socket).firmware_validation_timer))
+
+    server_close()
+
+    assert_eventually(:sys.get_state(socket).firmware_validation_timer == nil)
+  end
+
+  # `UpdateManager` is a sibling under the same supervisor, so its restart does
+  # not restart the socket, and a connection can complete while the name is
+  # momentarily unregistered. Nothing starts it in this file, which puts the
+  # socket in exactly that position.
+  test "connecting survives UpdateManager not being there" do
+    refute Process.whereis(NervesHubLink.UpdateManager)
+
+    port = start_server()
+    socket = start_socket(port)
+
+    # Getting as far as asking to join proves `handle_connect/1` finished.
+    assert_join("device", _params, :ok)
+
+    assert Process.alive?(socket)
+  end
+
+  # A redirect that points back at the same server, so the device is sent round
+  # the loop the hop limit is there to stop. Past that limit it must keep
+  # trying rather than go quiet: nothing on a device would ever bring it back.
+  test "a redirect loop does not leave the device off the air" do
+    port = start_server(mode: :redirect, location: "/socket/websocket")
+
+    start_socket(port, socket: [reconnect_after_msec: [10]])
+
+    # Two hops are followed, and the attempts after the limit prove it is
+    # still trying rather than sitting idle.
+    for _ <- 1..5, do: assert_receive({:connection_test, :redirected}, 2_000)
+  end
+
+  # Holds the connection open without answering. `listen_for_one_request/0`
+  # cannot: it closes as soon as it has the request, which the device sees as
+  # an ordinary disconnect long before any upgrade timeout.
+  defp listen_without_answering() do
+    {:ok, listener} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true])
+    {:ok, port} = :inet.port(listener)
+
+    spawn_link(fn ->
+      with {:ok, socket} <- :gen_tcp.accept(listener, 10_000),
+           {:ok, _request} <- :gen_tcp.recv(socket, 0, 10_000) do
+        Process.sleep(:infinity)
+      end
+    end)
+
+    on_exit(fn -> :gen_tcp.close(listener) end)
+
+    port
   end
 
   defp start_socket(port, overrides \\ []) do

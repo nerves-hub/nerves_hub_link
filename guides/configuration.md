@@ -286,6 +286,34 @@ The firmware downloader leaves the TLS version to `Mint`, which already offers T
 config :nerves_hub_link, downloader_ssl: [session_tickets: :auto]
 ```
 
+## Bounding the upgrade
+
+A server can accept the TCP connection and then never answer the websocket upgrade request. Nothing below the socket notices, and the heartbeat that would is not running until the upgrade completes, so the device waits. The upgrade is therefore given 10 seconds, after which the connection is closed and the usual reconnect takes over:
+
+```elixir
+config :nerves_hub_link, upgrade_timeout_msec: 30_000
+```
+
+Setting it to `0` waits forever, which is how things behaved before this option existed.
+
+## Bounding socket writes
+
+A write to the socket can stall: the server stops reading, the send buffer fills, and the write never completes. Nothing below the socket notices, so the device keeps believing it is connected — and the heartbeat that would otherwise spot the dead connection is itself waiting behind the stalled write. Until something reboots the device, it is gone.
+
+Writes are therefore bounded by a 30 second timeout, after which the socket is closed and the usual reconnect takes over. Devices on very slow links can raise it:
+
+```elixir
+config :nerves_hub_link, send_timeout_msec: 60_000
+```
+
+Setting it to `0` leaves writes unbounded, which is how things behaved before this option existed:
+
+```elixir
+config :nerves_hub_link, send_timeout_msec: 0
+```
+
+This sets the `:send_timeout` and `:send_timeout_close` socket options. Anything given in `:ssl` or in `socket: [http_opts: [transport_opts: [...]]]` takes precedence, so a timeout you configure there is left alone.
+
 ## HTTP proxy
 
 Devices that have to reach NervesHub through an HTTP proxy can configure one for both the WebSocket connection and the firmware downloader. The option is passed through to `Mint.HTTP.connect/4` as `:proxy`, so any `Mint` proxy form is accepted:
