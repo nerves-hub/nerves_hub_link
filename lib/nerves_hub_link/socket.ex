@@ -775,22 +775,22 @@ defmodule NervesHubLink.Socket do
     :alarm_handler.set_alarm({NervesHubLink.Disconnected, [reason: reason]})
     channel_config = %{socket.channel_config | reconnect_after_msec: Client.reconnect_backoff()}
 
+    # A connection signed with a shared secret is signed again for every attempt,
+    # whichever configurator built it.
     channel_config =
-      case Configurator.fetch_configurator() do
-        SharedSecret ->
-          # TODO: I don't know when reconnect/1 actually gets validated. It could be that
-          # the signature we create here will be too old before the headers are used
-          # in a connection attempt again.
-          #
-          # When the failed upgrade response carried a `Date` header, sign
-          # with that time instead of the device clock — recovers devices
-          # whose RTC/NTP isn't trustworthy yet.
-          hint = SharedSecret.server_time_hint(reason)
-          headers = SharedSecret.headers(socket.assigns.config, hint)
-          %{channel_config | headers: headers}
-
-        _ ->
-          channel_config
+      if List.keymember?(channel_config.headers, "x-nh-signature", 0) do
+        # TODO: I don't know when reconnect/1 actually gets validated. It could be that
+        # the signature we create here will be too old before the headers are used
+        # in a connection attempt again.
+        #
+        # When the failed upgrade response carried a `Date` header, sign
+        # with that time instead of the device clock — recovers devices
+        # whose RTC/NTP isn't trustworthy yet.
+        hint = SharedSecret.server_time_hint(reason)
+        headers = SharedSecret.headers(socket.assigns.config, hint)
+        %{channel_config | headers: headers}
+      else
+        channel_config
       end
 
     %{socket | channel_config: channel_config}
