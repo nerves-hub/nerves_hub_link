@@ -135,6 +135,8 @@ defmodule NervesHubLink.DownloaderTest do
       {:ok, download} =
         Downloader.start_download(url, handler_fun, retry_config: @short_retry_args)
 
+      ref = Process.monitor(download)
+
       assert_receive {:data, "h", _}, 1000
       assert_receive {:error, _}
 
@@ -144,7 +146,8 @@ defmodule NervesHubLink.DownloaderTest do
 
       assert_receive :complete
 
-      refute Process.alive?(download)
+      # The handler hears :complete before the downloader stops
+      assert_receive {:DOWN, ^ref, :process, ^download, _reason}
     end
   end
 
@@ -163,13 +166,15 @@ defmodule NervesHubLink.DownloaderTest do
       end
 
       {:ok, download} = Downloader.start_download(url, handler_fun)
+      ref = Process.monitor(download)
 
       refute_receive {:error, _}
       assert_receive {:data, "redirected", _}
 
       assert_receive :complete
 
-      refute Process.alive?(download)
+      # The handler hears :complete before the downloader stops
+      assert_receive {:DOWN, ^ref, :process, ^download, _reason}
     end
   end
 
