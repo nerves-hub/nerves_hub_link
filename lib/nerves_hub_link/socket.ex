@@ -787,6 +787,7 @@ defmodule NervesHubLink.Socket do
         # with that time instead of the device clock — recovers devices
         # whose RTC/NTP isn't trustworthy yet.
         hint = SharedSecret.server_time_hint(reason)
+
         headers =
           SharedSecret.headers(socket.assigns.config, hint)
           |> Stream.concat(channel_config.headers)
