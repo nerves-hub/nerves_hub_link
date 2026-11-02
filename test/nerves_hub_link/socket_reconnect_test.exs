@@ -51,6 +51,22 @@ defmodule NervesHubLink.SocketReconnectTest do
     assert String.to_integer(headers["x-nh-time"]) > 0
   end
 
+  test "keeps headers the configurator added when signing again" do
+    headers = [
+      {"x-custom", "keep-me"},
+      {"x-nh-key", "nhd_key"},
+      {"x-nh-time", "0"},
+      {"x-nh-signature", "stale"}
+    ]
+
+    {:ok, socket} = Socket.handle_disconnect({:error, :closed}, disconnected_socket(headers))
+
+    new_headers = socket.channel_config.headers
+    assert {"x-custom", "keep-me"} in new_headers
+    assert Enum.count(new_headers, fn {k, _} -> k == "x-nh-signature" end) == 1
+    refute {"x-nh-signature", "stale"} in new_headers
+  end
+
   test "leaves a connection without a shared secret as it was" do
     {:ok, socket} = Socket.handle_disconnect({:error, :closed}, disconnected_socket([]))
 
