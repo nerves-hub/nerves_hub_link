@@ -787,12 +787,12 @@ defmodule NervesHubLink.Socket do
         # with that time instead of the device clock — recovers devices
         # whose RTC/NTP isn't trustworthy yet.
         hint = SharedSecret.server_time_hint(reason)
-        signed = SharedSecret.headers(socket.assigns.config, hint)
+        headers =
+          SharedSecret.headers(socket.assigns.config, hint)
+          |> Stream.concat(channel_config.headers)
+          |> Enum.uniq_by(&elem(&1, 0))
 
-        # Replace only the signing headers, keeping any others the configurator added.
-        signed_keys = Enum.map(signed, &elem(&1, 0))
-        kept = Enum.reject(channel_config.headers, fn {k, _} -> k in signed_keys end)
-        %{channel_config | headers: kept ++ signed}
+        %{channel_config | headers: headers}
       else
         channel_config
       end
