@@ -660,17 +660,7 @@ defmodule NervesHubLink.UpdateManager.PartsUpdater do
   end
 
   defp report_progress(state, downloader_percent) do
-    percent = round(overall_percent(state, downloader_percent))
-
-    if send_update?(state, percent) do
-      NervesHubLink.send_update_status({:downloading, percent})
-
-      state
-      |> Map.put(:status, {:downloading, percent})
-      |> Map.put(:last_progress_message, System.monotonic_time(:millisecond))
-    else
-      state
-    end
+    state.updater.handle_progress(:downloading, overall_percent(state, downloader_percent), state)
   end
 
   # Each download only knows about its own range, so progress is counted from

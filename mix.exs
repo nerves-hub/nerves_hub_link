@@ -1,7 +1,7 @@
 defmodule NervesHubLink.MixProject do
   use Mix.Project
 
-  @version "2.12.0"
+  @version "2.13.0"
   @description "Manage your Nerves fleet by connecting it to NervesHub"
   @source_url "https://github.com/nerves-hub/nerves_hub_link"
 
@@ -168,7 +168,7 @@ defmodule NervesHubLink.MixProject do
       {:extty, "~> 0.4.1"},
       {:fwup, "~> 1.0"},
       {:jason, "~> 1.0"},
-      {:mint, "~> 1.2"},
+      {:mint, "~> 1.9"},
       {:mint_web_socket, "~> 1.0"},
       {:mox, "~> 1.0", only: :test},
       {:msgpax, "~> 2.0", optional: true},

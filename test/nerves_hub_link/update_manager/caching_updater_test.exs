@@ -52,7 +52,8 @@ defmodule NervesHubLink.UpdateManager.CachingUpdaterTest do
     state = %{
       update_info: ctx.update_info,
       reporting_download_fun: handler_fun,
-      last_progress_message: nil
+      last_progress_message: nil,
+      updater: CachingUpdater
     }
 
     {:ok, state} = CachingUpdater.start(state)
