@@ -290,8 +290,25 @@ defmodule NervesHubLink.Socket do
     config = socket.config
 
     case Configurator.fetch_configurator() do
-      SharedSecret -> SharedSecret.headers(config, socket.signing_time_hint)
-      _ -> config.socket[:headers] || []
+      SharedSecret ->
+        SharedSecret.headers(config, socket.signing_time_hint)
+
+      _ ->
+        configured = config.socket[:headers] || []
+
+        # An app may build the shared-secret headers in its own configurator,
+        # which runs once at startup. Keying the signing off the configurator
+        # being `SharedSecret` left those signed once for the life of the
+        # firmware, and refused as expired from the first reconnect onwards.
+        # What decides it is the headers carrying a signature, not who made
+        # them; anything else the configurator added is kept.
+        if List.keymember?(configured, "x-nh-signature", 0) do
+          SharedSecret.headers(config, socket.signing_time_hint)
+          |> Stream.concat(configured)
+          |> Enum.uniq_by(&elem(&1, 0))
+        else
+          configured
+        end
     end
   end
 
