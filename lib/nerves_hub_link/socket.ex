@@ -315,6 +315,7 @@ defmodule NervesHubLink.Socket do
 
     socket =
       %{socket | params: device_join_params, redirect_count: 0}
+      |> cancel_reconnect()
       |> join(@device_topic, device_join_params)
       |> maybe_join_console()
       |> schedule_heartbeat()
@@ -889,14 +890,25 @@ defmodule NervesHubLink.Socket do
   end
 
   def handle_info(:heartbeat, socket) do
+    was_connected? = Connection.connected?(socket.connection)
+
     case Connection.send_heartbeat(socket.connection) do
       {:ok, connection} ->
         {:noreply, socket |> put_connection(connection) |> schedule_heartbeat()}
 
       # An unanswered heartbeat has closed the connection, and nothing arrived
-      # from the network to say so, so this is where it gets reported.
+      # from the network to say so, so this is where it gets reported. A
+      # heartbeat already in the mailbox when the connection went cannot be
+      # retracted, so one can arrive for a connection that is already down;
+      # that one has nothing to report, as in `push_message/4`.
       {:error, reason, connection} ->
-        {:noreply, socket |> put_connection(connection) |> disconnected(reason)}
+        socket = put_connection(socket, connection)
+
+        if was_connected? and not Connection.connected?(socket.connection) do
+          {:noreply, disconnected(socket, reason)}
+        else
+          {:noreply, socket}
+        end
     end
   end
 
@@ -1096,6 +1108,8 @@ defmodule NervesHubLink.Socket do
   # Pushes and reports what happened, for the callers that need the ref or the
   # error. Everything else uses `push/4`.
   defp push_message(socket, topic, event, payload) do
+    was_connected? = Connection.connected?(socket.connection)
+
     case Connection.push(socket.connection, topic, event, payload) do
       {:ok, ref, connection} ->
         {{:ok, ref}, put_connection(socket, connection)}
@@ -1107,11 +1121,18 @@ defmodule NervesHubLink.Socket do
         # nothing arrived from the network to announce that, so the disconnect
         # handling runs from here or not at all. It belongs here rather than in
         # `push/4` so that the callers who want the error get it too.
+        #
+        # Only for the push that ended it, though. A push refused because the
+        # connection was already down, or not up yet, leaves it exactly as it
+        # was, and there is no second disconnect in that to report: running the
+        # handling again rescheduled the reconnect, so pushes arriving faster
+        # than the backoff - an update reporting progress, a console, a script
+        # result - postponed it for as long as they kept coming.
         socket =
-          if Connection.connected?(socket.connection) do
-            socket
-          else
+          if was_connected? and not Connection.connected?(socket.connection) do
             disconnected(socket, reason)
+          else
+            socket
           end
 
         {{:error, reason}, socket}
@@ -1136,14 +1157,28 @@ defmodule NervesHubLink.Socket do
   # Cancelling first, because more than one path can decide the connection has
   # gone - a failed write and the heartbeat that follows it, say - and two
   # pending timers mean opening a connection and dropping it an instant later.
+  # A reconnect already due stands. Cancelling it to schedule another only ever
+  # moves it further out, since each delay comes from one step further along the
+  # backoff, and a second disconnect is not a reason to retry later than the
+  # first one asked for.
+  defp reconnect(%State{reconnect_timer: timer} = socket) when is_reference(timer) do
+    {:ok, socket}
+  end
+
   defp reconnect(socket) do
     {delay, connection} = Connection.reconnect_delay(socket.connection)
-
-    maybe_cancel_timer(socket.reconnect_timer)
 
     socket = put_connection(socket, connection)
 
     {:ok, %{socket | reconnect_timer: Process.send_after(self(), :connect, delay)}}
+  end
+
+  # A reconnect scheduled before this connection succeeded has to go, or it
+  # fires later and closes it: `connect/1` closes whatever is open first.
+  defp cancel_reconnect(socket) do
+    maybe_cancel_timer(socket.reconnect_timer)
+
+    %{socket | reconnect_timer: nil}
   end
 
   defp rejoin(socket, topic) do

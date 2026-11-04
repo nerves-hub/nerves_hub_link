@@ -16,6 +16,10 @@ defmodule NervesHubLink.Support.WebSocketServer do
     * `:redirect` - answers 302 with `:location`
     * `:refuse` - answers `:status`, 403 by default
     * `:silent` - accepts the connection and never answers
+
+  `:upgrade_after_msec` holds an `:upgrade` open for that long before
+  answering, announcing `{:connection_test, :upgrade_requested}` first, so a
+  test can act while the device is still connecting rather than racing it.
   """
 
   @behaviour Plug
@@ -31,6 +35,15 @@ defmodule NervesHubLink.Support.WebSocketServer do
 
     case Keyword.get(opts, :mode, :upgrade) do
       :upgrade ->
+        case Keyword.get(opts, :upgrade_after_msec, 0) do
+          0 ->
+            :ok
+
+          delay ->
+            send(test_pid, {:connection_test, :upgrade_requested})
+            Process.sleep(delay)
+        end
+
         upgrade_adapter(
           conn,
           :websocket,

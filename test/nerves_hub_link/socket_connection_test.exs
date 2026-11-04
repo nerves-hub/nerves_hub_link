@@ -194,6 +194,61 @@ defmodule NervesHubLink.SocketConnectionTest do
     for _ <- 1..5, do: assert_receive({:connection_test, :redirected}, 2_000)
   end
 
+  # A download in progress keeps reporting its status, and the socket being
+  # down is exactly when it has most to report. Each of those pushes fails,
+  # and a failed push used to be taken for the cause of a disconnect that had
+  # already happened - running the disconnect handling again and, with it,
+  # rescheduling the reconnect. Pushes arriving faster than the backoff then
+  # postponed the reconnect for as long as they kept coming.
+  test "pushing while disconnected does not postpone the reconnect" do
+    stub(NervesHubLink.ClientMock, :handle_error, fn _ -> :ok end)
+
+    port = start_server()
+    socket = start_socket(port, socket: [reconnect_after_msec: [300]])
+
+    assert_join("device", _params, :ok)
+    _ = await_connect()
+
+    server_close()
+
+    pusher =
+      spawn(fn ->
+        Enum.each(1..40, fn _ ->
+          NervesHubLink.send_update_status(socket, {:downloading, 1})
+          Process.sleep(50)
+        end)
+      end)
+
+    on_exit(fn -> Process.exit(pusher, :kill) end)
+
+    assert_receive {:connection_test, {:server, _}}, 2_000
+  end
+
+  # `init/1` continues straight into connecting, so a cast sent now is handled
+  # while the upgrade is still outstanding. The push fails for a connection
+  # that is not up *yet*, which is not the same as one that has gone, and the
+  # reconnect it used to schedule outlived the upgrade it raced - closing a
+  # healthy connection a backoff later.
+  test "pushing during the upgrade does not drop the connection it completes" do
+    stub(NervesHubLink.ClientMock, :handle_error, fn _ -> :ok end)
+
+    # The server holds the upgrade, so the cast below is certainly handled
+    # while connecting; and the reconnect it wrongly schedules is due after
+    # the upgrade has succeeded, which is the window the bug lived in.
+    port = start_server(upgrade_after_msec: 200)
+    socket = start_socket(port, socket: [reconnect_after_msec: [500]])
+
+    assert_receive {:connection_test, :upgrade_requested}, 2_000
+
+    NervesHubLink.send_update_status(socket, {:downloading, 1})
+
+    assert_join("device", _params, :ok)
+    first = await_connect()
+
+    refute_receive {:connection_test, {:server, _}}, 1_000
+    assert Process.alive?(first)
+  end
+
   # Holds the connection open without answering. `listen_for_one_request/0`
   # cannot: it closes as soon as it has the request, which the device sees as
   # an ordinary disconnect long before any upgrade timeout.
