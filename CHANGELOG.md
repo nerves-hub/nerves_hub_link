@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.13.1] - 2026-11-05
+
+* Fixed
+  * Reconnects now refresh the shared-secret signature for any configurator, not just `NervesHubLink.Configurator.SharedSecret`. Custom configurators reused their first signature and were refused once it expired. (#505)
+
 ## [2.13.0] - 2026-10-29
 
 * Potentially breaking
