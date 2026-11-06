@@ -8,7 +8,7 @@ defmodule NervesHubLink.Backoff do
   Functions for computing network connect backoff intervals
   """
 
-  # Compute retry backoff intervals used by Slipstream
+  # Compute retry backoff intervals for reconnecting and rejoining
 
   @doc """
   Produce a list of integer backoff delays with jitter
@@ -34,6 +34,19 @@ defmodule NervesHubLink.Backoff do
   defp calc(min, max, jitter) do
     delay = add_jitter(min, jitter)
     [delay | calc(min * 2, max, jitter)]
+  end
+
+  @doc """
+  Pick the delay to use for a retry attempt.
+
+  `attempt` counts from zero. Once the attempts run past the end of the list
+  the last delay repeats, so a device that has been failing for a long time
+  keeps retrying at the longest interval rather than stopping or starting over
+  at the shortest one.
+  """
+  @spec at([integer()], non_neg_integer()) :: integer()
+  def at(delays, attempt) when is_list(delays) and delays != [] and attempt >= 0 do
+    Enum.at(delays, attempt, List.last(delays))
   end
 
   defp add_jitter(value, jitter) do
