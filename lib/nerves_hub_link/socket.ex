@@ -977,6 +977,13 @@ defmodule NervesHubLink.Socket do
     existing_keys = Map.fetch!(config, field)
 
     cond do
+      keys_not_requested?(config, field) ->
+        Logger.warning(
+          "[NervesHubLink] Ignoring public keys for #{label} verification that were not requested : keeping the #{length(existing_keys)} locally configured key(s)"
+        )
+
+        config
+
       received_keys != [] ->
         Logger.info(
           "[NervesHubLink] Public keys for #{label} verification updated - #{length(received_keys)} key(s) received"
@@ -998,6 +1005,12 @@ defmodule NervesHubLink.Socket do
 
         config
     end
+  end
+
+  # The configurator asks for keys by putting "on_connect" in the join params
+  # under the field's name. Without it the device didn't ask for keys.
+  defp keys_not_requested?(config, field) do
+    config.params[Atom.to_string(field)] != "on_connect"
   end
 
   # Shallow-merge user-supplied opts on top of the base, but for :transport_opts
