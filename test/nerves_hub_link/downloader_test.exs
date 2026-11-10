@@ -169,7 +169,6 @@ defmodule NervesHubLink.DownloaderTest do
       end
 
       {:ok, download} = Downloader.start_download(url, handler_fun)
-      ref = Process.monitor(download)
 
       ref = Process.monitor(download)
 
