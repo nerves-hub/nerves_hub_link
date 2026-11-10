@@ -18,6 +18,7 @@ defmodule NervesHubLink.SocketConnectionTest do
 
   import Mox
 
+  alias NervesHubLink.Configurator
   alias NervesHubLink.Configurator.Config
   alias NervesHubLink.Socket
 
@@ -68,6 +69,16 @@ defmodule NervesHubLink.SocketConnectionTest do
 
     assert %{headers: headers} = assert_upgrade_request()
     assert headers["x-device"] == "test-device"
+  end
+
+  test "the upgrade request names this library, not Mint, in its User-Agent" do
+    port = listen_for_one_request()
+
+    start_socket(port, socket: [headers: Configurator.build().socket[:headers]])
+
+    assert %{header_list: header_list} = assert_upgrade_request()
+
+    assert for({"user-agent", value} <- header_list, do: value) == [Configurator.user_agent()]
   end
 
   describe "with the msgpack serializer configured" do
@@ -121,13 +132,12 @@ defmodule NervesHubLink.SocketConnectionTest do
     [request_line | header_lines] = String.split(request, "\r\n")
     [method, path | _] = String.split(request_line, " ")
 
-    headers =
+    header_list =
       for line <- header_lines,
           [name, value] <- [String.split(line, ": ", parts: 2)],
-          into: %{},
           do: {String.downcase(name), value}
 
-    %{method: method, path: path, headers: headers}
+    %{method: method, path: path, headers: Map.new(header_list), header_list: header_list}
   end
 
   defp start_socket(port, overrides \\ []) do
