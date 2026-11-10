@@ -33,6 +33,7 @@ defmodule NervesHubLink.Downloader do
 
   use GenServer
 
+  alias NervesHubLink.Configurator
   alias NervesHubLink.Downloader
   alias NervesHubLink.Downloader.RetryConfig
   alias NervesHubLink.Downloader.TimeoutCalculation
@@ -602,7 +603,7 @@ defmodule NervesHubLink.Downloader do
     do: [{"X-Retry-Number", "#{retry_number}"} | headers]
 
   defp add_user_agent_header(headers, _),
-    do: [{"User-Agent", "NHL/#{Application.spec(:nerves_hub_link)[:vsn]}"} | headers]
+    do: [{"User-Agent", Configurator.user_agent()} | headers]
 
   # OTP writes the whole state to the crash report when this process stops
   # abnormally, which for a download means the signed firmware URL and whatever
