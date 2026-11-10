@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-defmodule NervesHubLink.MsgPackSerializerTest do
+defmodule NervesHubLink.Connection.Serializer.MsgPackTest do
   @moduledoc """
   The serializer sits on the wire for every message the device sends and
   receives, so what it puts on the wire is a contract with NervesHub, and
@@ -11,10 +11,10 @@ defmodule NervesHubLink.MsgPackSerializerTest do
 
   use ExUnit.Case, async: true
 
+  alias NervesHubLink.Connection.Message
+  alias NervesHubLink.Connection.Serializer
+  alias NervesHubLink.Connection.Serializer.MsgPack
   alias NervesHubLink.Extensions.Health.DeviceStatus
-  alias NervesHubLink.MsgPackSerializer
-  alias Slipstream.Message
-  alias Slipstream.Serializer
 
   describe "encode!/2" do
     test "packs a message as the five element Phoenix envelope" do
@@ -26,7 +26,7 @@ defmodule NervesHubLink.MsgPackSerializerTest do
         payload: %{"status" => "received"}
       }
 
-      assert {:binary, packed} = MsgPackSerializer.encode!(message, [])
+      assert {:binary, packed} = MsgPack.encode!(message)
 
       assert Msgpax.unpack!(packed) == [
                "1",
@@ -40,7 +40,7 @@ defmodule NervesHubLink.MsgPackSerializerTest do
     test "a message with no refs keeps them null" do
       message = %Message{topic: "device", event: "phx_join", payload: %{}}
 
-      assert {:binary, packed} = MsgPackSerializer.encode!(message, [])
+      assert {:binary, packed} = MsgPack.encode!(message)
       assert [nil, nil, "device", "phx_join", %{}] = Msgpax.unpack!(packed)
     end
 
@@ -53,7 +53,7 @@ defmodule NervesHubLink.MsgPackSerializerTest do
         payload: %{stage: :updating, value: 50}
       }
 
-      assert {:binary, packed} = MsgPackSerializer.encode!(message, [])
+      assert {:binary, packed} = MsgPack.encode!(message)
       assert [_, _, _, _, payload] = Msgpax.unpack!(packed)
       assert payload == %{"stage" => "updating", "value" => 50}
     end
@@ -73,7 +73,7 @@ defmodule NervesHubLink.MsgPackSerializerTest do
         payload: %{"value" => status}
       }
 
-      assert {:binary, packed} = MsgPackSerializer.encode!(message, [])
+      assert {:binary, packed} = MsgPack.encode!(message)
       assert [_, _, _, _, %{"value" => value}] = Msgpax.unpack!(packed)
 
       # Msgpack carries a timestamp as its own extension type rather than the
@@ -92,7 +92,7 @@ defmodule NervesHubLink.MsgPackSerializerTest do
       }
 
       assert_raise Serializer.EncodeError, fn ->
-        MsgPackSerializer.encode!(message, [])
+        MsgPack.encode!(message)
       end
     end
   end
@@ -102,7 +102,7 @@ defmodule NervesHubLink.MsgPackSerializerTest do
       frame =
         pack([nil, "3", "device", "update", %{"firmware_url" => "http://example.test/a.fw"}])
 
-      assert %Message{} = message = MsgPackSerializer.decode!(frame, opcode: :binary)
+      assert %Message{} = message = MsgPack.decode!(frame, :binary)
 
       assert message.join_ref == nil
       assert message.ref == "3"
@@ -115,7 +115,7 @@ defmodule NervesHubLink.MsgPackSerializerTest do
       frame =
         pack(["1", "2", "device", "phx_reply", %{"status" => "ok", "response" => %{}}])
 
-      assert %Message{} = message = MsgPackSerializer.decode!(frame, opcode: :binary)
+      assert %Message{} = message = MsgPack.decode!(frame, :binary)
 
       assert message.event == "phx_reply"
       assert message.payload == %{"status" => "ok", "response" => %{}}
@@ -126,7 +126,7 @@ defmodule NervesHubLink.MsgPackSerializerTest do
     test "refs sent as integers become strings" do
       frame = pack([1, 2, "device", "ping", %{}])
 
-      assert %Message{join_ref: "1", ref: "2"} = MsgPackSerializer.decode!(frame, opcode: :binary)
+      assert %Message{join_ref: "1", ref: "2"} = MsgPack.decode!(frame, :binary)
     end
 
     test "a message encoded by this serializer decodes back to itself" do
@@ -138,35 +138,53 @@ defmodule NervesHubLink.MsgPackSerializerTest do
         payload: %{"a" => [1, 2, 3]}
       }
 
-      {:binary, packed} = MsgPackSerializer.encode!(message, [])
+      {:binary, packed} = MsgPack.encode!(message)
 
-      assert MsgPackSerializer.decode!(packed, opcode: :binary) == message
+      assert MsgPack.decode!(packed, :binary) == message
     end
 
-    # Slipstream rescues DecodeError and leaves the connection up. Anything else
+    # The connection drops a frame it cannot decode and leaves the connection up
     # takes the connection process down with it.
     test "a malformed frame raises a DecodeError" do
       assert_raise Serializer.DecodeError, fn ->
-        MsgPackSerializer.decode!(<<0x93, 1, 2, 3>>, opcode: :binary)
+        MsgPack.decode!(<<0x93, 1, 2, 3>>, :binary)
       end
     end
 
     test "a frame that isn't msgpack at all raises a DecodeError" do
       assert_raise Serializer.DecodeError, fn ->
-        MsgPackSerializer.decode!("this is not msgpack", opcode: :binary)
+        MsgPack.decode!("this is not msgpack", :binary)
       end
     end
 
     test "an envelope of the wrong shape raises a DecodeError" do
       assert_raise Serializer.DecodeError, fn ->
-        MsgPackSerializer.decode!(pack(["only", "three", "elements"]), opcode: :binary)
+        MsgPack.decode!(pack(["only", "three", "elements"]), :binary)
       end
     end
 
     test "a text frame raises a DecodeError" do
       assert_raise Serializer.DecodeError, fn ->
-        MsgPackSerializer.decode!(~s([null,"2","device","ping",{}]), opcode: :text)
+        MsgPack.decode!(~s([null,"2","device","ping",{}]), :text)
       end
+    end
+
+    test "a topic or event that is not a string is a decode error" do
+      assert_raise Serializer.DecodeError, ~r/string topic and event/, fn ->
+        MsgPack.decode!(pack(["1", nil, %{"not" => "a topic"}, "event", %{}]), :binary)
+      end
+    end
+
+    test "a ref that is neither a string nor a number is a decode error" do
+      assert_raise Serializer.DecodeError, ~r/string, a number or null/, fn ->
+        MsgPack.decode!(pack(["1", %{}, "device", "event", %{}]), :binary)
+      end
+    end
+
+    test "an envelope with more than five elements is still read" do
+      frame = pack([nil, "2", "device", "ping", %{}, "later"])
+
+      assert %Message{topic: "device", event: "ping"} = MsgPack.decode!(frame, :binary)
     end
   end
 

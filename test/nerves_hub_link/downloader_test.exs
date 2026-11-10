@@ -146,8 +146,11 @@ defmodule NervesHubLink.DownloaderTest do
 
       assert_receive :complete
 
-      # The handler hears :complete before the downloader stops
-      assert_receive {:DOWN, ^ref, :process, ^download, _reason}
+      # `:complete` reaches the handler before the download process returns
+      # `{:stop, :normal, state}`, so it is still alive for a moment after the
+      # message arrives. Wait for the exit rather than asking whether it has
+      # happened yet.
+      assert_receive {:DOWN, ^ref, :process, ^download, :normal}
     end
   end
 
@@ -166,6 +169,7 @@ defmodule NervesHubLink.DownloaderTest do
       end
 
       {:ok, download} = Downloader.start_download(url, handler_fun)
+
       ref = Process.monitor(download)
 
       refute_receive {:error, _}
@@ -173,8 +177,11 @@ defmodule NervesHubLink.DownloaderTest do
 
       assert_receive :complete
 
-      # The handler hears :complete before the downloader stops
-      assert_receive {:DOWN, ^ref, :process, ^download, _reason}
+      # `:complete` reaches the handler before the download process returns
+      # `{:stop, :normal, state}`, so it is still alive for a moment after the
+      # message arrives. Wait for the exit rather than asking whether it has
+      # happened yet.
+      assert_receive {:DOWN, ^ref, :process, ^download, :normal}
     end
   end
 

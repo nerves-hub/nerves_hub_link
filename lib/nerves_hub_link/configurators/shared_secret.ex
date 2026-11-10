@@ -86,18 +86,17 @@ defmodule NervesHubLink.Configurator.SharedSecret do
   end
 
   @doc """
-  Extract a server-time hint from a Slipstream disconnect reason.
+  Extract a server-time hint from a disconnect reason.
 
-  Slipstream surfaces Mint's WebSocket upgrade failures as
-  `{:error, {:upgrade_failure, %{reason: %UpgradeFailureError{headers: ...}}}}`.
+  A failed WebSocket upgrade is reported as
+  `{:upgrade_failure, %Mint.WebSocket.UpgradeFailureError{headers: ...}}`.
   When that's the shape we get, parse the server's RFC 9110 `Date`
   header (e.g. `Sun, 06 Nov 1994 08:49:37 GMT`) into a `DateTime` and
   return it. Returns `nil` for any other reason shape, or if the Date
   header is missing or malformed.
   """
   @spec server_time_hint(term()) :: DateTime.t() | nil
-  def server_time_hint({:error, {:upgrade_failure, %{reason: %{headers: headers}}}})
-      when is_list(headers) do
+  def server_time_hint({:upgrade_failure, %{headers: headers}}) when is_list(headers) do
     with {_, date_str} <- Enum.find(headers, fn {k, _v} -> k == "date" end),
          {:ok, dt} <- parse_http_date(date_str) do
       dt

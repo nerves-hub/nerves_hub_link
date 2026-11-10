@@ -21,6 +21,35 @@ defmodule NervesHubLink.BackoffTest do
     assert_in_delta run_average, 0.125, 0.04
   end
 
+  describe "at/2" do
+    test "each attempt takes the next delay in the list" do
+      assert Backoff.at([1, 2, 3], 0) == 1
+      assert Backoff.at([1, 2, 3], 1) == 2
+      assert Backoff.at([1, 2, 3], 2) == 3
+    end
+
+    # A device that has been failing for hours should keep retrying at the
+    # longest interval. Starting over at the shortest would turn a server
+    # coming back up into a stampede from the whole fleet.
+    test "attempts past the end of the list repeat the longest delay" do
+      assert Backoff.at([1, 2, 3], 3) == 3
+      assert Backoff.at([1, 2, 3], 300) == 3
+    end
+
+    test "a single delay is used for every attempt" do
+      assert Backoff.at([5], 0) == 5
+      assert Backoff.at([5], 99) == 5
+    end
+
+    test "the delays computed by delay_list/3 are indexed the same way" do
+      delays = Backoff.delay_list(1000, 60_000, 0)
+
+      assert Backoff.at(delays, 0) == 1000
+      assert Backoff.at(delays, length(delays) - 1) == 60_000
+      assert Backoff.at(delays, length(delays) * 2) == 60_000
+    end
+  end
+
   defp backoff_average_jitter(low, high, jitter) do
     zero_jitter = Backoff.delay_list(low, high, 0)
     test_jitter = Backoff.delay_list(low, high, jitter)
