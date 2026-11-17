@@ -37,11 +37,24 @@ defmodule NervesHubLink.Connection do
 
   ## Failing to send
 
-  `join/3`, `push/4` and `send_heartbeat/1` return `{:error, reason, connection}`
-  when a message cannot be sent. A write that fails has taken the connection
-  with it, so check `connected?/1` on the returned connection: when it is false
-  the caller should run whatever it does on `{:disconnected, reason}`, because
-  no such event will arrive separately.
+  `join/3`, `rejoin/2`, `push/4` and `send_heartbeat/1` answer a message that
+  could not be sent in one of two ways, and which one it is matters:
+
+    * `{:error, reason, connection}` - refused before anything was written,
+      because the connection is not up or the topic is not joined. The
+      connection is unchanged and nothing has happened to report.
+
+    * `{:disconnected, reason, connection}` - this call took the connection
+      down, by a write that failed or a heartbeat that went unanswered. The
+      returned connection is closed, and no `{:disconnected, reason}` event
+      will arrive from `handle_transport/2` to say so, because nothing came
+      from the network: the caller runs its disconnect handling here or not at
+      all.
+
+  The two are kept apart rather than left to `connected?/1` because a refused
+  send also leaves a connection that is not connected, and running the
+  disconnect handling for one of those reschedules a reconnect that is already
+  due - which postpones it for as long as the sends keep coming.
   """
 
   alias Mint.WebSocket.UpgradeFailureError
@@ -95,7 +108,7 @@ defmodule NervesHubLink.Connection do
       with `response`.
     * `{:join_failed, topic, reason}` - the server refused a join.
     * `{:topic_closed, topic, reason}` - the server closed a joined topic,
-      usually because the connection process crashed. The connection is still up.
+      usually because its channel process crashed. The connection is still up.
     * `{:topic_left, topic}` - the server closed a topic normally.
     * `{:message, topic, event, payload}` - the server sent a message.
     * `{:reply, ref, reply}` - the server replied to the push sent with `ref`.
@@ -176,7 +189,8 @@ defmodule NervesHubLink.Connection do
 
     uri = connection.uri
 
-    with {:ok, conn} <-
+    with :ok <- check_scheme(uri),
+         {:ok, conn} <-
            Mint.HTTP.connect(http_scheme(uri), uri.host, uri.port, connection.mint_opts),
          {:ok, conn, request_ref} <-
            Mint.WebSocket.upgrade(ws_scheme(uri), conn, path(uri), connection.headers,
@@ -249,7 +263,8 @@ defmodule NervesHubLink.Connection do
   alone. `{:joined, topic, response}` or `{:join_failed, topic, reason}`
   arrives through `handle_transport/2`.
   """
-  @spec join(t(), String.t(), term()) :: {:ok, t()} | {:error, reason :: term(), t()}
+  @spec join(t(), String.t(), term()) ::
+          {:ok, t()} | {:error, reason :: term(), t()} | {:disconnected, reason :: term(), t()}
   def join(%__MODULE__{} = connection, topic, params \\ %{}) when is_binary(topic) do
     cond do
       not connected?(connection) ->
@@ -269,7 +284,8 @@ defmodule NervesHubLink.Connection do
   Returns `{:error, :never_joined, connection}` for a topic that has not been
   joined, since there are no parameters to repeat.
   """
-  @spec rejoin(t(), String.t()) :: {:ok, t()} | {:error, reason :: term(), t()}
+  @spec rejoin(t(), String.t()) ::
+          {:ok, t()} | {:error, reason :: term(), t()} | {:disconnected, reason :: term(), t()}
   def rejoin(%__MODULE__{} = connection, topic) when is_binary(topic) do
     case Map.fetch(connection.joins, topic) do
       {:ok, %{params: params}} -> join(connection, topic, params)
@@ -283,7 +299,9 @@ defmodule NervesHubLink.Connection do
   The returned ref is what a later `{:reply, ref, reply}` event will carry.
   """
   @spec push(t(), String.t(), String.t(), term()) ::
-          {:ok, String.t(), t()} | {:error, reason :: term(), t()}
+          {:ok, String.t(), t()}
+          | {:error, reason :: term(), t()}
+          | {:disconnected, reason :: term(), t()}
   def push(%__MODULE__{} = connection, topic, event, payload)
       when is_binary(topic) and is_binary(event) do
     cond do
@@ -307,6 +325,7 @@ defmodule NervesHubLink.Connection do
         case send_message(connection, message) do
           {:ok, connection} -> {:ok, ref, connection}
           {:error, reason, connection} -> {:error, reason, connection}
+          {:disconnected, reason, connection} -> {:disconnected, reason, connection}
         end
     end
   end
@@ -314,14 +333,15 @@ defmodule NervesHubLink.Connection do
   @doc """
   Send a heartbeat.
 
-  Returns `{:error, :heartbeat_timeout, connection}`, with the connection closed,
+  Returns `{:disconnected, :heartbeat_timeout, connection}`, with the connection closed,
   when the previous heartbeat has not been answered. That is the point of
   sending them: an idle TCP connection can be dead for a long time without
   either end noticing, and an unanswered heartbeat is how this one finds out.
   """
-  @spec send_heartbeat(t()) :: {:ok, t()} | {:error, reason :: term(), t()}
+  @spec send_heartbeat(t()) ::
+          {:ok, t()} | {:error, reason :: term(), t()} | {:disconnected, reason :: term(), t()}
   def send_heartbeat(%__MODULE__{heartbeat_ref: ref} = connection) when is_binary(ref) do
-    {:error, :heartbeat_timeout, close(connection)}
+    {:disconnected, :heartbeat_timeout, close(connection)}
   end
 
   def send_heartbeat(%__MODULE__{} = connection) do
@@ -333,6 +353,7 @@ defmodule NervesHubLink.Connection do
       case send_message(connection, message) do
         {:ok, connection} -> {:ok, %{connection | heartbeat_ref: ref}}
         {:error, reason, connection} -> {:error, reason, connection}
+        {:disconnected, reason, connection} -> {:disconnected, reason, connection}
       end
     else
       {:error, :not_connected, connection}
@@ -467,6 +488,9 @@ defmodule NervesHubLink.Connection do
 
       {:error, reason, connection} ->
         {:error, reason, connection}
+
+      {:disconnected, reason, connection} ->
+        {:disconnected, reason, connection}
     end
   end
 
@@ -504,11 +528,12 @@ defmodule NervesHubLink.Connection do
             {:ok, %{connection | conn: conn}}
 
           {:error, conn, reason} ->
-            {:error, {:send_failure, transport_reason(reason)}, close(%{connection | conn: conn})}
+            {:disconnected, {:send_failure, transport_reason(reason)},
+             close(%{connection | conn: conn})}
         end
 
       {:error, websocket, reason} ->
-        {:error, {:send_failure, transport_reason(reason)},
+        {:disconnected, {:send_failure, transport_reason(reason)},
          close(%{connection | websocket: websocket})}
     end
   end
@@ -660,7 +685,7 @@ defmodule NervesHubLink.Connection do
   defp handle_frame(connection, {:ping, data}) do
     case send_frame(connection, {:pong, data}) do
       {:ok, connection} -> {connection, []}
-      {:error, reason, connection} -> {connection, [{:disconnected, reason}]}
+      {:disconnected, reason, connection} -> {connection, [{:disconnected, reason}]}
     end
   end
 
@@ -868,10 +893,16 @@ defmodule NervesHubLink.Connection do
   defp transport_reason(reason), do: reason
 
   defp http_scheme(%URI{scheme: "wss"}), do: :https
-  defp http_scheme(%URI{}), do: :http
+  defp http_scheme(%URI{scheme: "ws"}), do: :http
 
   defp ws_scheme(%URI{scheme: "wss"}), do: :wss
-  defp ws_scheme(%URI{}), do: :ws
+  defp ws_scheme(%URI{scheme: "ws"}), do: :ws
+
+  # Anything else is refused rather than connected to. Falling through to
+  # plaintext would put the shared-secret headers, `x-nh-key` and
+  # `x-nh-signature`, on the wire in clear.
+  defp check_scheme(%URI{scheme: scheme}) when scheme in ["ws", "wss"], do: :ok
+  defp check_scheme(%URI{scheme: scheme}), do: {:error, {:unsupported_scheme, scheme}}
 
   # The query carries the `vsn` the serializer needs, so it travels with the
   # path rather than being dropped here.

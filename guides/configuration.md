@@ -298,7 +298,7 @@ Setting it to `0` waits forever, which is how things behaved before this option 
 
 ## Bounding socket writes
 
-A write to the socket can stall: the server stops reading, the send buffer fills, and the write never completes. Nothing below the socket notices, so the device keeps believing it is connected — and the heartbeat that would otherwise spot the dead connection is itself waiting behind the stalled write. Until something reboots the device, it is gone.
+A write to the socket can stall: the server stops reading, the send buffer fills, and the write never completes. Nothing below the socket notices, so the device keeps believing it is connected - and the heartbeat that would otherwise spot the dead connection is itself waiting behind the stalled write. Until something reboots the device, it is gone.
 
 Writes are therefore bounded by a 30 second timeout, after which the socket is closed and the usual reconnect takes over. Devices on very slow links can raise it:
 

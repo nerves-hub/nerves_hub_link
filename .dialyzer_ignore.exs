@@ -9,9 +9,5 @@
   # `NervesHubLink.ConnectionTest`. Neither a spec on the calling function nor one
   # on a wrapper module shifts it: dialyzer narrows a declared return to what
   # it inferred, so the warning follows the code that matches on success.
-  #
-  # This is the only entry the OTP in `.tool-versions` needs. The opaque-term
-  # entries that were here, for the connection being handed back to Mint, were
-  # reported on OTP 27 and are not on OTP 29.
   {"lib/nerves_hub_link/connection.ex", :pattern_match}
 ]

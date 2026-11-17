@@ -143,8 +143,8 @@ defmodule NervesHubLink.Connection.Serializer.MsgPackTest do
       assert MsgPack.decode!(packed, :binary) == message
     end
 
-    # The connection drops a frame it cannot decode and leaves the connection up
-    # takes the connection process down with it.
+    # The connection logs and drops a frame it cannot decode, leaving the
+    # connection up.
     test "a malformed frame raises a DecodeError" do
       assert_raise Serializer.DecodeError, fn ->
         MsgPack.decode!(<<0x93, 1, 2, 3>>, :binary)

@@ -118,6 +118,13 @@ defmodule NervesHubLink.Configurator do
   end
 
   @spec fetch_configurator :: atom()
+  # `https://host` means the same thing here as `wss://host`, and a device
+  # configured that way should connect with TLS rather than without it. Any
+  # other scheme is left alone for `NervesHubLink.Connection` to refuse.
+  defp websocket_url("https://" <> rest), do: "wss://" <> rest
+  defp websocket_url("http://" <> rest), do: "ws://" <> rest
+  defp websocket_url(url), do: url
+
   def fetch_configurator() do
     cond do
       configurator = Application.get_env(:nerves_hub_link, :configurator) ->
@@ -165,7 +172,9 @@ defmodule NervesHubLink.Configurator do
       if base.device_api_host do
         "wss://#{base.device_api_host}:#{base.device_api_port || 443}"
       else
-        if String.contains?(base.host, "://"), do: base.host, else: "wss://#{base.host}"
+        if String.contains?(base.host, "://"),
+          do: websocket_url(base.host),
+          else: "wss://#{base.host}"
       end
 
     url = URI.parse(host) |> URI.merge("/socket/websocket")

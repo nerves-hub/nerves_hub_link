@@ -405,10 +405,15 @@ defmodule NervesHubLink.Extensions do
   # leaves a window between the answer and the push. The socket isn't running at
   # all when `connect: false`, which a push has to survive rather than take this
   # process down with it.
+  # The socket opens its own connection, and DNS, TCP and TLS all happen inside
+  # that process, so it can be busy for longer than a call will wait. A push
+  # that arrives then is not worth taking this process, and every extension
+  # under it, down for.
   defp push_to_socket(event, payload) do
     Socket.push_extensions_message(event, payload)
   catch
     :exit, {:noproc, _} -> {:error, :socket_not_running}
+    :exit, {:timeout, _} -> {:error, :socket_busy}
   end
 
   defp choose_offer(advertisement, state) do

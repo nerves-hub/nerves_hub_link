@@ -194,12 +194,10 @@ defmodule NervesHubLink.SocketConnectionTest do
     for _ <- 1..5, do: assert_receive({:connection_test, :redirected}, 2_000)
   end
 
-  # A download in progress keeps reporting its status, and the socket being
-  # down is exactly when it has most to report. Each of those pushes fails,
-  # and a failed push used to be taken for the cause of a disconnect that had
-  # already happened - running the disconnect handling again and, with it,
-  # rescheduling the reconnect. Pushes arriving faster than the backoff then
-  # postponed the reconnect for as long as they kept coming.
+  # A download in progress keeps reporting its status while the socket is
+  # down. Each of those pushes fails, and taking one for the cause of the
+  # disconnect would reschedule the reconnect, so pushes arriving faster than
+  # the backoff would postpone it for as long as they kept coming.
   test "pushing while disconnected does not postpone the reconnect" do
     stub(NervesHubLink.ClientMock, :handle_error, fn _ -> :ok end)
 
@@ -225,10 +223,9 @@ defmodule NervesHubLink.SocketConnectionTest do
   end
 
   # `init/1` continues straight into connecting, so a cast sent now is handled
-  # while the upgrade is still outstanding. The push fails for a connection
-  # that is not up *yet*, which is not the same as one that has gone, and the
-  # reconnect it used to schedule outlived the upgrade it raced - closing a
-  # healthy connection a backoff later.
+  # while the upgrade is still outstanding. A push refused for a connection that
+  # is not up yet must not schedule a reconnect, which would outlive the upgrade
+  # and close a healthy connection a backoff later.
   test "pushing during the upgrade does not drop the connection it completes" do
     stub(NervesHubLink.ClientMock, :handle_error, fn _ -> :ok end)
 
@@ -247,6 +244,48 @@ defmodule NervesHubLink.SocketConnectionTest do
 
     refute_receive {:connection_test, {:server, _}}, 1_000
     assert Process.alive?(first)
+  end
+
+  # The join is the first write after an upgrade, so it is the one that finds a
+  # connection the server dropped in between. Nothing else reports that: a
+  # failed write produces no event, and the heartbeat that would otherwise
+  # notice stops along with the connection. Without a reconnect scheduled here
+  # the device is off the air until something reboots it.
+  test "a join whose write fails still schedules a reconnect" do
+    stub(NervesHubLink.ClientMock, :handle_error, fn _ -> :ok end)
+
+    port = start_server()
+
+    # The rejoin is driven below rather than waited for, so the timer this
+    # schedules must not beat it to the connection while it is still alive.
+    socket =
+      start_socket(port, rejoin_after: [5_000], socket: [reconnect_after_msec: [100]])
+
+    assert_join("device", _params, :ok)
+    first = await_connect()
+
+    # A topic NervesHub closes normally is what asks for a rejoin.
+    server_push("device", "phx_close", %{})
+
+    assert_eventually(
+      NervesHubLink.Connection.join_status(:sys.get_state(socket).connection, "device") ==
+        :closed
+    )
+
+    # Take the transport out from under the connection, from inside the socket
+    # so the port's owner is the one closing it. A write now fails, and because
+    # this process did the closing no `{:tcp_closed, _}` arrives to report it.
+    :sys.replace_state(socket, fn state ->
+      :ok = :gen_tcp.close(Mint.HTTP.get_socket(state.connection.conn))
+      state
+    end)
+
+    # The message the rejoin timer sends, driven directly: the transport is
+    # gone in both directions, so nothing from the server could ask for it.
+    send(socket, {:rejoin, "device"})
+
+    assert_receive {:connection_test, {:server, second}}, 3_000
+    assert second != first
   end
 
   # Holds the connection open without answering. `listen_for_one_request/0`

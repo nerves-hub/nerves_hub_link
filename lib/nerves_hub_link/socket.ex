@@ -297,11 +297,10 @@ defmodule NervesHubLink.Socket do
         configured = config.socket[:headers] || []
 
         # An app may build the shared-secret headers in its own configurator,
-        # which runs once at startup. Keying the signing off the configurator
-        # being `SharedSecret` left those signed once for the life of the
-        # firmware, and refused as expired from the first reconnect onwards.
-        # What decides it is the headers carrying a signature, not who made
-        # them; anything else the configurator added is kept.
+        # which runs once at startup. Headers carrying a signature are signed
+        # again for every attempt, whoever made them, or they would be refused
+        # as expired from the first reconnect. Anything else the configurator
+        # added is kept.
         if List.keymember?(configured, "x-nh-signature", 0) do
           SharedSecret.headers(config, socket.signing_time_hint)
           |> Stream.concat(configured)
@@ -365,10 +364,8 @@ defmodule NervesHubLink.Socket do
     {:ok, socket}
   end
 
-  # Only reachable by joining a topic this module has no clause for, which it
-  # cannot do today. Worth having anyway: without it the failure is losing the
-  # device's only connection process, at runtime on a device, rather than a
-  # line in the log.
+  # Unreachable while every joined topic has a clause above. Without it a new
+  # topic would crash the device's only connection process rather than log.
   defp handle_join(topic, _reply, socket) do
     Logger.warning("[#{inspect(__MODULE__)}] Joined an unexpected topic : #{topic}")
 
@@ -684,6 +681,20 @@ defmodule NervesHubLink.Socket do
   ##
   # Console API messages
   #
+  # `remote_iex: false` is the device's answer about whether anyone gets a
+  # shell on it, so it has to hold against whatever answers the socket rather
+  # than against a well-behaved NervesHub. It stops the console topic being
+  # joined, but a server that sends console messages anyway is not stopped by
+  # that, and the handlers below start an IEx shell and write and delete files
+  # under `data_path`.
+  defp handle_message(@console_topic, event, _payload, %State{remote_iex: false} = socket) do
+    Logger.warning(
+      "[#{inspect(__MODULE__)}] Ignoring console message #{inspect(event)}, remote IEx is disabled"
+    )
+
+    {:ok, socket}
+  end
+
   defp handle_message(@console_topic, "restart", _payload, socket) do
     Logger.warning("[#{inspect(__MODULE__)}] Restarting IEx process from web request")
 
@@ -841,9 +852,6 @@ defmodule NervesHubLink.Socket do
     {:noreply, socket}
   end
 
-  # Only `:killed` used to be handled, so an uploader that crashed was reported
-  # as an unknown message and left behind a `uploader_pid` pointing at a dead
-  # process.
   def handle_info({:EXIT, uploader_pid, reason}, %State{uploader_pid: uploader_pid} = socket) do
     case reason do
       :killed -> Logger.info("[#{inspect(__MODULE__)}] Upload cancelled")
@@ -907,25 +915,21 @@ defmodule NervesHubLink.Socket do
   end
 
   def handle_info(:heartbeat, socket) do
-    was_connected? = Connection.connected?(socket.connection)
-
     case Connection.send_heartbeat(socket.connection) do
       {:ok, connection} ->
         {:noreply, socket |> put_connection(connection) |> schedule_heartbeat()}
 
-      # An unanswered heartbeat has closed the connection, and nothing arrived
-      # from the network to say so, so this is where it gets reported. A
-      # heartbeat already in the mailbox when the connection went cannot be
-      # retracted, so one can arrive for a connection that is already down;
-      # that one has nothing to report, as in `push_message/4`.
-      {:error, reason, connection} ->
-        socket = put_connection(socket, connection)
+      # A heartbeat already in the mailbox when the connection went cannot be
+      # retracted, so one arrives for a connection that is already down. There
+      # is nothing to report about a connection that is gone already.
+      {:error, _reason, connection} ->
+        {:noreply, put_connection(socket, connection)}
 
-        if was_connected? and not Connection.connected?(socket.connection) do
-          {:noreply, disconnected(socket, reason)}
-        else
-          {:noreply, socket}
-        end
+      # An unanswered heartbeat is how a connection that is dead but still open
+      # is found, and closing it is this clause's doing, so this is where it
+      # gets reported.
+      {:disconnected, reason, connection} ->
+        {:noreply, socket |> put_connection(connection) |> disconnected(reason)}
     end
   end
 
@@ -1119,40 +1123,36 @@ defmodule NervesHubLink.Socket do
         Logger.warning("[NervesHubLink] could not join #{topic} : #{inspect(reason)}")
 
         put_connection(socket, connection)
+
+      # The join is the first thing written after an upgrade, so it is the
+      # write that finds a connection the server has already dropped. Nothing
+      # else will report it: no event arrives for a write that failed, and the
+      # heartbeat that would otherwise notice stops with the connection.
+      {:disconnected, reason, connection} ->
+        Logger.warning("[NervesHubLink] could not join #{topic} : #{inspect(reason)}")
+
+        socket |> put_connection(connection) |> disconnected(reason)
     end
   end
 
   # Pushes and reports what happened, for the callers that need the ref or the
   # error. Everything else uses `push/4`.
   defp push_message(socket, topic, event, payload) do
-    was_connected? = Connection.connected?(socket.connection)
-
     case Connection.push(socket.connection, topic, event, payload) do
       {:ok, ref, connection} ->
         {{:ok, ref}, put_connection(socket, connection)}
 
+      # Refused before anything was written, so nothing has happened that the
+      # rest of the socket needs to hear about.
       {:error, reason, connection} ->
-        socket = put_connection(socket, connection)
+        {{:error, reason}, put_connection(socket, connection)}
 
-        # A write that failed has already taken the connection with it, and
-        # nothing arrived from the network to announce that, so the disconnect
-        # handling runs from here or not at all. It belongs here rather than in
-        # `push/4` so that the callers who want the error get it too.
-        #
-        # Only for the push that ended it, though. A push refused because the
-        # connection was already down, or not up yet, leaves it exactly as it
-        # was, and there is no second disconnect in that to report: running the
-        # handling again rescheduled the reconnect, so pushes arriving faster
-        # than the backoff - an update reporting progress, a console, a script
-        # result - postponed it for as long as they kept coming.
-        socket =
-          if was_connected? and not Connection.connected?(socket.connection) do
-            disconnected(socket, reason)
-          else
-            socket
-          end
-
-        {{:error, reason}, socket}
+      # This push took the connection with it, and nothing arrived from the
+      # network to announce that, so the disconnect handling runs from here or
+      # not at all. It belongs here rather than in `push/4` so that the callers
+      # who want the error get it too.
+      {:disconnected, reason, connection} ->
+        {{:error, reason}, socket |> put_connection(connection) |> disconnected(reason)}
     end
   end
 
@@ -1174,10 +1174,11 @@ defmodule NervesHubLink.Socket do
   # Cancelling first, because more than one path can decide the connection has
   # gone - a failed write and the heartbeat that follows it, say - and two
   # pending timers mean opening a connection and dropping it an instant later.
-  # A reconnect already due stands. Cancelling it to schedule another only ever
-  # moves it further out, since each delay comes from one step further along the
-  # backoff, and a second disconnect is not a reason to retry later than the
-  # first one asked for.
+  # The delay comes from the connection's own backoff, so repeated failures back
+  # off and a connection that succeeds starts the next one over from the
+  # shortest wait. A reconnect already due stands: more than one path can decide
+  # the connection has gone - a failed write and the heartbeat that follows it,
+  # say - and rescheduling would only move it one step further along the backoff.
   defp reconnect(%State{reconnect_timer: timer} = socket) when is_reference(timer) do
     {:ok, socket}
   end
@@ -1211,12 +1212,19 @@ defmodule NervesHubLink.Socket do
       {:ok, connection} ->
         put_connection(socket, connection)
 
-      # Not worth retrying from here: losing the connection schedules a
-      # reconnect, and the topics are joined again when that succeeds.
+      # Not worth retrying from here: the topics are joined again when the next
+      # connection succeeds.
       {:error, reason, connection} ->
         Logger.warning("[NervesHubLink] could not rejoin #{topic} : #{inspect(reason)}")
 
         put_connection(socket, connection)
+
+      # As in `join/3`: this write is what closed the connection, so the
+      # reconnect is scheduled here or never.
+      {:disconnected, reason, connection} ->
+        Logger.warning("[NervesHubLink] could not rejoin #{topic} : #{inspect(reason)}")
+
+        socket |> put_connection(connection) |> disconnected(reason)
     end
   end
 
@@ -1270,8 +1278,6 @@ defmodule NervesHubLink.Socket do
     end
   end
 
-  # The connection is held right here, so this is a plain read rather than the
-  # best-effort look into another process's state it used to be.
   defp network_interface(socket) do
     case Connection.mint_socket(socket.connection) do
       nil -> nil
@@ -1536,7 +1542,7 @@ defmodule NervesHubLink.Socket do
 
   # The console only needs to know which protocol versions it is talking to.
   # The rest of the join params describe the device and its firmware, and the
-  # device connection has already sent them.
+  # device channel has already sent them.
   @console_join_params ["console_version", "device_api_version"]
 
   defp maybe_join_console(socket) do

@@ -41,6 +41,17 @@ defmodule NervesHubLink.ConnectionTest do
       assert {:ok, _channel} = Connection.connect(connection)
     end
 
+    # `https://hub.example.com` is accepted as a host in configuration, and a
+    # scheme that is not refused here is connected to without TLS - putting the
+    # shared-secret headers on the wire in clear.
+    test "a scheme that is not ws or wss is refused rather than connected to" do
+      connection =
+        Connection.new(uri: URI.parse("https://localhost/socket/websocket"), serializer: JSON)
+
+      assert {:error, {:unsupported_scheme, "https"}, connection} = Connection.connect(connection)
+      refute Connection.connected?(connection)
+    end
+
     test "a connection that cannot be opened at all is an error, with nothing left open" do
       # Port 1 on loopback: nothing listens there, and binding it needs root.
       connection =
@@ -508,7 +519,8 @@ defmodule NervesHubLink.ConnectionTest do
 
       # The server was never told to reply, so the second heartbeat finds the
       # first still outstanding.
-      assert {:error, :heartbeat_timeout, connection} = Connection.send_heartbeat(connection)
+      assert {:disconnected, :heartbeat_timeout, connection} =
+               Connection.send_heartbeat(connection)
 
       refute Connection.connected?(connection)
     end
@@ -588,8 +600,7 @@ defmodule NervesHubLink.ConnectionTest do
       assert Connection.connected?(harness.connection)
     end
 
-    # `#93` upstream: Mint reports these as entries in the frame list, and
-    # Slipstream had nothing that matched them.
+    # Mint reports these as entries in the frame list rather than as a failure.
     test "a frame that cannot be read is dropped and the next one still arrives" do
       message = %Message{topic: @device_topic, event: "identify", payload: %{}, ref: nil}
       {:text, encoded} = JSON.encode!(message)

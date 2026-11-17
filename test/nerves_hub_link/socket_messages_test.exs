@@ -557,7 +557,26 @@ defmodule NervesHubLink.SocketMessagesTest do
     end
   end
 
+  describe "the console when remote IEx is off" do
+    setup :join_device_topic
+
+    # `remote_iex: false` keeps the device from joining the console topic, but
+    # that only stops a NervesHub that waits to be joined. Whatever answers the
+    # socket can send console messages regardless, and acting on them starts a
+    # shell and writes files under the data path.
+    test "a console message does not start a shell", %{socket: socket} do
+      server_push(@console_topic, "dn", %{"data" => "ls\r"})
+
+      assert_handled_in_order()
+
+      assert :sys.get_state(socket).iex_pid == nil
+      assert NervesHubLink.socket_connected?(socket)
+    end
+  end
+
   describe "receiving a file over the console" do
+    @describetag socket_config: [remote_iex: true]
+
     test "the file is written to the data path", %{data_path: data_path} do
       filename = "notes.txt"
 
