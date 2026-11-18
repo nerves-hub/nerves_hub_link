@@ -312,7 +312,7 @@ NervesHubLink names itself and its version in the `User-Agent` of the WebSocket 
 
 If the socket headers already have a `User-Agent`, for example one a custom configurator set, NervesHubLink leaves it alone and doesn't add its own.
 
-The `NervesHubLink.Configurator.SharedSecret` configurator replaces the socket headers with its signature headers, so a `User-Agent` set in `config :nerves_hub_link, socket: [headers: ...]` is dropped and NervesHubLink sends its own. To send a different `User-Agent` with shared secret authentication, set it in a custom configurator that calls `NervesHubLink.Configurator.SharedSecret.build/1` and then adds the header.
+The `NervesHubLink.Configurator.SharedSecret` configurator replaces the socket headers with its signature headers, so a `User-Agent` set in `config :nerves_hub_link, socket: [headers: ...]` is dropped and NervesHubLink sends its own. To send a different `User-Agent` with shared secret authentication, write a custom configurator that delegates to `NervesHubLink.Configurator.SharedSecret` and then adds the header to the socket headers it returns.
 
 ## Message serialization
 
