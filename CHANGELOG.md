@@ -32,6 +32,17 @@
   * A timeout configured as something other than a non-negative integer is refused with a warning, and the library's default used instead. Slipstream's configuration schema refused one; nothing validated these without it, and `connect_timeout_msec`, `heartbeat_interval_msec`, `send_timeout_msec` and `upgrade_timeout_msec` are each read at their point of use as no bound at all when the value cannot be used - so a typo quietly turned off a keepalive, or a timeout that is there to stop a device sitting on a dead connection.
   * A redirect that carries no query of its own no longer drops the `vsn` parameter. `URI.merge/2` takes the query from the `Location` whenever it has a path, so a redirect to `/socket/websocket` left the next upgrade asking for no protocol version at all, and Phoenix read the device's V2 or Msgpack frames with its default V1 JSON serializer.
 
+## [2.14.0] - 2026-11-18
+
+* Added
+  * The socket's websocket upgrade now sends `NHL/<version>` as its `User-Agent`, as firmware downloads already did, so a NervesHub that reads it can record which version of NervesHubLink each device runs. A `User-Agent` already set in the socket headers is left alone, and `NervesHubLink.Configurator.user_agent/0` returns the token for a custom configurator to send alongside its own headers. See [Identifying the library to NervesHub](guides/configuration.md#identifying-the-library-to-nerveshub). (#512)
+
+* Changed
+  * Bumped `slipstream` to 1.3.0, `nimble_options` to 1.2.0, and `mint_web_socket` to 1.0.6.
+
+* Fixed
+  * Public keys NervesHub sends for firmware or archive verification are now ignored unless the device asked for them when it connected, rather than replacing the keys configured on the device. A device that doesn't ask for keys keeps its own and logs a warning when it is sent some. (#510)
+
 ## [2.13.1] - 2026-11-05
 
 * Fixed
