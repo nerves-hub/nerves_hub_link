@@ -7,7 +7,10 @@ defmodule NervesHubLink.ConfiguratorTest do
   # async: false because some tests change application config.
   use ExUnit.Case, async: false
 
+  import ExUnit.CaptureLog
+
   alias NervesHubLink.Configurator
+  alias NervesHubLink.Configurator.Config
 
   test "inserts socket_opts from ssl" do
     ssl = [
@@ -77,6 +80,51 @@ defmodule NervesHubLink.ConfiguratorTest do
       config = Configurator.build()
 
       assert user_agents(config) == ["custom#acme-link/1.4.0"]
+    end
+  end
+
+  describe "the timeout options" do
+    # Each of these is read at its point of use as no bound at all when it
+    # cannot be used, so a value that is not a number has to be caught here or
+    # it silently turns the bound off.
+    test "a value that is not a number is refused and the default kept" do
+      put_env(:heartbeat_interval_msec, "30000")
+
+      log =
+        capture_log(fn ->
+          assert Configurator.build().heartbeat_interval_msec ==
+                   %Config{}.heartbeat_interval_msec
+        end)
+
+      assert log =~ "heartbeat_interval_msec"
+      assert log =~ ~s("30000")
+    end
+
+    test "a negative value is refused and the default kept" do
+      put_env(:upgrade_timeout_msec, -1)
+
+      log =
+        capture_log(fn ->
+          assert Configurator.build().upgrade_timeout_msec == %Config{}.upgrade_timeout_msec
+        end)
+
+      assert log =~ "upgrade_timeout_msec"
+    end
+
+    # Zero is how each bound is turned off, so it has to survive untouched.
+    test "zero is kept" do
+      put_env(:connect_timeout_msec, 0)
+      put_env(:send_timeout_msec, 0)
+
+      log =
+        capture_log(fn ->
+          config = Configurator.build()
+
+          assert config.connect_timeout_msec == 0
+          assert config.send_timeout_msec == 0
+        end)
+
+      refute log =~ "non-negative integer"
     end
   end
 

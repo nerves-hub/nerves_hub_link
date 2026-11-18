@@ -113,6 +113,13 @@ defmodule NervesHubLink.Configurator do
 
   @fwup_devpath "nerves_fw_devpath"
 
+  @timeout_options [
+    :connect_timeout_msec,
+    :heartbeat_interval_msec,
+    :send_timeout_msec,
+    :upgrade_timeout_msec
+  ]
+
   @spec build :: Config.t()
   def build() do
     configurator = fetch_configurator()
@@ -199,6 +206,8 @@ defmodule NervesHubLink.Configurator do
     base = struct(Config, Application.get_all_env(:nerves_hub_link))
 
     connection_config_warnings(base)
+
+    base = check_timeout_options(base)
 
     host =
       if base.device_api_host do
@@ -301,6 +310,38 @@ defmodule NervesHubLink.Configurator do
     params = Map.put(config.params, "archive_public_keys", "on_connect")
 
     %{config | params: params}
+  end
+
+  # Slipstream's configuration schema refused a heartbeat interval or an
+  # upgrade timeout that was not a non-negative integer, and it went with
+  # Slipstream. Nothing validates these now - the config is built straight from
+  # application environment - and each option is read at its point of use as no
+  # bound at all when it cannot be used, so a typo would quietly turn off a
+  # keepalive, or a timeout that is there to stop a device sitting on a dead
+  # connection. One that cannot be used is refused here and the default kept
+  # instead, loudly.
+  #
+  # `nil` is left alone. The points of use already read it as no bound, which
+  # is what an option set to nothing is asking for.
+  defp check_timeout_options(config) do
+    defaults = %Config{}
+
+    Enum.reduce(@timeout_options, config, fn option, config ->
+      case Map.fetch!(config, option) do
+        value when is_nil(value) or (is_integer(value) and value >= 0) ->
+          config
+
+        value ->
+          default = Map.fetch!(defaults, option)
+
+          Logger.warning(
+            "[NervesHubLink] `#{option}` has to be a non-negative integer or nil," <>
+              " got #{inspect(value)} : using #{default}"
+          )
+
+          Map.put(config, option, default)
+      end
+    end)
   end
 
   defp connection_config_warnings(base) do

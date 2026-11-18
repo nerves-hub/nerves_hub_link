@@ -51,12 +51,27 @@ what is left, only two are named: `NervesHubLink.Socket` and
 process is larger on its own, which it should be - it holds the connection that
 main keeps in a second process.
 
-`:timer` is stdlib's, started on demand and shared with anything else that wants
-it, so whether to charge it to the socket depends on whether something else on
-the device would have started it anyway. I have not identified the sixth,
-unnamed process and have not attributed it. The settled total of 23,624 B
-against 14,680 B is measured the same way on both sides and needs none of this
-apportioning.
+`:timer` is there for the heartbeat. Slipstream asks stdlib's timer server for a
+repeating interval as the channel connects:
+
+```elixir
+{:ok, tref} =
+  :timer.send_interval(
+    state.config.heartbeat_interval_msec,
+    command(%Commands.SendHeartbeat{})
+  )
+```
+
+so on main that process is running because the socket connected. It is a single
+shared server, though, so a device whose firmware reaches for `:timer` anywhere
+else would be running it regardless - which is why it is listed above rather
+than charged to the socket. This branch schedules its own heartbeat with
+`Process.send_after/3` and schedules the next only once the current one has been
+sent, and BEAM timers live in the scheduler rather than in a process.
+
+I have not identified the sixth, unnamed process and have not attributed it. The
+settled total of 23,624 B against 14,680 B is measured the same way on both
+sides and needs none of this apportioning.
 
 ### The device build
 
