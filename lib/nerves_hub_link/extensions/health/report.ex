@@ -12,22 +12,7 @@ defmodule NervesHubLink.Extensions.Health.Report do
   need exact control over how the generation of data happens then using this
   gives you that possibility.
   """
-  alias NervesHubLink.Extensions.Health.DeviceStatus
-
   @callback timestamp() :: DateTime.t()
   @callback alarms() :: %{String.t() => String.t()}
   @callback metrics() :: %{String.t() => number()}
-  @callback checks() :: %{String.t() => %{pass: boolean(), note: String.t()}}
-  @callback connectivity() :: %{
-              DeviceStatus.interface_identifier() => %{
-                type: DeviceStatus.interface_type(),
-                present: boolean(),
-                state: atom(),
-                connection_status: DeviceStatus.connection_status(),
-                # Such as RSSI and others
-                metrics: %{String.t() => number()},
-                # Network name, telecom operator and similar data
-                metadata: %{String.t() => String.t()}
-              }
-            }
 end

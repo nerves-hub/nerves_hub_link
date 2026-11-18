@@ -98,12 +98,12 @@ defmodule NervesHubLink.MixProject do
           NervesHubLink.Extensions.Health,
           NervesHubLink.Extensions.Health.DefaultReport,
           NervesHubLink.Extensions.Health.DeviceStatus,
-          NervesHubLink.Extensions.Health.MetricSet,
-          NervesHubLink.Extensions.Health.MetricSet.CPU,
-          NervesHubLink.Extensions.Health.MetricSet.Disk,
-          NervesHubLink.Extensions.Health.MetricSet.Memory,
-          NervesHubLink.Extensions.Health.MetricSet.NetworkTraffic,
           NervesHubLink.Extensions.Health.Report,
+          NervesHubLink.MetricSet,
+          NervesHubLink.MetricSet.CPU,
+          NervesHubLink.MetricSet.Disk,
+          NervesHubLink.MetricSet.Memory,
+          NervesHubLink.MetricSet.NetworkTraffic,
           NervesHubLink.Extensions.LocalShell
         ],
         "Downloads and Updates": [

@@ -4,9 +4,9 @@
 #
 defmodule NervesHubLink.MetricsTest.CatMetrics do
   @moduledoc false
-  @behaviour NervesHubLink.Extensions.Health.MetricSet
+  @behaviour NervesHubLink.MetricSet
 
-  @impl NervesHubLink.Extensions.Health.MetricSet
+  @impl NervesHubLink.MetricSet
   def sample(), do: %{cats_seen: 4, cats_fed: 2}
 end
 
@@ -19,8 +19,8 @@ end
 defmodule NervesHubLink.MetricsTest do
   use ExUnit.Case, async: false
 
-  alias NervesHubLink.Extensions.Health.MetricSet
   alias NervesHubLink.Metrics
+  alias NervesHubLink.MetricSet
   alias NervesHubLink.MetricsTest.Battery
   alias NervesHubLink.MetricsTest.CatMetrics
 
@@ -50,6 +50,15 @@ defmodule NervesHubLink.MetricsTest do
                MetricSet.Memory,
                CatMetrics
              ]
+    end
+
+    test "a set's name from before the metrics extension still samples" do
+      put_metrics_config(metric_sets: [MetricSet.Memory])
+      through_new = Metrics.sample() |> Map.keys() |> Enum.sort()
+
+      put_metrics_config(metric_sets: [NervesHubLink.Extensions.Health.MetricSet.Memory])
+
+      assert Metrics.sample() |> Map.keys() |> Enum.sort() == through_new
     end
 
     test "can be turned off entirely" do

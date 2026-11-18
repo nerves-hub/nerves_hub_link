@@ -16,9 +16,8 @@ defmodule NervesHubLink.Metrics do
           metrics: %{"firmware_slot" => {MyApp, :slot, []}}
         ]
 
-  `:metric_sets` names modules implementing
-  `NervesHubLink.Extensions.Health.MetricSet`, with `:defaults` standing in for
-  the CPU, Disk and Memory sets. `:metrics` is for a handful of numbers that don't
+  `:metric_sets` names modules implementing `NervesHubLink.MetricSet`, with
+  `:defaults` standing in for the CPU, Disk and Memory sets. `:metrics` is for a handful of numbers that don't
   warrant a set of their own; each value is either a number or an
   `{module, function, args}` tuple called when the metrics are sampled.
 
@@ -28,7 +27,7 @@ defmodule NervesHubLink.Metrics do
   """
 
   alias NervesHubLink.ConfigValue
-  alias NervesHubLink.Extensions.Health.MetricSet
+  alias NervesHubLink.MetricSet
 
   @default_metric_sets [
     MetricSet.CPU,

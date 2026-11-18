@@ -14,12 +14,6 @@ defmodule NervesHubLink.Extensions.HealthTest.StubReport do
 
   @impl NervesHubLink.Extensions.Health.Report
   def metrics(), do: %{"cat_count" => 3}
-
-  @impl NervesHubLink.Extensions.Health.Report
-  def checks(), do: %{"cattery" => %{pass: true}}
-
-  @impl NervesHubLink.Extensions.Health.Report
-  def connectivity(), do: %{}
 end
 
 defmodule NervesHubLink.Extensions.HealthTest.BrokenReport do
@@ -34,19 +28,13 @@ defmodule NervesHubLink.Extensions.HealthTest.BrokenReport do
 
   @impl NervesHubLink.Extensions.Health.Report
   def metrics(), do: %{}
-
-  @impl NervesHubLink.Extensions.Health.Report
-  def checks(), do: %{}
-
-  @impl NervesHubLink.Extensions.Health.Report
-  def connectivity(), do: %{}
 end
 
 defmodule NervesHubLink.Extensions.HealthTest.CatMetrics do
   @moduledoc false
-  @behaviour NervesHubLink.Extensions.Health.MetricSet
+  @behaviour NervesHubLink.MetricSet
 
-  @impl NervesHubLink.Extensions.Health.MetricSet
+  @impl NervesHubLink.MetricSet
   def sample(), do: %{cats_seen: 4, cats_fed: 2}
 end
 
@@ -87,7 +75,6 @@ defmodule NervesHubLink.Extensions.HealthTest do
       assert status.timestamp == ~U[2026-01-01 00:00:00Z]
       assert status.alarms == %{"SomeAlarm" => "[]"}
       assert status.metrics == %{"cat_count" => 3}
-      assert status.checks == %{"cattery" => %{pass: true}}
     end
 
     test "a configured report module is used instead of the default" do
@@ -146,14 +133,6 @@ defmodule NervesHubLink.Extensions.HealthTest do
       put_health_config(metric_sets: [], metrics: %{"battery" => 87})
 
       assert DefaultReport.metrics() == %{"battery" => 87}
-    end
-  end
-
-  describe "DefaultReport checks" do
-    test "checks are read from the config" do
-      put_health_config(checks: %{"cattery" => %{pass: true}})
-
-      assert DefaultReport.checks() == %{"cattery" => %{pass: true}}
     end
   end
 

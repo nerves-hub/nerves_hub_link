@@ -30,12 +30,10 @@ defmodule NervesHubLink.Extensions do
   # early release. See `guides/extensions.md` for how to opt in.
   #
   # `NervesHubLink.Extensions.Health` is absent because metrics and alarms, the
-  # two things a device reported through it, now have extensions of their own.
-  # What health still carries - checks and connectivity - is configured rather
-  # than collected, so a device that has configured none has nothing to report.
-  # A NervesHub without ClickHouse doesn't offer the metrics extension and
-  # takes metrics through health, so a device talking to one has to name health
-  # here; see `guides/extensions.md`.
+  # only two things it still carries, now have extensions of their own. It is
+  # there for a NervesHub that has no extension for them: one without
+  # ClickHouse takes metrics through health, so a device talking to one has to
+  # name health here; see `guides/extensions.md`.
   @default_extension_modules [
                                NervesHubLink.Extensions.Alarms,
                                NervesHubLink.Extensions.Geo,

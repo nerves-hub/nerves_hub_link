@@ -13,16 +13,12 @@ defmodule NervesHubLink.Extensions.Health.DeviceStatusTest do
         DeviceStatus.new(
           timestamp: ~U[2026-08-12 01:02:03Z],
           alarms: %{"SomeAlarm" => "[]"},
-          metrics: %{"cpu_usage_percent" => 12.5},
-          checks: %{"cattery" => %{pass: true}},
-          connectivity: %{"eth0" => %{type: :ethernet}}
+          metrics: %{"cpu_usage_percent" => 12.5}
         )
 
       assert status.timestamp == ~U[2026-08-12 01:02:03Z]
       assert status.alarms == %{"SomeAlarm" => "[]"}
       assert status.metrics == %{"cpu_usage_percent" => 12.5}
-      assert status.checks == %{"cattery" => %{pass: true}}
-      assert status.connectivity == %{"eth0" => %{type: :ethernet}}
     end
 
     test "fills in anything left out" do
@@ -31,22 +27,6 @@ defmodule NervesHubLink.Extensions.Health.DeviceStatusTest do
       assert %DateTime{} = status.timestamp
       assert status.alarms == %{}
       assert status.metrics == %{}
-      assert status.checks == %{}
-      assert status.connectivity == %{}
-    end
-
-    test "a report that leaves out connectivity still gets an empty map" do
-      # `check_health/1` builds a status without connectivity, so this is the
-      # shape NervesHub actually receives
-      status =
-        DeviceStatus.new(
-          timestamp: ~U[2026-08-12 01:02:03Z],
-          alarms: %{},
-          metrics: %{},
-          checks: %{}
-        )
-
-      assert status.connectivity == %{}
     end
   end
 
@@ -70,17 +50,13 @@ defmodule NervesHubLink.Extensions.Health.DeviceStatusTest do
         DeviceStatus.new(
           timestamp: ~U[2026-08-12 01:02:03Z],
           alarms: %{"SomeAlarm" => "[]"},
-          metrics: %{"cpu_usage_percent" => 12.5},
-          checks: %{"cattery" => %{"pass" => true}},
-          connectivity: %{}
+          metrics: %{"cpu_usage_percent" => 12.5}
         )
 
       decoded = status |> Msgpax.pack!() |> Msgpax.unpack!()
 
       assert decoded["alarms"] == %{"SomeAlarm" => "[]"}
       assert decoded["metrics"] == %{"cpu_usage_percent" => 12.5}
-      assert decoded["checks"] == %{"cattery" => %{"pass" => true}}
-      assert decoded["connectivity"] == %{}
     end
   end
 end

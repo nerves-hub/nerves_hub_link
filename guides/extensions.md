@@ -7,7 +7,7 @@ There are eight extensions currently:
 - [**Alarms**](#alarms) sends the device's alarms to NervesHub as they are raised and cleared.
 - [**Error Reports**](#error-reports) sends the device's exceptions and crashes to NervesHub, where they are grouped into issues you can resolve.
 - [**Geo**](#geo) provides hooks to send a device's GeoIP information.
-- [**Health**](#health) reports the device's checks and connectivity, and its metrics and alarms to a NervesHub that has no extension for them.
+- [**Health**](#health) reports the device's metrics and alarms to a NervesHub that has no extension for them.
 - [**Local Shell**](#local-shell) gives NervesHub the ability to expose an interactive shell in the UI.
 - [**Logging**](#logging) sends the device's log lines to NervesHub, where they are stored and searchable.
 - [**Metrics**](#metrics) sends the numbers a device measures about itself, such as CPU temperature and memory used.
@@ -172,7 +172,7 @@ Please see `NervesHubLink.Extensions.Geo.Resolver` for more information.
 
 ## Health
 
-The Health extension reports the device's checks and connectivity, and its metrics and alarms to a NervesHub that has no extension for them.
+The Health extension reports the device's metrics and alarms to a NervesHub that has no extension for either of them.
 
 It is not named in `extension_modules` by default, because metrics and alarms - the two things most devices reported through it - now have extensions of their own. To turn it on, name it:
 
@@ -192,7 +192,7 @@ config :nerves_hub_link,
 >
 > A NervesHub without ClickHouse doesn't offer the [Metrics extension](#metrics) at all and takes metrics through health instead, and one that predates these extensions has no extension for metrics or alarms at all. A device talking to either reports neither unless health is named here. Naming all three is safe whatever your server has: a device offers back only what the server says it supports, and health leaves out whatever another attached extension is already reporting.
 
-What is sampled, and how, is configured in one place for both extensions - see [Metrics](#metrics).
+What is sampled, and how, is configured in one place for both extensions - see [Metrics](#metrics). A report carries the metrics and the alarms, and nothing else: `checks` and `connectivity` are gone, the first because NervesHub never stored them and the second because it was never sent.
 
 You can implement a completely custom reporting module by implementing `NervesHubLink.Extensions.Health.Report` and configuring it:
 
@@ -316,7 +316,7 @@ Any single line longer than 8KB is cut short and marked, so one line cannot fill
 
 The Metrics extension sends the numbers a device measures about itself: CPU temperature, memory used, load average, and whatever else its firmware knows how to read.
 
-Health carries metrics too, but alongside its checks, connectivity and everything else in one report. A device reporting every minute therefore sends all of it every minute, and across a fleet most of what that costs is the part that never changes. Split out, the numbers run at their own pace.
+Health carries metrics too, but alongside its alarms, in one report on one timer. Split out, the numbers run at their own pace: as often as anyone wants to watch them, rather than as often as the slowest thing in the report needs sending.
 
 It is named in `extension_modules` by default, so there is nothing to turn on. Like every extension, it sends nothing until NervesHub asks the device to attach it, which you control in your Product settings. It needs a NervesHub that has the Metrics extension, which needs ClickHouse; against one that doesn't, turn on the [Health extension](#health) and report metrics through that.
 
@@ -340,15 +340,16 @@ A reading is timed against the monotonic clock and given a wall-clock time only 
 
 The default set of metrics are:
 
-- `NervesHubLink.Extensions.Health.MetricSet.CPU` - CPU temperature, usage (percentage), and load averages.
-- `NervesHubLink.Extensions.Health.MetricSet.Memory` - Memory size (MB), used (MB), and percentage used.
-- `NervesHubLink.Extensions.Health.MetricSet.Disk` - Disk size (KB), available (KB), and percentage used.
+- `NervesHubLink.MetricSet.CPU` - CPU temperature, usage (percentage), and load averages.
+- `NervesHubLink.MetricSet.Memory` - Memory size (MB), used (MB), and percentage used.
+- `NervesHubLink.MetricSet.Disk` - Disk size (KB), available (KB), and percentage used.
 
 And one optional metric set:
-- `NervesHubLink.Extensions.Health.MetricSet.NetworkTraffic` - Total bytes sent and received (per interface).
+- `NervesHubLink.MetricSet.NetworkTraffic` - Total bytes sent and received (per interface).
 
-You can also create your own metric sets by implementing the `NervesHubLink.Extensions.Health.MetricSet`
-behaviour.
+You can also create your own metric sets by implementing the `NervesHubLink.MetricSet`
+behaviour. It lived under the health extension's namespace until the metrics extension arrived, and those
+older names still work: both the behaviour and the four sets above answer to them.
 
 If a library you are using provides a metric set, you can add it to the list of metric sets, but please ensure
 to include all the metric sets you want to use. If you want to include the full default set, you can use
@@ -373,8 +374,8 @@ If you only want to use some of the default metrics, you can specify them explic
 config :nerves_hub_link,
   metrics: [
     metric_sets: [
-      NervesHubLink.Extensions.Health.MetricSet.CPU,
-      NervesHubLink.Extensions.Health.MetricSet.Memory
+      NervesHubLink.MetricSet.CPU,
+      NervesHubLink.MetricSet.Memory
       # the disk metrics have been excluded
     ]
   ]
