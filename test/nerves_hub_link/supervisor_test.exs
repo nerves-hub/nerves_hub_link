@@ -27,6 +27,8 @@ defmodule NervesHubLink.SupervisorTest do
     assert child_start_modules(result) == [
              DynamicSupervisor,
              NervesHubLink.Extensions,
+             # The metrics extension is on by default, and samples from boot.
+             NervesHubLink.Metrics.Sampler,
              NervesHubLink.UpdateManager,
              NervesHubLink.ArchiveManager,
              NervesHubLink.Socket,
@@ -62,7 +64,7 @@ defmodule NervesHubLink.SupervisorTest do
   test "init/1 falls back to Configurator.build/0 when no config is given" do
     # No :config option means the old application-environment path is used.
     assert {:ok, {%{strategy: :one_for_one}, specs}} = NervesHubLink.Supervisor.init([])
-    assert length(specs) == 7
+    assert length(specs) == 8
   end
 
   test "the application does not auto-start children when connect: false" do

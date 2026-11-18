@@ -430,7 +430,7 @@ defmodule NervesHubLink.SocketMessagesTest do
       assert_join("extensions", available_extensions, :error)
 
       assert is_map(available_extensions)
-      assert Map.has_key?(available_extensions, "health")
+      assert Map.has_key?(available_extensions, "metrics")
     end
 
     test "only the extensions the platform advertised are offered", %{socket: socket} do
@@ -438,17 +438,17 @@ defmodule NervesHubLink.SocketMessagesTest do
       # never declares a version nothing can serve, and never declares an
       # extension an operator switched off.
       push(socket, @device_topic, "extensions:get", %{
-        "extensions" => %{"health" => ["0.0.1"]}
+        "extensions" => %{"metrics" => ["0.1.0"]}
       })
 
       assert_join("extensions", offered, :error)
 
-      assert offered == %{"health" => "0.0.1"}
+      assert offered == %{"metrics" => "0.1.0"}
     end
 
     test "an extension the platform has at another version is not offered", %{socket: socket} do
       push(socket, @device_topic, "extensions:get", %{
-        "extensions" => %{"health" => ["9.0.0"], "geo" => ["0.0.1"]}
+        "extensions" => %{"metrics" => ["9.0.0"], "geo" => ["0.0.1"]}
       })
 
       assert_join("extensions", offered, :error)

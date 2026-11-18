@@ -14,12 +14,7 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
 
   alias NervesHubLink.Alarms
   alias NervesHubLink.Extensions.Health.Report
-
-  @default_metric_sets [
-    NervesHubLink.Extensions.Health.MetricSet.CPU,
-    NervesHubLink.Extensions.Health.MetricSet.Disk,
-    NervesHubLink.Extensions.Health.MetricSet.Memory
-  ]
+  alias NervesHubLink.Metrics
 
   @impl Report
   def timestamp() do
@@ -45,13 +40,7 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
   end
 
   @impl Report
-  def metrics() do
-    [
-      metrics_from_config(),
-      get_metric_sets()
-    ]
-    |> Enum.reduce(%{}, &Map.merge/2)
-  end
+  def metrics(), do: Metrics.sample()
 
   @impl Report
   def checks() do
@@ -67,39 +56,12 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
     |> Enum.reduce(%{}, &Map.merge/2)
   end
 
-  defp get_metric_sets() do
-    metric_sets =
-      Application.get_env(:nerves_hub_link, :health, [])
-      |> Keyword.get(:metric_sets, @default_metric_sets)
-      |> Enum.map(fn metric_set ->
-        if metric_set in [:default, :defaults] do
-          @default_metric_sets
-        else
-          metric_set
-        end
-      end)
-      |> List.flatten()
-
-    for metric_set <- metric_sets,
-        {k, v} <- metric_set.sample(),
-        into: %{},
-        do: {normalize_key(k), v}
-  end
-
   defp vof({mod, fun, args}), do: apply(mod, fun, args)
   defp vof(val), do: val
 
   defp get_health_config(key, default) do
     config = Application.get_env(:nerves_hub_link, :health, [])
     Keyword.get(config, key, default)
-  end
-
-  defp metrics_from_config() do
-    metrics = get_health_config(:metrics, %{})
-
-    for {key, val_or_fun} <- metrics, into: %{} do
-      {normalize_key(key), vof(val_or_fun)}
-    end
   end
 
   defp checks_from_config() do

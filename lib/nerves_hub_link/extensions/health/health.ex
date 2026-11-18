@@ -19,8 +19,9 @@ defmodule NervesHubLink.Extensions.Health do
   sent once per connection on the device channel instead. See
   `c:NervesHubLink.Client.metadata/0`.
 
-  While `NervesHubLink.Extensions.Alarms` is attached, alarms are sent there as
-  they happen and left out of health reports.
+  While `NervesHubLink.Extensions.Alarms` or `NervesHubLink.Extensions.Metrics`
+  is attached, what it carries is sent there instead and left out of health
+  reports.
   """
 
   use NervesHubLink.Extensions, name: "health", version: "0.0.1"
@@ -29,6 +30,7 @@ defmodule NervesHubLink.Extensions.Health do
   alias NervesHubLink.Extensions.Alarms, as: AlarmsExtension
   alias NervesHubLink.Extensions.Health.DefaultReport
   alias NervesHubLink.Extensions.Health.DeviceStatus
+  alias NervesHubLink.Extensions.Metrics, as: MetricsExtension
 
   require Logger
 
@@ -100,19 +102,29 @@ defmodule NervesHubLink.Extensions.Health do
     end
   end
 
-  # Without the `alarms` key at all, rather than with an empty map: NervesHub
-  # reads an empty map as "no alarms" and would clear everything the alarms
-  # extension had raised, where a missing key says nothing about alarms.
+  # Without the keys at all, rather than with empty maps: NervesHub reads an
+  # empty `alarms` map as "no alarms" and would clear everything the alarms
+  # extension had raised, where a missing key says nothing about alarms. A
+  # missing `metrics` key records no readings, where an empty one would be a
+  # report with nothing in it against readings the metrics extension sent a
+  # moment ago.
   defp report_value() do
     case check_health() do
       %DeviceStatus{} = status ->
-        if AlarmsExtension.attached?(),
-          do: status |> Map.from_struct() |> Map.delete(:alarms),
-          else: status
+        case reported_elsewhere() do
+          [] -> status
+          keys -> status |> Map.from_struct() |> Map.drop(keys)
+        end
 
       nil ->
         nil
     end
+  end
+
+  defp reported_elsewhere() do
+    [{AlarmsExtension, :alarms}, {MetricsExtension, :metrics}]
+    |> Enum.filter(fn {extension, _key} -> extension.attached?() end)
+    |> Enum.map(fn {_extension, key} -> key end)
   end
 
   @spec check_health(module()) :: DeviceStatus.t() | nil
