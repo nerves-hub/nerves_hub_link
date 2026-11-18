@@ -324,7 +324,7 @@ It is named in `extension_modules` by default, so there is nothing to turn on. L
 
 NervesHub asks for a report on one timer per connection - however many people have the device's page open, the device is asked once - every fifteen minutes while nobody is looking and every minute while somebody is. Each report carries the readings taken since the last one, each with the time it was taken, up to sixty of them per message.
 
-Readings are taken on the device's own interval rather than when NervesHub asks, which is what lets a device asked every fifteen minutes still report a reading a minute, and a device that spent an hour offline still say what it measured while it was gone. Sampling runs from application start, so the readings taken before NervesHub attached the extension are there to send too. The oldest are dropped once there are `max_samples` of them.
+Readings are taken on the device's own interval rather than when NervesHub asks, which is what lets a device asked every fifteen minutes still report a reading a minute, and a device that spent an hour offline still say what it measured while it was gone. Sampling starts the first time NervesHub attaches the extension and carries on from there, whatever the connection does - a device whose NervesHub never asks for metrics never pays for taking them. The oldest readings are dropped once there are `max_samples` of them.
 
 ```elixir
 config :nerves_hub_link,

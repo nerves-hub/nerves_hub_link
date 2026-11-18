@@ -40,10 +40,10 @@ defmodule NervesHubLink.Extensions.Metrics do
   while somebody is. The answer (`metrics:report`) carries every reading taken
   since the last one, each with the time it was taken, up to sixty of them.
 
-  Readings are taken by `NervesHubLink.Metrics.Sampler` from application start,
-  on its own interval, so being asked rarely costs a device no detail and a
-  disconnection costs it nothing at all. `flush/0` sends what is waiting
-  without being asked.
+  Readings are taken by `NervesHubLink.Metrics.Sampler` on its own interval,
+  from the first time NervesHub attaches this extension, so being asked rarely
+  costs a device no detail and a disconnection costs it nothing at all.
+  `flush/0` sends what is waiting without being asked.
 
   While this extension is attached, `NervesHubLink.Extensions.Health` leaves
   metrics out of its reports, so the two don't both report them.
@@ -98,9 +98,14 @@ defmodule NervesHubLink.Extensions.Metrics do
 
   @impl GenServer
   def init(_opts) do
+    # The sampler holds off until something is going to ask for the readings,
+    # which is this. It keeps sampling from here on, whatever the connection
+    # does and whether or not this extension is still attached.
+    :ok = Sampler.start_sampling()
+
     # No report here: NervesHub asks for one shortly after attaching, and
-    # answering an attach as well would have a fleet reconnecting together
-    # report together.
+    # answering the attach as well would have a fleet that reconnected
+    # together report together.
     {:ok, %{}}
   end
 

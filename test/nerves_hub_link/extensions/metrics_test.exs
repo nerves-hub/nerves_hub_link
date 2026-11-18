@@ -63,6 +63,16 @@ defmodule NervesHubLink.Extensions.MetricsTest do
     end
   end
 
+  describe "attaching" do
+    test "is what starts the device sampling" do
+      assert Sampler.count() == 0
+
+      attach("metrics")
+
+      assert Sampler.count() == 1
+    end
+  end
+
   describe "a check" do
     test "sends the readings taken since the last one" do
       attach("metrics")

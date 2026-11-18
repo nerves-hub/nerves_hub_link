@@ -6,10 +6,17 @@ defmodule NervesHubLink.Metrics.Sampler do
   @moduledoc """
   Takes the device's readings, and holds them until the extension sends them.
 
-  Runs from application start rather than from the extension being attached,
-  which is what lets a report carry a minute-by-minute history rather than the
-  instant it was sent, and what lets a device that spent an hour offline still
-  say what it measured while it was gone.
+  Started with the rest of the application, and takes its first reading when
+  NervesHub first attaches the extension. From then on it keeps sampling
+  whatever the connection does, which is what lets a report carry a
+  minute-by-minute history rather than the instant it was sent, and what lets a
+  device that spent an hour offline still say what it measured while it was
+  gone.
+
+  Waiting for that first attach is what stops a device whose NervesHub never
+  asks for metrics shelling out to `free` and `df` every minute, forever, for
+  readings nobody will ever ask for. Nothing is lost by waiting: before the
+  first attach there is nothing to catch up on.
 
   ## The bound
 
@@ -94,6 +101,21 @@ defmodule NervesHubLink.Metrics.Sampler do
   end
 
   @doc """
+  Start taking readings, if they aren't being taken already.
+
+  Called by `NervesHubLink.Extensions.Metrics` when NervesHub attaches it.
+  Takes a reading straight away, so a device asked for a report moments after
+  attaching has something to say.
+  """
+  @spec start_sampling() :: :ok
+  def start_sampling() do
+    case Process.whereis(__MODULE__) do
+      nil -> :ok
+      sampler -> GenServer.call(sampler, :start_sampling)
+    end
+  end
+
+  @doc """
   Take a reading now, rather than waiting for the next one.
 
   ## Examples
@@ -124,24 +146,26 @@ defmodule NervesHubLink.Metrics.Sampler do
     state = %{
       samples: :queue.new(),
       held: 0,
+      sampling?: false,
       max_samples: Keyword.get_lazy(opts, :max_samples, &max_samples/0),
       interval:
         Keyword.get_lazy(opts, :sample_interval_seconds, &interval_seconds/0) |> :timer.seconds()
     }
 
-    # A first reading now rather than one interval from now, so a device asked
-    # for a report shortly after it boots has something to say.
-    {:ok, state, {:continue, :sample}}
-  end
-
-  @impl GenServer
-  def handle_continue(:sample, state) do
-    {:noreply, state |> take_sample() |> schedule()}
+    {:ok, state}
   end
 
   @impl GenServer
   def handle_call({:take, max}, _from, state) do
     {:reply, reports(state, max), state}
+  end
+
+  def handle_call(:start_sampling, _from, %{sampling?: true} = state) do
+    {:reply, :ok, state}
+  end
+
+  def handle_call(:start_sampling, _from, state) do
+    {:reply, :ok, %{state | sampling?: true} |> take_sample() |> schedule()}
   end
 
   def handle_call(:sample, _from, state) do

@@ -63,8 +63,22 @@ defmodule NervesHubLink.Metrics.SamplerTest do
   end
 
   describe "sampling" do
-    test "takes a reading as soon as it starts" do
+    test "takes no readings until something is going to ask for them" do
+      _ = start_supervised!({Sampler, []})
+
+      assert Sampler.count() == 0
+    end
+
+    test "takes a reading as soon as it is asked to start" do
       start_sampler()
+
+      assert Sampler.count() == 1
+    end
+
+    test "being asked to start again doesn't take another reading" do
+      start_sampler()
+
+      :ok = Sampler.start_sampling()
 
       assert Sampler.count() == 1
     end
@@ -163,10 +177,9 @@ defmodule NervesHubLink.Metrics.SamplerTest do
     :persistent_term.erase(CatMetrics)
     sampler = start_supervised!({Sampler, opts})
 
-    # The first reading is taken in a `handle_continue`, which has run by the
-    # time a call is answered. Without this a test setting up its next reading
-    # could get there first.
-    _ = Sampler.count()
+    # The first reading is taken while this call is being answered, so the
+    # sampler is one reading in by the time a test sets up its next one.
+    :ok = Sampler.start_sampling()
 
     sampler
   end
