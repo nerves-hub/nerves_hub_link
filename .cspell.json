@@ -34,6 +34,7 @@
     "Geolocation",
     "geoip",
     "getcap",
+    "gethost",
     "iroh",
     "kbps",
     "maint",

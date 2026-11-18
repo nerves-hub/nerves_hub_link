@@ -25,10 +25,9 @@ defmodule NervesHubLink.Configurator.SharedSecretTest do
     ts
   end
 
+  # The shape `NervesHubLink.Connection` emits.
   defp upgrade_failure(status_code, headers) do
-    {:error,
-     {:upgrade_failure,
-      %{reason: %UpgradeFailureError{status_code: status_code, headers: headers}}}}
+    {:upgrade_failure, %UpgradeFailureError{status_code: status_code, headers: headers}}
   end
 
   # RFC 9110 format (the form Bandit emits in every response).
