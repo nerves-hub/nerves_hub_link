@@ -9,13 +9,17 @@ defmodule NervesHubLink.Extensions.Health do
   @moduledoc """
   The Health Extension.
 
-  Provides metrics, metadata and alarms to allow building an understanding of
-  the operational state of a device. The device's "health". This information
-  is reported over the extensions mechanism to NervesHub for display, alerting
-  and more.
+  Reports the device's metrics and alarms to a NervesHub that has no extension
+  for them: one without ClickHouse takes metrics here, and one older than
+  `NervesHubLink.Extensions.Alarms` takes alarms here.
 
-  While `NervesHubLink.Extensions.Alarms` is attached, alarms are sent there as
-  they happen and left out of health reports.
+  Metadata is not part of a report. It says what a device is rather than how it
+  is doing, and NervesHub holds it against the connection, so it is sent once
+  per connection on the device channel. See `c:NervesHubLink.Client.metadata/0`.
+
+  While `NervesHubLink.Extensions.Alarms` or `NervesHubLink.Extensions.Metrics`
+  is attached, what it carries is sent there instead and left out of health
+  reports.
   """
 
   use NervesHubLink.Extensions, name: "health", version: "0.0.1"
@@ -24,6 +28,7 @@ defmodule NervesHubLink.Extensions.Health do
   alias NervesHubLink.Extensions.Alarms, as: AlarmsExtension
   alias NervesHubLink.Extensions.Health.DefaultReport
   alias NervesHubLink.Extensions.Health.DeviceStatus
+  alias NervesHubLink.Extensions.Metrics, as: MetricsExtension
 
   require Logger
 
@@ -95,19 +100,29 @@ defmodule NervesHubLink.Extensions.Health do
     end
   end
 
-  # Without the `alarms` key at all, rather than with an empty map: NervesHub
-  # reads an empty map as "no alarms" and would clear everything the alarms
-  # extension had raised, where a missing key says nothing about alarms.
+  # Without the keys at all, rather than with empty maps: NervesHub reads an
+  # empty `alarms` map as "no alarms" and would clear everything the alarms
+  # extension had raised, where a missing key says nothing about alarms. A
+  # missing `metrics` key records no readings, where an empty one would be a
+  # report with nothing in it against readings the metrics extension sent a
+  # moment ago.
   defp report_value() do
     case check_health() do
       %DeviceStatus{} = status ->
-        if AlarmsExtension.attached?(),
-          do: status |> Map.from_struct() |> Map.delete(:alarms),
-          else: status
+        case reported_elsewhere() do
+          [] -> status
+          keys -> status |> Map.from_struct() |> Map.drop(keys)
+        end
 
       nil ->
         nil
     end
+  end
+
+  defp reported_elsewhere() do
+    for {extension, key} <- [{AlarmsExtension, :alarms}, {MetricsExtension, :metrics}],
+        extension.attached?(),
+        do: key
   end
 
   @spec check_health(module()) :: DeviceStatus.t() | nil
@@ -120,10 +135,8 @@ defmodule NervesHubLink.Extensions.Health do
 
       DeviceStatus.new(
         timestamp: report.timestamp(),
-        metadata: report.metadata(),
         alarms: report.alarms(),
-        metrics: report.metrics(),
-        checks: report.checks()
+        metrics: report.metrics()
       )
     end
   rescue
@@ -143,10 +156,8 @@ defmodule NervesHubLink.Extensions.Health do
 
       DeviceStatus.new(
         timestamp: DateTime.utc_now(),
-        metadata: %{},
         alarms: %{to_string(NervesHubLink.Extensions.Health.CheckFailed) => reason},
-        metrics: %{},
-        checks: %{}
+        metrics: %{}
       )
   end
 end

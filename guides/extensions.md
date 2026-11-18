@@ -1,16 +1,19 @@
-# Extensions: Health, Geo and more
+# Extensions: Metrics, Alarms, Geo and more
 
 Extensions are pieces of non-critical functionality going over the NervesHub WebSocket. They are separated out under the Extensions mechanism so that the client can happily ignore anything extension-related in service of keeping firmware updates healthy. That is always the top priority.
 
-There are seven extensions currently:
+There are eight extensions currently:
 
 - [**Alarms**](#alarms) sends the device's alarms to NervesHub as they are raised and cleared.
 - [**Error Reports**](#error-reports) sends the device's exceptions and crashes to NervesHub, where they are grouped into issues you can resolve.
 - [**Geo**](#geo) provides hooks to send a device's GeoIP information.
-- [**Health**](#health) reports device metrics, alarms, metadata and similar.
+- [**Health**](#health) reports the device's metrics and alarms to a NervesHub that has no extension for them.
 - [**Local Shell**](#local-shell) gives NervesHub the ability to expose an interactive shell in the UI.
 - [**Logging**](#logging) sends the device's log lines to NervesHub, where they are stored and searchable.
+- [**Metrics**](#metrics) sends the numbers a device measures about itself, such as CPU temperature and memory used.
 - [**Network Identity**](#network-identity) reports the device's identity on networks NervesHub doesn't run, such as iroh or NetBird.
+
+Alarms, Geo, Metrics and Network Identity are named in `extension_modules` by default, as is Local Shell when [`ExPTY`](https://hex.pm/packages/expty) is available. Error Reports, Health and Logging are not; see each one for how to turn it on.
 
 Your NervesHub server controls enabling and disabling extensions to allow you to switch them off if they impact operations.
 
@@ -20,15 +23,15 @@ Which extensions a device offers is decided when it connects. The server names t
 
 The Alarms extension sends the device's alarms to NervesHub as they are raised and cleared. Health sends alarms too, but only in its reports, which NervesHub asks for every hour or so while nobody is looking at the device. An alarm raised just after a report isn't seen for up to an hour, and one raised and cleared between two reports isn't seen at all.
 
-It is off by default. To turn it on, name it in `extension_modules`:
+It is named in `extension_modules` by default, so there is nothing to turn on. The default list is:
 
 ```elixir
 config :nerves_hub_link,
   extension_modules: [
     NervesHubLink.Extensions.Alarms,
     NervesHubLink.Extensions.Geo,
-    NervesHubLink.Extensions.Health,
     NervesHubLink.Extensions.LocalShell,
+    NervesHubLink.Extensions.Metrics,
     NervesHubLink.Extensions.NetworkIdentity
   ]
 ```
@@ -37,7 +40,7 @@ config :nerves_hub_link,
 >
 > `extension_modules` replaces the default list rather than adding to it, so every extension you want has to be named, not just the one you are adding. `NervesHubLink.Extensions.LocalShell` is only in the default list when [`ExPTY`](https://hex.pm/packages/expty) is available, so leave it out of your list if you don't depend on it.
 
-Enabling it here only makes the extension available. Like every extension, it sends nothing until NervesHub asks the device to attach it, which you control in your Product settings. It needs a NervesHub that has the Alarms extension; against one that doesn't, the device keeps sending alarms in its health reports as before.
+Like every extension, it sends nothing until NervesHub asks the device to attach it, which you control in your Product settings. It needs a NervesHub that has the Alarms extension; against one that doesn't, nothing is sent at all, so a device talking to an older server should name the [Health extension](#health) too and go on reporting alarms in its health reports.
 
 ### What is sent
 
@@ -64,10 +67,11 @@ It is off by default. To turn it on, name it in `extension_modules`:
 ```elixir
 config :nerves_hub_link,
   extension_modules: [
+    NervesHubLink.Extensions.Alarms,
     NervesHubLink.Extensions.ErrorReports,
     NervesHubLink.Extensions.Geo,
-    NervesHubLink.Extensions.Health,
     NervesHubLink.Extensions.LocalShell,
+    NervesHubLink.Extensions.Metrics,
     NervesHubLink.Extensions.NetworkIdentity
   ]
 ```
@@ -168,73 +172,29 @@ Please see `NervesHubLink.Extensions.Geo.Resolver` for more information.
 
 ## Health
 
-You can add your own metrics, metadata and alarms.
+The Health extension reports the device's metrics and alarms to a NervesHub that has no extension for either of them.
 
-The default set of metrics used by the `Health.DefaultReport` are:
+It is not named in `extension_modules` by default, because metrics and alarms - the two things most devices reported through it - now have extensions of their own. To turn it on, name it:
 
-- `NervesHubLink.Extensions.Health.MetricSet.CPU` - CPU temperature, usage (percentage), and load averages.
-- `NervesHubLink.Extensions.Health.MetricSet.Memory` - Memory size (MB), used (MB), and percentage used.
-- `NervesHubLink.Extensions.Health.MetricSet.Disk` - Disk size (KB), available (KB), and percentage used.
-
-And one optional metric set:
-- `NervesHubLink.Extensions.Health.MetricSet.NetworkTraffic` - Total bytes sent and received (per interface).
-
-You can also create your own metric sets by implementing the `NervesHubLink.Extensions.Health.MetricSet`
-behaviour.
-
-If a library you are using provides a metric set, you can add it to the list of metrics, but please ensure
-to include all the metric sets you want to use. If you want to include the full default set, you can use
-`:default` or `:defaults` in your metric set list.
-
-eg.
-
-```
+```elixir
 config :nerves_hub_link,
-  health: [
-    metric_sets: [
-      :defaults,
-      MyApp.HealthMetrics,
-      ALibrary.BatteryMetrics
-    ]
+  extension_modules: [
+    NervesHubLink.Extensions.Alarms,
+    NervesHubLink.Extensions.Geo,
+    NervesHubLink.Extensions.Health,
+    NervesHubLink.Extensions.LocalShell,
+    NervesHubLink.Extensions.Metrics,
+    NervesHubLink.Extensions.NetworkIdentity
   ]
 ```
 
-If you only want to use some of the default metrics, you can specify them explicitly:
+> #### An older NervesHub needs this {: .warning}
+>
+> A NervesHub without ClickHouse doesn't offer the [Metrics extension](#metrics) at all and takes metrics through health instead, and one that predates these extensions has no extension for metrics or alarms at all. A device talking to either reports neither unless health is named here. Naming all three is safe whatever your server has: a device offers back only what the server says it supports, and health leaves out whatever another attached extension is already reporting.
 
-```
-config :nerves_hub_link,
-  health: [
-    metric_sets: [
-      NervesHubLink.Extensions.Health.MetricSet.CPU,
-      NervesHubLink.Extensions.Health.MetricSet.Memory
-      # the disk metrics have been excluded
-    ]
-  ]
-```
+What is sampled, and how, is configured in one place for both extensions - see [Metrics](#metrics). A report carries the metrics and the alarms, and nothing else: `checks` and `connectivity` are gone, the first because NervesHub never stored them and the second because it was never sent.
 
-And if you don't want to use any metric sets, you can set the `metric_sets` option to an empty list.
-
-```
-config :nerves_hub_link,
-  health: [
-    metric_sets: []
-  ]
-```
-
-If you want to add custom metadata to the default health report, you can specify it with:
-
-```
-config :nerves_hub_link,
-  health: [
-    # metadata is added with a key and MFA
-    # the function should return a string
-    metadata: %{
-      "placement" => {CatCounter, :venue, []}
-    }
-  ]
-```
-
-Or you can implement a completely custom reporting module by implementing `NervesHubLink.Extensions.Health.Report` and configuring it:
+You can implement a completely custom reporting module by implementing `NervesHubLink.Extensions.Health.Report` and configuring it:
 
 ```
 config :nerves_hub_link,
@@ -242,6 +202,8 @@ config :nerves_hub_link,
     report: CatCounter.MyHealthReport
   ]
 ```
+
+Health reports no longer carry metadata. Metadata says what a device is rather than how it is doing, and NervesHub holds it against the connection, so it is sent once per connection on the device channel instead - see [Reporting device metadata](configuration.md#reporting-device-metadata).
 
 The `Health.DefaultReport` also sends the current system alarms to the connected NervesHub platform.
 
@@ -267,7 +229,7 @@ Specifying a list of mounts to ignore will override the default `/`, so make sur
 The [default health report](`NervesHubLink.Extensions.Health.DefaultReport`) uses `:alarm_handler`, but we
 recommend the [`alarmist`](https://hex.pm/packages/alarmist) library for improved alarms handling.
 
-To have alarms reach NervesHub as they happen rather than with the next report, turn on the [Alarms extension](#alarms). While it is attached, health reports leave alarms out.
+To have alarms reach NervesHub as they happen rather than with the next report, use the [Alarms extension](#alarms), which is on by default. While it is attached, health reports leave alarms out, as they leave metrics out while the [Metrics extension](#metrics) is attached, so nothing is reported twice.
 
 ## Local Shell
 
@@ -286,11 +248,12 @@ It is in early release and is off by default. To turn it on, name it in `extensi
 ```elixir
 config :nerves_hub_link,
   extension_modules: [
+    NervesHubLink.Extensions.Alarms,
     NervesHubLink.Extensions.Geo,
-    NervesHubLink.Extensions.Health,
     NervesHubLink.Extensions.LocalShell,
-    NervesHubLink.Extensions.NetworkIdentity,
-    NervesHubLink.Extensions.Logging
+    NervesHubLink.Extensions.Logging,
+    NervesHubLink.Extensions.Metrics,
+    NervesHubLink.Extensions.NetworkIdentity
   ]
 ```
 
@@ -348,6 +311,97 @@ On 0.0.1 the handler is installed when the extension is attached and removed whe
 0.0.1 sends only lines of text. Reports, which is how OTP logs a crash, a supervisor starting a child, or an alarm, are skipped by it. 0.1.0 sends those too, on one line and bounded in length, since they are most of what you want when a device misbehaves.
 
 Any single line longer than 8KB is cut short and marked, so one line cannot fill a message on its own.
+
+## Metrics
+
+The Metrics extension sends the numbers a device measures about itself: CPU temperature, memory used, load average, and whatever else its firmware knows how to read.
+
+Health carries metrics too, but alongside its alarms, in one report on one timer. Split out, the numbers run at their own pace: as often as anyone wants to watch them, rather than as often as the slowest thing in the report needs sending.
+
+It is named in `extension_modules` by default, so there is nothing to turn on. Like every extension, it sends nothing until NervesHub asks the device to attach it, which you control in your Product settings. It needs a NervesHub that has the Metrics extension, which needs ClickHouse; against one that doesn't, turn on the [Health extension](#health) and report metrics through that.
+
+### What is sent
+
+NervesHub asks for a report on one timer per connection - however many people have the device's page open, the device is asked once - every fifteen minutes while nobody is looking and every minute while somebody is. Each report carries the readings taken since the last one, each with the time it was taken, up to sixty of them per message.
+
+Readings are taken on the device's own interval rather than when NervesHub asks, which is what lets a device asked every fifteen minutes still report a reading a minute, and a device that spent an hour offline still say what it measured while it was gone. Sampling starts the first time NervesHub attaches the extension and carries on from there, whatever the connection does - a device whose NervesHub never asks for metrics never pays for taking them. The oldest readings are dropped once there are `max_samples` of them.
+
+```elixir
+config :nerves_hub_link,
+  metrics: [
+    sample_interval_seconds: 60,
+    max_samples: 60
+  ]
+```
+
+A reading is timed against the monotonic clock and given a wall-clock time only when it is sent, so a device that boots hours behind and syncs NTP a minute later doesn't stamp its first readings with whatever its clock said at the time. NervesHub skips a reading more than a day from its own clock.
+
+### Metric sets
+
+The default set of metrics are:
+
+- `NervesHubLink.MetricSet.CPU` - CPU temperature, usage (percentage), and load averages.
+- `NervesHubLink.MetricSet.Memory` - Memory size (MB), used (MB), and percentage used.
+- `NervesHubLink.MetricSet.Disk` - Disk size (KB), available (KB), and percentage used.
+
+And one optional metric set:
+- `NervesHubLink.MetricSet.NetworkTraffic` - Total bytes sent and received (per interface).
+
+You can also create your own metric sets by implementing the `NervesHubLink.MetricSet`
+behaviour. It lived under the health extension's namespace until the metrics extension arrived, and those
+older names still work: both the behaviour and the four sets above answer to them.
+
+If a library you are using provides a metric set, you can add it to the list of metric sets, but please ensure
+to include all the metric sets you want to use. If you want to include the full default set, you can use
+`:default` or `:defaults` in your metric set list.
+
+eg.
+
+```elixir
+config :nerves_hub_link,
+  metrics: [
+    metric_sets: [
+      :defaults,
+      MyApp.HealthMetrics,
+      ALibrary.BatteryMetrics
+    ]
+  ]
+```
+
+If you only want to use some of the default metrics, you can specify them explicitly:
+
+```elixir
+config :nerves_hub_link,
+  metrics: [
+    metric_sets: [
+      NervesHubLink.MetricSet.CPU,
+      NervesHubLink.MetricSet.Memory
+      # the disk metrics have been excluded
+    ]
+  ]
+```
+
+And if you don't want to use any metric sets, you can set the `metric_sets` option to an empty list.
+
+```elixir
+config :nerves_hub_link,
+  metrics: [
+    metric_sets: []
+  ]
+```
+
+For a handful of numbers that don't warrant a set of their own, name them directly. Each value is either a number or an `{module, function, args}` tuple called when the metrics are sampled:
+
+```elixir
+config :nerves_hub_link,
+  metrics: [
+    metrics: %{
+      "battery_percent" => {CatCounter.Battery, :percent, []}
+    }
+  ]
+```
+
+Both keys were read from `health:` before this extension existed, and are still read from there when `metrics:` doesn't name them, so a device configured for health samples exactly what it always did. They are shared: whichever of the two extensions is attached samples the same numbers the same way.
 
 ## Network Identity
 

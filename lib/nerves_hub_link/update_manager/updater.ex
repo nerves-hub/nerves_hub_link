@@ -95,6 +95,27 @@ defmodule NervesHubLink.UpdateManager.Updater do
               | {:stop, reason :: term(), new_state :: term()}
 
   @doc """
+  Report the update's progress to NervesHub.
+
+  `stage` is `:downloading` while the firmware arrives and `:updating` while `fwup`
+  writes it. Updaters built on this module call it through `state.updater`, the
+  module that started the update, so an updater that hands its work to another one
+  can still change what is reported, for example to put work of its own before the
+  download in the same progress bar. It is a callback rather than a message to
+  `c:handle_message/2` so that an updater whose `c:handle_message/2` ignores what it
+  doesn't know still reports progress.
+
+  Optional. Updaters built on this module get an implementation that sends the
+  progress at most every 500 ms, and only when it has grown.
+  """
+  @callback handle_progress(
+              stage :: :downloading | :updating,
+              percent :: number(),
+              state :: term()
+            ) ::
+              new_state :: term()
+
+  @doc """
   Process messages received from the `Fwup` library
   """
   @callback handle_fwup_message(message :: term(), state :: term()) ::
@@ -118,7 +139,7 @@ defmodule NervesHubLink.UpdateManager.Updater do
   @callback handle_message(message :: term(), state :: term()) ::
               {:ok, new_state :: term()} | {:stop, reason :: term(), new_state :: term()}
 
-  @optional_callbacks handle_message: 2
+  @optional_callbacks handle_message: 2, handle_progress: 3
 
   @doc """
   Run any cleanup that might need to take place
@@ -201,7 +222,8 @@ defmodule NervesHubLink.UpdateManager.Updater do
            fwup_public_keys: fwup_public_keys,
            update_info: update_info,
            reporting_download_fun: &report_download(pid, &1),
-           last_progress_message: nil
+           last_progress_message: nil,
+           updater: __MODULE__
          }}
       end
 
@@ -260,16 +282,7 @@ defmodule NervesHubLink.UpdateManager.Updater do
             {:stop, {:shutdown, :update_complete}, state}
 
           {:progress, percent} ->
-            if send_update?(state, percent) do
-              NervesHubLink.send_update_status({:updating, round(percent)})
-
-              state
-              |> Map.put(:status, {:updating, round(percent)})
-              |> Map.put(:last_progress_message, System.monotonic_time(:millisecond))
-              |> then(&{:ok, &1})
-            else
-              {:ok, state}
-            end
+            {:ok, state.updater.handle_progress(:updating, percent, state)}
 
           {:error, _, message} ->
             {:stop, {:shutdown, {:fwup_error, message}}, state}
@@ -291,6 +304,21 @@ defmodule NervesHubLink.UpdateManager.Updater do
       def handle_message(message, state) do
         Logger.info("[#{log_prefix()}] Unhandled message : #{inspect(message)}")
         {:ok, state}
+      end
+
+      @impl NervesHubLink.UpdateManager.Updater
+      def handle_progress(stage, percent, state) do
+        percent = round(percent)
+
+        if send_update?(state, percent) do
+          NervesHubLink.send_update_status({stage, percent})
+
+          state
+          |> Map.put(:status, {stage, percent})
+          |> Map.put(:last_progress_message, System.monotonic_time(:millisecond))
+        else
+          state
+        end
       end
 
       @impl NervesHubLink.UpdateManager.Updater
@@ -316,6 +344,7 @@ defmodule NervesHubLink.UpdateManager.Updater do
 
       defoverridable init: 1,
                      handle_fwup_message: 2,
+                     handle_progress: 3,
                      handle_message: 2,
                      cleanup: 1,
                      log_prefix: 0

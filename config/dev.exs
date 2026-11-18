@@ -35,7 +35,10 @@ config :nerves_runtime,
        "nerves_serial_number" => "test"
      }}
 
+# Keep VintageNet from touching the host network: no persistence, resolv.conf
+# goes to /dev/null, and `:path` points nowhere so that `ip` and friends can
+# never be executed. (`:bin_ip` has been ignored since vintage_net v0.9.0.)
 config :vintage_net,
   resolvconf: "/dev/null",
   persistence: VintageNet.Persistence.Null,
-  bin_ip: "false"
+  path: "/nonexistent"

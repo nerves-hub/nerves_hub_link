@@ -3,29 +3,15 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 defmodule NervesHubLink.Extensions.Health.MetricSet.Memory do
-  @moduledoc """
-  Health report metrics for total, available, and used (percentage) memory.
+  @moduledoc false
 
-  The keys used in the report are:
-    - mem_size_mb: Total memory size in megabytes
-    - mem_used_mb: Used memory size in megabytes
-    - mem_used_percent: Used memory percentage
-  """
-  @behaviour NervesHubLink.Extensions.Health.MetricSet
+  # Moved to `NervesHubLink.MetricSet.Memory`. Kept so a device that names this
+  # module in `metric_sets` goes on sampling the same numbers rather than
+  # losing them to an undefined module.
 
-  @impl NervesHubLink.Extensions.Health.MetricSet
-  def sample() do
-    {free_output, 0} = System.cmd("free", [])
-    [_title_row, memory_row | _] = String.split(free_output, "\n")
-    [_title_column | memory_columns] = String.split(memory_row)
-    [size_kb, used_kb, _, _, _, _] = Enum.map(memory_columns, &String.to_integer/1)
-    size_mb = round(size_kb / 1000)
-    used_mb = round(used_kb / 1000)
-    used_percent = round(used_mb / size_mb * 100)
+  @behaviour NervesHubLink.MetricSet
 
-    %{mem_size_mb: size_mb, mem_used_mb: used_mb, mem_used_percent: used_percent}
-  rescue
-    _ ->
-      %{}
-  end
+  @impl NervesHubLink.MetricSet
+  @deprecated "Use NervesHubLink.MetricSet.Memory.sample/0 instead"
+  defdelegate sample(), to: NervesHubLink.MetricSet.Memory
 end

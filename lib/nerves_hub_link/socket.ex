@@ -65,6 +65,11 @@ defmodule NervesHubLink.Socket do
     GenServer.cast(server, {:send_update_status, status})
   end
 
+  @spec send_metadata(GenServer.server()) :: :ok
+  def send_metadata(server \\ __MODULE__) do
+    GenServer.cast(server, :send_metadata)
+  end
+
   @spec check_connection(GenServer.server(), atom()) :: boolean()
   def check_connection(server \\ __MODULE__, type) do
     GenServer.call(server, {:check_connection, type})
@@ -261,6 +266,7 @@ defmodule NervesHubLink.Socket do
     Logger.debug("[#{inspect(__MODULE__)}] Joined Device channel")
 
     send(self(), :get_network_interface)
+    send(self(), :send_metadata)
 
     {:ok, assign(socket, joined_at: System.monotonic_time(:millisecond))}
   end
@@ -387,6 +393,10 @@ defmodule NervesHubLink.Socket do
   def handle_cast(:reconnect, socket) do
     # See handle_disconnect/2 for the reconnect call once the connection is closed.
     {:noreply, disconnect(socket)}
+  end
+
+  def handle_cast(:send_metadata, socket) do
+    {:noreply, push_metadata(socket)}
   end
 
   def handle_cast({:send_update_status, {stage, progress}}, socket)
@@ -749,6 +759,10 @@ defmodule NervesHubLink.Socket do
     end
   end
 
+  def handle_info(:send_metadata, socket) do
+    {:noreply, push_metadata(socket)}
+  end
+
   def handle_info(msg, socket) do
     Logger.warning("[#{inspect(__MODULE__)}] Unhandled handle_info: #{inspect(msg)}")
     {:noreply, socket}
@@ -775,22 +789,27 @@ defmodule NervesHubLink.Socket do
     :alarm_handler.set_alarm({NervesHubLink.Disconnected, [reason: reason]})
     channel_config = %{socket.channel_config | reconnect_after_msec: Client.reconnect_backoff()}
 
+    # A connection signed with a shared secret is signed again for every attempt,
+    # whichever configurator built it.
     channel_config =
-      case Configurator.fetch_configurator() do
-        SharedSecret ->
-          # TODO: I don't know when reconnect/1 actually gets validated. It could be that
-          # the signature we create here will be too old before the headers are used
-          # in a connection attempt again.
-          #
-          # When the failed upgrade response carried a `Date` header, sign
-          # with that time instead of the device clock — recovers devices
-          # whose RTC/NTP isn't trustworthy yet.
-          hint = SharedSecret.server_time_hint(reason)
-          headers = SharedSecret.headers(socket.assigns.config, hint)
-          %{channel_config | headers: headers}
+      if List.keymember?(channel_config.headers, "x-nh-signature", 0) do
+        # TODO: I don't know when reconnect/1 actually gets validated. It could be that
+        # the signature we create here will be too old before the headers are used
+        # in a connection attempt again.
+        #
+        # When the failed upgrade response carried a `Date` header, sign
+        # with that time instead of the device clock. This recovers devices
+        # whose RTC/NTP isn't trustworthy yet.
+        hint = SharedSecret.server_time_hint(reason)
 
-        _ ->
-          channel_config
+        headers =
+          SharedSecret.headers(socket.assigns.config, hint)
+          |> Stream.concat(channel_config.headers)
+          |> Enum.uniq_by(&elem(&1, 0))
+
+        %{channel_config | headers: headers}
+      else
+        channel_config
       end
 
     %{socket | channel_config: channel_config}
@@ -836,6 +855,21 @@ defmodule NervesHubLink.Socket do
   @impl Slipstream
   def terminate(_reason, socket) do
     disconnect(socket)
+  end
+
+  # NervesHub holds metadata against the connection rather than the device, so
+  # a reconnect starts with none and this is sent on every join rather than
+  # only when it changes. Nothing is sent when there is none to send: NervesHub
+  # merges what it is given, so an empty map would only cost a message.
+  defp push_metadata(socket) do
+    case Client.metadata() do
+      metadata when metadata == %{} ->
+        socket
+
+      metadata ->
+        _ = push(socket, @device_topic, "metadata", %{metadata: metadata})
+        socket
+    end
   end
 
   # The connection process is inspected with `:sys.get_state/2` rather than
@@ -972,6 +1006,13 @@ defmodule NervesHubLink.Socket do
     existing_keys = Map.fetch!(config, field)
 
     cond do
+      keys_not_requested?(config, field) ->
+        Logger.warning(
+          "[NervesHubLink] Ignoring public keys for #{label} verification that were not requested : keeping the #{length(existing_keys)} locally configured key(s)"
+        )
+
+        config
+
       received_keys != [] ->
         Logger.info(
           "[NervesHubLink] Public keys for #{label} verification updated - #{length(received_keys)} key(s) received"
@@ -993,6 +1034,12 @@ defmodule NervesHubLink.Socket do
 
         config
     end
+  end
+
+  # The configurator asks for keys by putting "on_connect" in the join params
+  # under the field's name. Without it the device didn't ask for keys.
+  defp keys_not_requested?(config, field) do
+    config.params[Atom.to_string(field)] != "on_connect"
   end
 
   # Shallow-merge user-supplied opts on top of the base, but for :transport_opts

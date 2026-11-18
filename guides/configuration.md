@@ -203,6 +203,45 @@ defmodule MyApp.NervesHubLinkClient do
 end
 ```
 
+## Reporting device metadata
+
+Metadata says what a device is rather than how it is doing: where it was installed, which customer it belongs to, the revision of the board under it. NervesHub holds it against the connection and shows it on the device's page.
+
+Implement `c:NervesHubLink.Client.metadata/0` in your client:
+
+```elixir
+defmodule MyApp.NervesHubLinkClient do
+  use NervesHubLink.Client
+
+  @impl NervesHubLink.Client
+  def metadata() do
+    %{
+      "placement" => CatCounter.venue(),
+      "board_revision" => CatCounter.Hardware.revision()
+    }
+  end
+end
+```
+
+It is called when the device joins, and again on every reconnect, since a connection starts with no metadata against it. The callback runs on the socket process, so anything slow to work out belongs in your application, with the callback reading the answer.
+
+When metadata changes while the device is connected - an installer naming the room it sits in, say - send it again:
+
+```elixir
+NervesHubLink.send_metadata()
+```
+
+Without a callback, metadata is read from the application environment, where each value is either a term or an `{module, function, args}` tuple called when the metadata is collected:
+
+```elixir
+config :nerves_hub_link,
+  metadata: %{
+    "placement" => {CatCounter, :venue, []}
+  }
+```
+
+Metadata configured under `health: [metadata: ...]`, where it lived while the Health extension reported it, is still read from there when neither of the above is in place.
+
 ## Enabling remote IEx access
 
 It's possible to remotely log into your device via the NervesHub web interface. This feature is disabled by default. To enable, add the following to your `config.exs`:
@@ -256,6 +295,36 @@ my_der_list = [<<213, 34, 234, 53, 83, 8, 2, ...>>]
 config :nerves_hub_link, downloader_ssl: [cacerts: my_der_list]
 ```
 
+## TLS 1.3 and session resumption
+
+The device offers TLS 1.2 to NervesHub by default. A device talking to a NervesHub that supports TLS 1.3 can offer that as well, and turn on TLS 1.3 session tickets so a reconnection costs a resumed handshake rather than a full one. A resumed handshake sends no certificates and verifies none, which is worth having on a slow or metered connection such as LTE-M, where the bytes and the round trips of a full handshake are the expensive part of reconnecting:
+
+```elixir
+config :nerves_hub_link,
+  ssl: [
+    versions: [:"tlsv1.3", :"tlsv1.2"],
+    session_tickets: :auto
+  ]
+```
+
+Both options are needed, as `:ssl` refuses `session_tickets` unless `:"tlsv1.3"` is one of the `:versions`. Keeping `:"tlsv1.2"` in the list means a device that reaches a server without TLS 1.3 still connects.
+
+NervesCloud has TLS 1.3 enabled. NervesHub always issues `stateless_with_cert` session tickets when TLS 1.3 is enabled, so the ticket carries the device's certificate: a resumed handshake exchanges none, and that is what lets the server tell which device has reconnected. Devices authenticating with a certificate (NervesKey, TPM, or a local certificate and key) and devices authenticating with a shared secret can both resume.
+
+Tickets are held in memory by the `ssl` application, so they outlive the socket reconnecting but not a reboot: the first connection after boot is always a full handshake. A ticket is matched on the server name, which is the host the device connects to, or `:sni` if you have configured one. Two `ssl` application variables bound the store, and their defaults (two hours, 1000 tickets) are generous for a device that only talks to one server:
+
+```elixir
+config :ssl,
+  client_session_ticket_lifetime: 7200,
+  client_session_ticket_store_size: 10
+```
+
+The firmware downloader leaves the TLS version to `Mint`, which already offers TLS 1.3. It can resume handshakes too, which is worth having when firmware is downloaded in parts or a download is retried:
+
+```elixir
+config :nerves_hub_link, downloader_ssl: [session_tickets: :auto]
+```
+
 ## HTTP proxy
 
 Devices that have to reach NervesHub through an HTTP proxy can configure one for both the WebSocket connection and the firmware downloader. The option is passed through to `Mint.HTTP.connect/4` as `:proxy`, so any `Mint` proxy form is accepted:
@@ -275,6 +344,14 @@ config :nerves_hub_link,
   ssl: [cacerts: my_der_list],
   socket: [http_opts: [proxy: {:http, "proxy.example.com", 8080, []}]]
 ```
+
+## Identifying the library to NervesHub
+
+NervesHubLink names itself and its version in the `User-Agent` of the WebSocket connection and of firmware downloads, for example `NHL/2.13.1`. NervesHub records it for each connection, which shows you which version of NervesHubLink each device runs. A NervesHub that doesn't read it ignores it.
+
+If the socket headers already have a `User-Agent`, for example one a custom configurator set, NervesHubLink leaves it alone and doesn't add its own.
+
+The `NervesHubLink.Configurator.SharedSecret` configurator replaces the socket headers with its signature headers, so a `User-Agent` set in `config :nerves_hub_link, socket: [headers: ...]` is dropped and NervesHubLink sends its own. To send a different `User-Agent` with shared secret authentication, write a custom configurator that delegates to `NervesHubLink.Configurator.SharedSecret` and then adds the header to the socket headers it returns.
 
 ## Message serialization
 

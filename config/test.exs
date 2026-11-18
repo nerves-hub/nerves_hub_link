@@ -43,7 +43,9 @@ config :nerves_time, :servers, []
 tmp_resolvconf = Path.join(System.tmp_dir!(), "null_resolvconf")
 File.touch!(tmp_resolvconf)
 
+# `:path` points nowhere so that `ip` and friends can never be executed.
+# (`:bin_ip` has been ignored since vintage_net v0.9.0.)
 config :vintage_net,
   resolvconf: tmp_resolvconf,
   persistence: VintageNet.Persistence.Null,
-  bin_ip: "false"
+  path: "/nonexistent"

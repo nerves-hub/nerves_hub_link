@@ -44,6 +44,7 @@ defmodule NervesHubLink.Supervisor do
   alias NervesHubLink.Extensions.Logging
   alias NervesHubLink.ExtensionsSupervisor
   alias NervesHubLink.FwupConfig
+  alias NervesHubLink.Metrics
   alias NervesHubLink.Socket
   alias NervesHubLink.SupportScriptsManager
   alias NervesHubLink.UpdateManager
@@ -81,6 +82,10 @@ defmodule NervesHubLink.Supervisor do
         # And again: an alarm raised while booting is raised before there is a
         # connection, and only something already watching knows when.
         alarms_tracker(),
+        # And again: a device samples on its own interval rather than when it
+        # is asked, so that being asked rarely costs no detail and an hour
+        # offline costs nothing at all.
+        metrics_sampler(),
         {UpdateManager, {fwup_config, config.updater}},
         {ArchiveManager, config},
         {Socket, config},
@@ -106,6 +111,14 @@ defmodule NervesHubLink.Supervisor do
   defp alarms_tracker() do
     if Extensions.Alarms in Extensions.configured_modules() and not Code.ensure_loaded?(Alarmist) do
       [AlarmsTracker]
+    else
+      []
+    end
+  end
+
+  defp metrics_sampler() do
+    if Extensions.Metrics in Extensions.configured_modules() do
+      [Metrics.Sampler]
     else
       []
     end
