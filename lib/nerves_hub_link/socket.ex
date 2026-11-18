@@ -288,26 +288,21 @@ defmodule NervesHubLink.Socket do
 
   defp headers(socket) do
     config = socket.config
+    configured = config.socket[:headers] || []
 
-    case Configurator.fetch_configurator() do
-      SharedSecret ->
-        SharedSecret.headers(config, socket.signing_time_hint)
-
-      _ ->
-        configured = config.socket[:headers] || []
-
-        # An app may build the shared-secret headers in its own configurator,
-        # which runs once at startup. Headers carrying a signature are signed
-        # again for every attempt, whoever made them, or they would be refused
-        # as expired from the first reconnect. Anything else the configurator
-        # added is kept.
-        if List.keymember?(configured, "x-nh-signature", 0) do
-          SharedSecret.headers(config, socket.signing_time_hint)
-          |> Stream.concat(configured)
-          |> Enum.uniq_by(&elem(&1, 0))
-        else
-          configured
-        end
+    # An app may build the shared-secret headers in its own configurator, which
+    # runs once at startup. Headers carrying a signature are signed again for
+    # every attempt, whoever made them, or they would be refused as expired
+    # from the first reconnect. Only those are replaced: everything else the
+    # configurator put there is kept, which is how the `User-Agent` and
+    # anything an app added survive a reconnect.
+    if Configurator.fetch_configurator() == SharedSecret or
+         List.keymember?(configured, "x-nh-signature", 0) do
+      SharedSecret.headers(config, socket.signing_time_hint)
+      |> Stream.concat(configured)
+      |> Enum.uniq_by(&elem(&1, 0))
+    else
+      configured
     end
   end
 
