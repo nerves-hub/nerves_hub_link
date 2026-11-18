@@ -113,13 +113,6 @@ defmodule NervesHubLink do
   Returns `:ok` whether or not there is a connection to send over. Nothing is
   queued: the next join collects the metadata afresh, which is the same value
   this call would have sent.
-
-  ## Example
-
-  ```elixir
-  NervesHubLink.send_metadata()
-  #=> :ok
-  ```
   """
   @spec send_metadata(GenServer.server()) :: :ok
   defdelegate send_metadata(server \\ Socket), to: Socket

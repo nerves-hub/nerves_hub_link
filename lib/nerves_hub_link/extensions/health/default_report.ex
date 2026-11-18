@@ -13,6 +13,7 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
   @behaviour NervesHubLink.Extensions.Health.Report
 
   alias NervesHubLink.Alarms
+  alias NervesHubLink.ConfigValue
   alias NervesHubLink.Extensions.Health.Report
   alias NervesHubLink.Metrics
 
@@ -56,9 +57,6 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
     |> Enum.reduce(%{}, &Map.merge/2)
   end
 
-  defp vof({mod, fun, args}), do: apply(mod, fun, args)
-  defp vof(val), do: val
-
   defp get_health_config(key, default) do
     config = Application.get_env(:nerves_hub_link, :health, [])
     Keyword.get(config, key, default)
@@ -68,7 +66,7 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
     checks = get_health_config(:checks, %{})
 
     for {key, val_or_fun} <- checks, into: %{} do
-      {normalize_key(key), vof(val_or_fun)}
+      {ConfigValue.key(key), ConfigValue.resolve(val_or_fun)}
     end
   end
 
@@ -76,20 +74,7 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
     connectivity = get_health_config(:connectivity, %{})
 
     for {key, val_or_fun} <- connectivity, into: %{} do
-      {inspect(key), vof(val_or_fun)}
-    end
-  end
-
-  defp normalize_key(key) when not is_binary(key) do
-    to_string(key)
-    |> normalize_key()
-  end
-
-  defp normalize_key(key) do
-    if String.printable?(key) do
-      key
-    else
-      inspect(key)
+      {inspect(key), ConfigValue.resolve(val_or_fun)}
     end
   end
 

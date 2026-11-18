@@ -27,7 +27,7 @@ defmodule NervesHubLink.SupervisorTest do
     assert child_start_modules(result) == [
              DynamicSupervisor,
              NervesHubLink.Extensions,
-             # The metrics extension is on by default, and samples from boot.
+             # The metrics extension is on by default, so its sampler starts at boot.
              NervesHubLink.Metrics.Sampler,
              NervesHubLink.UpdateManager,
              NervesHubLink.ArchiveManager,

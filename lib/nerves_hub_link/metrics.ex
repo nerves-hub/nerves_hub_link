@@ -18,7 +18,7 @@ defmodule NervesHubLink.Metrics do
 
   `:metric_sets` names modules implementing
   `NervesHubLink.Extensions.Health.MetricSet`, with `:defaults` standing in for
-  the three sets below. `:metrics` is for a handful of numbers that don't
+  the CPU, Disk and Memory sets. `:metrics` is for a handful of numbers that don't
   warrant a set of their own; each value is either a number or an
   `{module, function, args}` tuple called when the metrics are sampled.
 
@@ -27,6 +27,7 @@ defmodule NervesHubLink.Metrics do
   configured for health samples exactly what it always did.
   """
 
+  alias NervesHubLink.ConfigValue
   alias NervesHubLink.Extensions.Health.MetricSet
 
   @default_metric_sets [
@@ -68,12 +69,12 @@ defmodule NervesHubLink.Metrics do
     for metric_set <- metric_sets(),
         {key, value} <- metric_set.sample(),
         into: %{},
-        do: {normalize_key(key), value}
+        do: {ConfigValue.key(key), value}
   end
 
   defp configured_metrics() do
     for {key, value_or_mfa} <- config(:metrics, %{}), into: %{} do
-      {normalize_key(key), value_of(value_or_mfa)}
+      {ConfigValue.key(key), ConfigValue.resolve(value_or_mfa)}
     end
   end
 
@@ -89,20 +90,5 @@ defmodule NervesHubLink.Metrics do
         Application.get_env(:nerves_hub_link, :health, [])
         |> Keyword.get(key, default)
     end
-  end
-
-  defp value_of({mod, fun, args}) when is_atom(mod) and is_atom(fun) and is_list(args),
-    do: apply(mod, fun, args)
-
-  defp value_of(value), do: value
-
-  defp normalize_key(key) when not is_binary(key) do
-    key
-    |> to_string()
-    |> normalize_key()
-  end
-
-  defp normalize_key(key) do
-    if String.printable?(key), do: key, else: inspect(key)
   end
 end

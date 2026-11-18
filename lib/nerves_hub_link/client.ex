@@ -75,6 +75,7 @@ defmodule NervesHubLink.Client do
   alias Nerves.Runtime
   alias Nerves.Runtime.KV
   alias NervesHubLink.Backoff
+  alias NervesHubLink.ConfigValue
 
   require Logger
 
@@ -363,7 +364,7 @@ defmodule NervesHubLink.Client do
   # costs the metadata and nothing else.
   defp normalize_metadata(metadata) do
     for {key, value} <- metadata, into: %{} do
-      {normalize_key(key), value_of(value)}
+      {ConfigValue.key(key), ConfigValue.resolve(value)}
     end
   catch
     kind, reason ->
@@ -372,21 +373,6 @@ defmodule NervesHubLink.Client do
       )
 
       %{}
-  end
-
-  defp value_of({mod, fun, args}) when is_atom(mod) and is_atom(fun) and is_list(args),
-    do: apply(mod, fun, args)
-
-  defp value_of(value), do: value
-
-  defp normalize_key(key) when not is_binary(key) do
-    key
-    |> to_string()
-    |> normalize_key()
-  end
-
-  defp normalize_key(key) do
-    if String.printable?(key), do: key, else: inspect(key)
   end
 
   @doc """

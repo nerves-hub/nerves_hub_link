@@ -6,12 +6,12 @@ defmodule NervesHubLink.Metrics.Sampler do
   @moduledoc """
   Takes the device's readings, and holds them until the extension sends them.
 
-  Started with the rest of the application, and takes its first reading when
-  NervesHub first attaches the extension. From then on it keeps sampling
-  whatever the connection does, which is what lets a report carry a
-  minute-by-minute history rather than the instant it was sent, and what lets a
-  device that spent an hour offline still say what it measured while it was
-  gone.
+  Started with the rest of the application when the metrics extension is
+  configured, and takes its first reading when NervesHub first attaches it.
+  From then on it keeps sampling whatever the connection does, which is what
+  lets a report carry a minute-by-minute history rather than the instant it was
+  sent, and what lets a device that spent an hour offline still say what it
+  measured while it was gone.
 
   Waiting for that first attach is what stops a device whose NervesHub never
   asks for metrics shelling out to `free` and `df` every minute, forever, for
@@ -70,7 +70,8 @@ defmodule NervesHubLink.Metrics.Sampler do
   end
 
   @doc """
-  The next readings to send, oldest first, at most `max` of them, as reports.
+  The next readings to send, oldest first, at most `max` of them, as reports,
+  with the cursor to hand `sent/1` once they have gone.
 
   Left where they are. Paired with `sent/1` rather than handing them over,
   because a push can fail, and readings taken out of here and then not sent are
@@ -79,24 +80,28 @@ defmodule NervesHubLink.Metrics.Sampler do
   Answers with none when nothing is sampling, which is every device that hasn't
   turned the metrics extension on.
   """
-  @spec take(pos_integer()) :: [%{String.t() => term()}]
+  @spec take(pos_integer()) :: {[%{String.t() => term()}], non_neg_integer()}
   def take(max) when is_integer(max) and max > 0 do
     case Process.whereis(__MODULE__) do
-      nil -> []
+      nil -> {[], 0}
       sampler -> GenServer.call(sampler, {:take, max})
     end
   end
 
   @doc """
-  Forget the first `count` readings `take/1` returned, now that they have gone.
+  Forget the readings up to `cursor`, now that they have gone.
+
+  A cursor rather than a count: a reading dropped off the back of a full buffer
+  between `take/1` and here would otherwise shift the queue, and forgetting a
+  count would forget one reading that was never sent.
   """
   @spec sent(non_neg_integer()) :: :ok
   def sent(0), do: :ok
 
-  def sent(count) when is_integer(count) and count > 0 do
+  def sent(cursor) when is_integer(cursor) and cursor > 0 do
     case Process.whereis(__MODULE__) do
       nil -> :ok
-      sampler -> GenServer.cast(sampler, {:sent, count})
+      sampler -> GenServer.cast(sampler, {:sent, cursor})
     end
   end
 
@@ -146,6 +151,7 @@ defmodule NervesHubLink.Metrics.Sampler do
     state = %{
       samples: :queue.new(),
       held: 0,
+      taken: 0,
       sampling?: false,
       max_samples: Keyword.get_lazy(opts, :max_samples, &max_samples/0),
       interval:
@@ -177,8 +183,8 @@ defmodule NervesHubLink.Metrics.Sampler do
   end
 
   @impl GenServer
-  def handle_cast({:sent, count}, state) do
-    {:noreply, forget(state, count)}
+  def handle_cast({:sent, cursor}, state) do
+    {:noreply, forget(state, cursor)}
   end
 
   @impl GenServer
@@ -200,7 +206,11 @@ defmodule NervesHubLink.Metrics.Sampler do
         state
 
       metrics ->
-        hold(state, %{at: System.monotonic_time(), metrics: metrics})
+        hold(state, %{
+          seq: state.taken + state.held + 1,
+          at: System.monotonic_time(),
+          metrics: metrics
+        })
     end
   catch
     kind, reason ->
@@ -220,7 +230,7 @@ defmodule NervesHubLink.Metrics.Sampler do
 
     if state.held > state.max_samples do
       {{:value, _oldest}, samples} = :queue.out(state.samples)
-      %{state | samples: samples, held: state.held - 1}
+      %{state | samples: samples, held: state.held - 1, taken: state.taken + 1}
     else
       state
     end
@@ -230,27 +240,32 @@ defmodule NervesHubLink.Metrics.Sampler do
   # are still a second apart once they carry a wall-clock time.
   defp reports(state, max) do
     reference = {System.monotonic_time(), DateTime.utc_now()}
+    taking = state.samples |> :queue.to_list() |> Enum.take(max)
 
-    state.samples
-    |> :queue.to_list()
-    |> Enum.take(max)
-    |> Enum.map(fn %{at: at, metrics: metrics} ->
-      %{"timestamp" => at |> to_utc(reference) |> DateTime.to_iso8601(), "metrics" => metrics}
-    end)
+    reports =
+      Enum.map(taking, fn %{at: at, metrics: metrics} ->
+        %{"timestamp" => at |> to_utc(reference) |> DateTime.to_iso8601(), "metrics" => metrics}
+      end)
+
+    {reports, cursor(taking)}
   end
+
+  defp cursor([]), do: 0
+  defp cursor(samples), do: samples |> List.last() |> Map.fetch!(:seq)
 
   defp to_utc(at, {monotonic_now, utc_now}) do
     elapsed = System.convert_time_unit(monotonic_now - at, :native, :microsecond)
     DateTime.add(utc_now, -elapsed, :microsecond)
   end
 
-  defp forget(state, count) do
-    Enum.reduce(1..count//1, state, fn _, state ->
-      case :queue.out(state.samples) do
-        {{:value, _sample}, samples} -> %{state | samples: samples, held: state.held - 1}
-        {:empty, _samples} -> state
-      end
-    end)
+  defp forget(state, cursor) do
+    case :queue.out(state.samples) do
+      {{:value, %{seq: seq}}, samples} when seq <= cursor ->
+        forget(%{state | samples: samples, held: state.held - 1, taken: state.taken + 1}, cursor)
+
+      _nothing_left_that_was_sent ->
+        state
+    end
   end
 
   defp interval_seconds() do

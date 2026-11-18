@@ -798,7 +798,7 @@ defmodule NervesHubLink.Socket do
         # in a connection attempt again.
         #
         # When the failed upgrade response carried a `Date` header, sign
-        # with that time instead of the device clock — recovers devices
+        # with that time instead of the device clock. This recovers devices
         # whose RTC/NTP isn't trustworthy yet.
         hint = SharedSecret.server_time_hint(reason)
 

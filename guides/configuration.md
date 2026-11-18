@@ -311,7 +311,7 @@ Both options are needed, as `:ssl` refuses `session_tickets` unless `:"tlsv1.3"`
 
 NervesCloud has TLS 1.3 enabled. NervesHub always issues `stateless_with_cert` session tickets when TLS 1.3 is enabled, so the ticket carries the device's certificate: a resumed handshake exchanges none, and that is what lets the server tell which device has reconnected. Devices authenticating with a certificate (NervesKey, TPM, or a local certificate and key) and devices authenticating with a shared secret can both resume.
 
-Tickets are held in memory by the `ssl` application, so they outlive the socket reconnecting but not a reboot — the first connection after boot is always a full handshake. A ticket is matched on the server name, which is the host the device connects to, or `:sni` if you have configured one. Two `ssl` application variables bound the store, and their defaults (two hours, 1000 tickets) are generous for a device that only talks to one server:
+Tickets are held in memory by the `ssl` application, so they outlive the socket reconnecting but not a reboot: the first connection after boot is always a full handshake. A ticket is matched on the server name, which is the host the device connects to, or `:sni` if you have configured one. Two `ssl` application variables bound the store, and their defaults (two hours, 1000 tickets) are generous for a device that only talks to one server:
 
 ```elixir
 config :ssl,

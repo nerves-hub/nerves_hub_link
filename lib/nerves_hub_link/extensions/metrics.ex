@@ -10,12 +10,11 @@ defmodule NervesHubLink.Extensions.Metrics do
   used, load average, and whatever else its firmware knows how to read - and
   nothing else.
 
-  Health carries metrics too, alongside metadata, alarms and checks, in one
-  report. A device reporting every minute therefore sends all of it every
-  minute, and most of what that costs is the part that never changes. Split
-  out, the numbers run at their own pace: report metrics as often as anyone
-  wants to watch them, and health as often as what health carries actually
-  changes.
+  Health carries metrics too, alongside its alarms and checks, in one report. A
+  device reporting every minute therefore sends all of it every minute, and
+  most of what that costs is the part that never changes. Split out, the
+  numbers run at their own pace: report metrics as often as anyone wants to
+  watch them, and health as often as what health carries actually changes.
 
   Named in `extension_modules` by default, so there is nothing to turn on:
 
@@ -130,13 +129,13 @@ defmodule NervesHubLink.Extensions.Metrics do
   # socket that dies part way through a flush leaves the rest for the next one.
   defp send_reports(state) do
     case Sampler.take(@max_reports_per_message) do
-      [] ->
+      {[], _cursor} ->
         state
 
-      reports ->
+      {reports, cursor} ->
         case push("report", %{"reports" => reports}) do
           {:ok, _ref} ->
-            :ok = Sampler.sent(length(reports))
+            :ok = Sampler.sent(cursor)
             send_reports(state)
 
           {:error, _reason} ->

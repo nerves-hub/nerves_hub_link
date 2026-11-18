@@ -14,10 +14,9 @@ defmodule NervesHubLink.Extensions.Health do
   is reported over the extensions mechanism to NervesHub for display, alerting
   and more.
 
-  Metadata is no longer part of a report. It describes what a device is rather
-  than how it is doing, and NervesHub holds it against the connection, so it is
-  sent once per connection on the device channel instead. See
-  `c:NervesHubLink.Client.metadata/0`.
+  Metadata is not part of a report. It says what a device is rather than how it
+  is doing, and NervesHub holds it against the connection, so it is sent once
+  per connection on the device channel. See `c:NervesHubLink.Client.metadata/0`.
 
   While `NervesHubLink.Extensions.Alarms` or `NervesHubLink.Extensions.Metrics`
   is attached, what it carries is sent there instead and left out of health
@@ -122,9 +121,9 @@ defmodule NervesHubLink.Extensions.Health do
   end
 
   defp reported_elsewhere() do
-    [{AlarmsExtension, :alarms}, {MetricsExtension, :metrics}]
-    |> Enum.filter(fn {extension, _key} -> extension.attached?() end)
-    |> Enum.map(fn {_extension, key} -> key end)
+    for {extension, key} <- [{AlarmsExtension, :alarms}, {MetricsExtension, :metrics}],
+        extension.attached?(),
+        do: key
   end
 
   @spec check_health(module()) :: DeviceStatus.t() | nil

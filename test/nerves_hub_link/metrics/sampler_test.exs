@@ -102,8 +102,8 @@ defmodule NervesHubLink.Metrics.SamplerTest do
       assert Sampler.count() == 2
 
       # The first reading is the one that went
-      readings = Sampler.take(10) |> Enum.map(& &1["metrics"]["cats_seen"])
-      assert readings == [1, 2]
+      {reports, _cursor} = Sampler.take(10)
+      assert Enum.map(reports, & &1["metrics"]["cats_seen"]) == [1, 2]
     end
 
     test "a metric set that raises costs the reading and nothing else" do
@@ -125,7 +125,7 @@ defmodule NervesHubLink.Metrics.SamplerTest do
     test "reports carry the readings and when they were taken" do
       start_sampler()
 
-      assert [report] = Sampler.take(10)
+      assert {[report], _cursor} = Sampler.take(10)
       assert report["metrics"] == %{"cats_seen" => 0}
       assert {:ok, taken_at, _offset} = DateTime.from_iso8601(report["timestamp"])
       assert DateTime.diff(DateTime.utc_now(), taken_at, :second) <= 5
@@ -137,20 +137,41 @@ defmodule NervesHubLink.Metrics.SamplerTest do
       Process.sleep(10)
       :ok = Sampler.sample()
 
-      assert [older, newer] = Sampler.take(10)
+      assert {[older, newer], _cursor} = Sampler.take(10)
       assert DateTime.compare(timestamp(older), timestamp(newer)) == :lt
     end
 
     test "leaves the readings where they are until they are sent" do
       start_sampler()
 
-      assert length(Sampler.take(10)) == 1
-      assert length(Sampler.take(10)) == 1
+      assert {[_reading], cursor} = Sampler.take(10)
+      assert {[_still_here], ^cursor} = Sampler.take(10)
 
-      :ok = Sampler.sent(1)
+      :ok = Sampler.sent(cursor)
 
-      assert Sampler.take(10) == []
+      assert Sampler.take(10) == {[], 0}
       assert Sampler.count() == 0
+    end
+
+    test "a reading evicted after it was taken doesn't cost an unsent one" do
+      start_sampler(max_samples: 2)
+
+      CatMetrics.next()
+      :ok = Sampler.sample()
+
+      # Both readings are taken, and then a tick lands where it would land
+      # while the push is in flight, evicting the oldest of a full buffer.
+      {_reports, cursor} = Sampler.take(2)
+      CatMetrics.next()
+      :ok = Sampler.sample()
+
+      :ok = Sampler.sent(cursor)
+
+      # Forgetting a count here would have forgotten the reading that arrived
+      # after the take, which nothing has sent.
+      assert {[report], _cursor} = Sampler.take(10)
+      assert report["metrics"]["cats_seen"] == 2
+      assert Sampler.count() == 1
     end
 
     test "answers with at most what it is asked for, oldest first" do
@@ -159,14 +180,14 @@ defmodule NervesHubLink.Metrics.SamplerTest do
       CatMetrics.next()
       :ok = Sampler.sample()
 
-      assert [report] = Sampler.take(1)
+      assert {[report], _cursor} = Sampler.take(1)
       assert report["metrics"]["cats_seen"] == 0
     end
   end
 
   describe "without a sampler running" do
     test "nothing is waiting, and nothing raises" do
-      assert Sampler.take(10) == []
+      assert Sampler.take(10) == {[], 0}
       assert Sampler.count() == 0
       assert Sampler.sent(5) == :ok
       assert Sampler.sample() == :ok
