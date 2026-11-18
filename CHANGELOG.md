@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.14.0] - 2026-11-18
+
+* Added
+  * The socket's websocket upgrade now sends `NHL/<version>` as its `User-Agent`, as firmware downloads already did, so a NervesHub that reads it can record which version of NervesHubLink each device runs. A `User-Agent` already set in the socket headers is left alone, and `NervesHubLink.Configurator.user_agent/0` returns the token for a custom configurator to send alongside its own headers. See [Identifying the library to NervesHub](guides/configuration.md#identifying-the-library-to-nerveshub). (#512)
+
+* Changed
+  * Bumped `slipstream` to 1.3.0, `nimble_options` to 1.2.0, and `mint_web_socket` to 1.0.6.
+
+* Fixed
+  * Public keys NervesHub sends for firmware or archive verification are now ignored unless the device asked for them when it connected, rather than replacing the keys configured on the device. A device that doesn't ask for keys keeps its own and logs a warning when it is sent some. (#510)
+
 ## [2.13.1] - 2026-11-05
 
 * Fixed
