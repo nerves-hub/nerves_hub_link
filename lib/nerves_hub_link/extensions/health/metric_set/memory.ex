@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2026 Josh Kalderimis
+# SPDX-FileCopyrightText: 2025 Josh Kalderimis
 #
 # SPDX-License-Identifier: Apache-2.0
 #
