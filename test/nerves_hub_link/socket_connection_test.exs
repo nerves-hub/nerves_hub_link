@@ -230,8 +230,8 @@ defmodule NervesHubLink.SocketConnectionTest do
     stub(NervesHubLink.ClientMock, :handle_error, fn _ -> :ok end)
 
     # The server holds the upgrade, so the cast below is certainly handled
-    # while connecting; and the reconnect it wrongly schedules is due after
-    # the upgrade has succeeded, which is the window the bug lived in.
+    # while connecting, and a reconnect scheduled by it would fall due after
+    # the upgrade has succeeded.
     port = start_server(upgrade_after_msec: 200)
     socket = start_socket(port, socket: [reconnect_after_msec: [500]])
 
@@ -286,6 +286,48 @@ defmodule NervesHubLink.SocketConnectionTest do
 
     assert_receive {:connection_test, {:server, second}}, 3_000
     assert second != first
+  end
+
+  # A join whose write fails has already reported the connection gone: the
+  # alarm is raised, the timers are cancelled and a reconnect is scheduled.
+  # Nothing after it may announce a connection that is up, or the device
+  # claims to be online for the whole backoff and runs timers over a
+  # connection that is not there.
+  test "a connection a failed join took down is not reported as up" do
+    test_pid = self()
+
+    stub(NervesHubLink.ClientMock, :handle_error, fn reason ->
+      send(test_pid, {:client, {:error, reason}})
+      :ok
+    end)
+
+    stub(NervesHubLink.ClientMock, :connected, fn ->
+      send(test_pid, {:client, :connected})
+      :ok
+    end)
+
+    port = start_server(upgrade_after_msec: 200)
+    socket = start_socket(port, socket: [reconnect_after_msec: [5_000]])
+
+    assert_receive {:connection_test, :upgrade_requested}, 2_000
+
+    # Shutting down only the write side leaves the upgrade response readable,
+    # so the connection completes as usual and the device join is the first
+    # write - the one that fails.
+    :sys.replace_state(socket, fn state ->
+      :ok = :gen_tcp.shutdown(Mint.HTTP.get_socket(state.connection.conn), :write)
+      state
+    end)
+
+    assert_receive {:client, {:error, _reason}}, 2_000
+
+    # A call is answered only once the callback that failed the join has
+    # finished, so anything else that callback reported has arrived by now.
+    state = :sys.get_state(socket)
+
+    refute_received {:client, :connected}
+    assert state.heartbeat_timer == nil
+    refute NervesHubLink.socket_connected?(socket)
   end
 
   # Holds the connection open without answering. `listen_for_one_request/0`

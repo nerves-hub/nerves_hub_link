@@ -286,6 +286,22 @@ The firmware downloader leaves the TLS version to `Mint`, which already offers T
 config :nerves_hub_link, downloader_ssl: [session_tickets: :auto]
 ```
 
+## Bounding the connection
+
+Opening the connection - DNS, TCP, and the TLS handshake - happens inside the socket process, and `Mint` allows it 30 seconds. Until it returns, every call into the socket queues behind it, and a caller waiting the default 5 seconds exits rather than getting an answer. The connect is therefore given 10 seconds, the same budget as the upgrade that follows it, after which the attempt fails and the usual backoff takes over:
+
+```elixir
+config :nerves_hub_link, connect_timeout_msec: 30_000
+```
+
+Setting it to `0` leaves the timeout to `Mint`:
+
+```elixir
+config :nerves_hub_link, connect_timeout_msec: 0
+```
+
+This sets the transport's `:timeout`. Anything given in `:ssl` or in `socket: [http_opts: [transport_opts: [...]]]` takes precedence, so a timeout you configure there is left alone.
+
 ## Bounding the upgrade
 
 A server can accept the TCP connection and then never answer the websocket upgrade request. Nothing below the socket notices, and the heartbeat that would is not running until the upgrade completes, so the device waits. The upgrade is therefore given 10 seconds, after which the connection is closed and the usual reconnect takes over:
@@ -294,7 +310,7 @@ A server can accept the TCP connection and then never answer the websocket upgra
 config :nerves_hub_link, upgrade_timeout_msec: 30_000
 ```
 
-Setting it to `0` waits forever, which is how things behaved before this option existed.
+Setting it to `0` waits forever.
 
 ## Bounding socket writes
 
@@ -306,7 +322,7 @@ Writes are therefore bounded by a 30 second timeout, after which the socket is c
 config :nerves_hub_link, send_timeout_msec: 60_000
 ```
 
-Setting it to `0` leaves writes unbounded, which is how things behaved before this option existed:
+Setting it to `0` leaves writes unbounded:
 
 ```elixir
 config :nerves_hub_link, send_timeout_msec: 0

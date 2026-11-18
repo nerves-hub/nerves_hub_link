@@ -181,8 +181,6 @@ defmodule NervesHubLink.SocketMessagesTest do
       assert Task.await(task) == :ok
       assert_receive {:start_update, %UpdateInfo{}}
 
-      # Applying an update reports itself, and every push has to be asserted or
-      # the socket blocks on it.
       assert_push(@device_topic, "status_update", %{"status" => "received"})
     end
 
@@ -574,6 +572,26 @@ defmodule NervesHubLink.SocketMessagesTest do
     end
   end
 
+  describe "the console when remote IEx is unset" do
+    @describetag socket_config: [remote_iex: nil]
+
+    setup :join_device_topic
+
+    # The config is built straight from application environment with no type
+    # check, so an unset value arrives here as `nil` rather than `false`. It
+    # has to count as off, the way the check that decides whether to join the
+    # console topic counts it, or the opt-out holds against a well-behaved
+    # NervesHub only.
+    test "a console message does not start a shell", %{socket: socket} do
+      server_push(@console_topic, "dn", %{"data" => "ls\r"})
+
+      assert_handled_in_order()
+
+      assert :sys.get_state(socket).iex_pid == nil
+      assert NervesHubLink.socket_connected?(socket)
+    end
+  end
+
   describe "receiving a file over the console" do
     @describetag socket_config: [remote_iex: true]
 
@@ -586,6 +604,30 @@ defmodule NervesHubLink.SocketMessagesTest do
       server_push(@console_topic, "file-data/stop", %{"filename" => filename})
 
       assert_eventually(File.read(Path.join(data_path, filename)) == {:ok, "hello world"})
+    end
+
+    # `Path.join/2` drops a leading separator, so an absolute name lands under
+    # the data path harmlessly. A `..` segment walks out of it, and the handler
+    # deletes the path before writing it.
+    test "a filename that is not a plain name is refused", %{data_path: data_path} do
+      File.mkdir_p!(data_path)
+
+      outside = Path.join(Path.dirname(data_path), "outside.txt")
+      File.write!(outside, "keep me")
+      on_exit(fn -> File.rm_rf!(outside) end)
+
+      for filename <- ["../outside.txt", "nested/notes.txt", "..", ".", ""] do
+        server_push(@console_topic, "file-data/start", %{"filename" => filename})
+        server_push(@console_topic, "file-data", file_chunk(filename, "clobbered"))
+      end
+
+      server_push(@console_topic, "file-data/start", %{})
+
+      assert_handled_in_order()
+
+      assert File.read!(outside) == "keep me"
+      assert File.dir?(data_path)
+      refute File.exists?(Path.join(data_path, "nested"))
     end
 
     test "a console message starts a console session", %{socket: socket} do
@@ -624,9 +666,9 @@ defmodule NervesHubLink.SocketMessagesTest do
       assert Base.decode64!(data) == "hello from the device"
     end
 
-    # The upload is the whole of that process's work, so it used to sit idle
-    # for the life of the firmware once it was done - one leaked process per
-    # file an operator ever sent.
+    # The upload is the whole of that process's work, so one left idle once it
+    # is done would leak a process per file an operator sent, for the life of
+    # the firmware.
     test "the uploader stops once it has finished", %{socket: socket} do
       path = Path.join(System.tmp_dir!(), "upload_#{System.unique_integer([:positive])}.txt")
       File.write!(path, "hello from the device")
@@ -648,8 +690,8 @@ defmodule NervesHubLink.SocketMessagesTest do
       assert Process.alive?(socket)
     end
 
-    # An uploader that crashes used to be reported as an unknown message, and
-    # left `uploader_pid` pointing at a dead process.
+    # A crashed uploader has to be noticed as one, or `uploader_pid` is left
+    # pointing at a dead process.
     test "an uploader that crashes is noticed and forgotten", %{socket: socket} do
       path = Path.join(System.tmp_dir!(), "upload_#{System.unique_integer([:positive])}.txt")
       File.write!(path, "hello from the device")
@@ -752,8 +794,6 @@ defmodule NervesHubLink.SocketMessagesTest do
   end
 
   describe "reporting the network interface" do
-    # The connection is held by the socket itself, so the interface is a plain
-    # read rather than the look into another process's state it used to be.
     test "the interface the connection is using is reported after joining", %{socket: socket} do
       assert_join(@device_topic, _params, :ok)
 
@@ -831,9 +871,9 @@ defmodule NervesHubLink.SocketMessagesTest do
       assert NervesHubLink.socket_connected?(socket)
     end
 
-    # A numeric ref used to match nothing, so the acknowledgement was dropped
-    # and the next heartbeat found this one still outstanding - closing a
-    # perfectly good connection, once per interval, indefinitely.
+    # The connection stores refs as strings, so an unconverted numeric ref
+    # would match nothing: the acknowledgement would be dropped and the next
+    # heartbeat would close a healthy connection, once per interval.
     test "a heartbeat answered with a numeric ref is still acknowledged", %{socket: socket} do
       send(socket, :heartbeat)
 
@@ -955,7 +995,7 @@ defmodule NervesHubLink.SocketMessagesTest do
 
     # Phoenix sends a reply whenever a channel returns `{:reply, ...}`, so any
     # of these pushes can be answered. Only the extensions detach means
-    # anything here, and the rest used to take the socket down.
+    # anything here, and the rest must not take the socket down.
     test "an ok reply is ignored rather than fatal", %{socket: socket} do
       NervesHubLink.send_update_status(socket, :received)
 
@@ -982,11 +1022,9 @@ defmodule NervesHubLink.SocketMessagesTest do
   describe "disconnecting" do
     setup :join_device_topic
 
-    # Nothing can answer a parked request once the connection has gone, and
-    # waiting out the 30s timeout would report it as a timeout rather than as
-    # the disconnect it was.
-    # More than one path can decide the connection has gone, and each used to
-    # schedule its own attempt.
+    # More than one path can decide the connection has gone, and if each
+    # scheduled its own attempt the device would open a connection and drop it
+    # an instant later.
     test "two reconnect requests open one connection, not two", %{socket: socket} do
       NervesHubLink.reconnect(socket)
       NervesHubLink.reconnect(socket)
@@ -995,6 +1033,9 @@ defmodule NervesHubLink.SocketMessagesTest do
       refute_receive {:connection_test, {:server, _}}, 1_500
     end
 
+    # Nothing can answer a parked request once the connection has gone, and
+    # waiting out the 30s timeout would report it as a timeout rather than as
+    # the disconnect it was.
     test "a parked update request is answered rather than left to time out" do
       task = Task.async(fn -> NervesHubLink.check_for_update(Socket) end)
 

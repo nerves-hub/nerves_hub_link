@@ -117,6 +117,44 @@ defmodule NervesHubLink.SocketTest do
       assert opts[:transport_opts][:send_timeout_close] == true
     end
 
+    test "the connect timeout is set" do
+      config = %Config{
+        socket: [url: URI.parse("wss://example.test/socket")],
+        ssl: []
+      }
+
+      assert Socket.mint_opts(config)[:transport_opts][:timeout] == 10_000
+    end
+
+    test "the connect timeout is configurable" do
+      config = %Config{
+        socket: [url: URI.parse("wss://example.test/socket")],
+        connect_timeout_msec: 5_000,
+        ssl: []
+      }
+
+      assert Socket.mint_opts(config)[:transport_opts][:timeout] == 5_000
+    end
+
+    test "a connect timeout of zero leaves the timeout to Mint" do
+      config = %Config{
+        socket: [url: URI.parse("wss://example.test/socket")],
+        connect_timeout_msec: 0,
+        ssl: []
+      }
+
+      refute Keyword.has_key?(Socket.mint_opts(config)[:transport_opts], :timeout)
+    end
+
+    test "ssl options win over the default connect timeout" do
+      config = %Config{
+        socket: [url: URI.parse("wss://example.test/socket")],
+        ssl: [timeout: 1_000]
+      }
+
+      assert Socket.mint_opts(config)[:transport_opts][:timeout] == 1_000
+    end
+
     test "the send timeout is configurable" do
       config = %Config{
         socket: [url: URI.parse("wss://example.test/socket")],
@@ -164,9 +202,23 @@ defmodule NervesHubLink.SocketTest do
       assert opts[:transport_opts][:verify] == :verify_peer
     end
 
-    test "a send timeout of 0 over ws omits transport_opts entirely" do
+    test "a send timeout of 0 over ws leaves the connect timeout" do
       config = %Config{
         socket: [url: URI.parse("ws://example.test/socket")],
+        send_timeout_msec: 0,
+        ssl: [verify: :verify_peer]
+      }
+
+      opts = Socket.mint_opts(config)
+
+      assert opts[:protocols] == [:http1]
+      assert opts[:transport_opts] == [timeout: 10_000]
+    end
+
+    test "both timeouts off over ws omits transport_opts entirely" do
+      config = %Config{
+        socket: [url: URI.parse("ws://example.test/socket")],
+        connect_timeout_msec: 0,
         send_timeout_msec: 0,
         ssl: [verify: :verify_peer]
       }
@@ -232,8 +284,8 @@ defmodule NervesHubLink.SocketTest do
       assert Socket.upgrade_failure({:error, :nxdomain}) == :error
       assert Socket.upgrade_failure({:upgrade_failure, :something}) == :error
 
-      # The shape Slipstream used, which nothing emits any more. Matching it
-      # was why redirects stopped being followed at all.
+      # A nested `{:error, {:upgrade_failure, %{reason: _}}}` is not what
+      # `NervesHubLink.Connection` reports, so it is not taken for one.
       assert Socket.upgrade_failure(
                {:error, {:upgrade_failure, %{reason: %UpgradeFailureError{}}}}
              ) == :error
@@ -276,8 +328,33 @@ defmodule NervesHubLink.SocketTest do
       assert uri.host == "other.test"
     end
 
-    # A redirect with nowhere to redirect to used to raise, taking the socket
-    # process down with it.
+    # The `vsn` names the protocol the serializer was chosen for, and
+    # `URI.merge/2` takes its query from the `Location` whenever that carries a
+    # path. A redirect naming no query of its own would drop it, leaving
+    # Phoenix to read these frames with its default serializer.
+    test "a redirect that carries no query keeps the current one" do
+      current = URI.parse("wss://old.test/socket/websocket?vsn=2.0.0")
+
+      assert {:ok, relative} = Socket.redirect_uri(current, [{"location", "/socket/websocket"}])
+      assert relative.query == "vsn=2.0.0"
+
+      assert {:ok, absolute} =
+               Socket.redirect_uri(current, [{"location", "https://new.test/socket/websocket"}])
+
+      assert absolute.host == "new.test"
+      assert absolute.query == "vsn=2.0.0"
+    end
+
+    test "a redirect that carries its own query keeps that one" do
+      current = URI.parse("wss://old.test/socket/websocket?vsn=2.0.0")
+
+      assert {:ok, uri} =
+               Socket.redirect_uri(current, [{"location", "/socket/websocket?vsn=3.0.0"}])
+
+      assert uri.query == "vsn=3.0.0"
+    end
+
+    # A 3xx with nowhere to redirect to must not crash the socket process.
     test "a redirect without a location is an error rather than a crash" do
       assert Socket.redirect_uri(URI.parse("wss://old.test/socket"), []) == :error
 

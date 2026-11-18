@@ -451,12 +451,7 @@ defmodule NervesHubLink.Connection do
   """
   @spec rejoin_delay(t(), String.t()) :: {non_neg_integer(), t()}
   def rejoin_delay(%__MODULE__{} = connection, topic) do
-    count =
-      case connection.joins do
-        %{^topic => %{rejoin_count: count}} -> count
-        _ -> 0
-      end
-
+    count = rejoin_count(connection, topic)
     delay = Backoff.at(connection.rejoin_after_msec, count)
 
     {delay, update_join(connection, topic, &%{&1 | rejoin_count: count + 1})}

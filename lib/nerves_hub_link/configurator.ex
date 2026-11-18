@@ -36,9 +36,15 @@ defmodule NervesHubLink.Configurator do
     Data structure for holding configuration information provided by the configurator.
     """
 
+    # A map stops being a flat map past 32 keys, which is what the field count
+    # check is about. This one is application configuration: it is built once
+    # at startup and read a field at a time, never rebuilt or merged in a loop,
+    # so the shape it takes costs nothing here.
+    # credo:disable-for-next-line Credo.Check.Warning.StructFieldAmount
     defstruct archive_public_keys: [],
               compress: true,
               connect: true,
+              connect_timeout_msec: 10_000,
               connect_wait_for_network: true,
               data_path: "/data/nerves-hub",
               device_api_host: nil,
@@ -72,6 +78,7 @@ defmodule NervesHubLink.Configurator do
             archive_public_keys: [binary()],
             compress: boolean(),
             connect: boolean(),
+            connect_timeout_msec: non_neg_integer(),
             connect_wait_for_network: boolean(),
             data_path: Path.t(),
             device_api_host: String.t(),
@@ -118,13 +125,6 @@ defmodule NervesHubLink.Configurator do
   end
 
   @spec fetch_configurator :: atom()
-  # `https://host` means the same thing here as `wss://host`, and a device
-  # configured that way should connect with TLS rather than without it. Any
-  # other scheme is left alone for `NervesHubLink.Connection` to refuse.
-  defp websocket_url("https://" <> rest), do: "wss://" <> rest
-  defp websocket_url("http://" <> rest), do: "ws://" <> rest
-  defp websocket_url(url), do: url
-
   def fetch_configurator() do
     cond do
       configurator = Application.get_env(:nerves_hub_link, :configurator) ->
@@ -162,6 +162,13 @@ defmodule NervesHubLink.Configurator do
 
     %{config | socket: socket}
   end
+
+  # `https://host` means the same thing here as `wss://host`, and a device
+  # configured that way should connect with TLS rather than without it. Any
+  # other scheme is left alone for `NervesHubLink.Connection` to refuse.
+  defp websocket_url("https://" <> rest), do: "wss://" <> rest
+  defp websocket_url("http://" <> rest), do: "ws://" <> rest
+  defp websocket_url(url), do: url
 
   defp base_config() do
     base = struct(Config, Application.get_all_env(:nerves_hub_link))

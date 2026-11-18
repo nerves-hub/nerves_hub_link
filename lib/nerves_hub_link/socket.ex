@@ -334,15 +334,22 @@ defmodule NervesHubLink.Socket do
       |> cancel_reconnect()
       |> join(@device_topic, device_join_params)
       |> maybe_join_console()
-      |> schedule_heartbeat()
 
-    Alarms.clear_alarm(NervesHubLink.Disconnected)
+    # A join whose write fails takes the connection down with it, and `join/3`
+    # has already reported that: the alarm is raised, the timers are cancelled
+    # and a reconnect is scheduled. Everything below announces a connection
+    # that is up, so none of it may run. Clearing that alarm and reporting the
+    # device connected would have it claim to be online for the whole backoff,
+    # and the timers would outlive the connection they were started for.
+    if connected?(socket) do
+      Alarms.clear_alarm(NervesHubLink.Disconnected)
 
-    Client.connected()
+      Client.connected()
 
-    socket = schedule_firmware_validation_status_check(socket)
-
-    {:ok, socket}
+      {:ok, socket |> schedule_heartbeat() |> schedule_firmware_validation_status_check()}
+    else
+      {:ok, socket}
+    end
   end
 
   defp handle_join(@device_topic, _reply, socket) do
@@ -681,13 +688,16 @@ defmodule NervesHubLink.Socket do
   ##
   # Console API messages
   #
-  # `remote_iex: false` is the device's answer about whether anyone gets a
-  # shell on it, so it has to hold against whatever answers the socket rather
-  # than against a well-behaved NervesHub. It stops the console topic being
-  # joined, but a server that sends console messages anyway is not stopped by
-  # that, and the handlers below start an IEx shell and write and delete files
-  # under `data_path`.
-  defp handle_message(@console_topic, event, _payload, %State{remote_iex: false} = socket) do
+  # `remote_iex` is the device's answer about whether anyone gets a shell on
+  # it, so it has to hold against whatever answers the socket rather than
+  # against a well-behaved NervesHub. It stops the console topic being joined,
+  # but a server that sends console messages anyway is not stopped by that,
+  # and the handlers below start an IEx shell and write and delete files under
+  # `data_path`. `nil` counts as off here, as it does when deciding whether to
+  # join: the config is built straight from application environment with no
+  # type check, so an unset value reaches this as `nil` rather than `false`.
+  defp handle_message(@console_topic, event, _payload, %State{remote_iex: remote_iex} = socket)
+       when remote_iex in [false, nil] do
     Logger.warning(
       "[#{inspect(__MODULE__)}] Ignoring console message #{inspect(event)}, remote IEx is disabled"
     )
@@ -728,21 +738,31 @@ defmodule NervesHubLink.Socket do
   end
 
   defp handle_message(@console_topic, "file-data/start", params, socket) do
-    :ok = File.mkdir_p!(socket.data_path)
-    path = Path.join(socket.data_path, params["filename"])
-    _ = File.rm_rf!(path)
-    :ok = File.touch!(path)
+    case data_file_path(socket, params["filename"]) do
+      {:ok, path} ->
+        :ok = File.mkdir_p!(socket.data_path)
+        _ = File.rm_rf!(path)
+        :ok = File.touch!(path)
+
+      :error ->
+        :ok
+    end
+
     {:ok, socket}
   end
 
   defp handle_message(@console_topic, "file-data", params, socket) do
-    path = Path.join(socket.data_path, params["filename"])
+    case data_file_path(socket, params["filename"]) do
+      {:ok, path} ->
+        _res =
+          File.open!(path, [:append], fn fd ->
+            chunk = Base.decode64!(params["data"])
+            IO.binwrite(fd, chunk)
+          end)
 
-    _res =
-      File.open!(path, [:append], fn fd ->
-        chunk = Base.decode64!(params["data"])
-        IO.binwrite(fd, chunk)
-      end)
+      :error ->
+        :ok
+    end
 
     {:ok, socket}
   end
@@ -763,6 +783,30 @@ defmodule NervesHubLink.Socket do
     Logger.warning("Unknown message (\"#{topic}:#{event}\") received")
 
     {:ok, socket}
+  end
+
+  # The filename comes from NervesHub, and the two handlers above turn it into
+  # a path they delete and write. `Path.join/2` drops a leading separator, so
+  # an absolute name lands under `data_path` harmlessly, but a `..` segment
+  # walks out of it: `file-data/start` naming `../../etc/hosts` would delete
+  # that file. Only a plain name is accepted, and anything else is refused
+  # rather than trimmed down to one - a name built to escape says nothing
+  # about what it was meant to be.
+  defp data_file_path(socket, filename) do
+    if plain_filename?(filename) do
+      {:ok, Path.join(socket.data_path, filename)}
+    else
+      Logger.warning(
+        "[#{inspect(__MODULE__)}] Ignoring file data for #{inspect(filename)}, not a plain filename"
+      )
+
+      :error
+    end
+  end
+
+  defp plain_filename?(filename) do
+    is_binary(filename) and filename not in ["", ".", ".."] and
+      Path.basename(filename) == filename and not String.contains?(filename, <<0>>)
   end
 
   @impl GenServer
@@ -1047,12 +1091,19 @@ defmodule NervesHubLink.Socket do
   # `Location` is allowed to be relative, so it is merged onto the URL the
   # device just tried. The redirect answers an HTTP request and so names an
   # http(s) scheme, but the next attempt is still a websocket upgrade.
+  #
+  # `URI.merge/2` takes its query from the `Location` whenever that carries a
+  # path, so a bare `/socket/websocket` would drop the `vsn` the serializer was
+  # chosen for and leave Phoenix reading these frames with its default one. A
+  # redirect that names no query of its own keeps the current one.
   @doc false
   @spec redirect_uri(URI.t(), [{binary(), binary()}]) :: {:ok, URI.t()} | :error
   def redirect_uri(%URI{} = current_uri, headers) when is_list(headers) do
     case List.keyfind(headers, "location", 0) do
       {_name, location} when is_binary(location) and location != "" ->
-        {:ok, current_uri |> URI.merge(location) |> websocket_scheme()}
+        uri = current_uri |> URI.merge(location) |> websocket_scheme()
+
+        {:ok, %{uri | query: uri.query || current_uri.query}}
 
       _ ->
         :error
@@ -1168,12 +1219,6 @@ defmodule NervesHubLink.Socket do
     end
   end
 
-  # The delay comes from the connection's own backoff, so repeated failures back
-  # off and a connection that succeeds starts the next one over from the
-  # shortest wait.
-  # Cancelling first, because more than one path can decide the connection has
-  # gone - a failed write and the heartbeat that follows it, say - and two
-  # pending timers mean opening a connection and dropping it an instant later.
   # The delay comes from the connection's own backoff, so repeated failures back
   # off and a connection that succeeds starts the next one over from the
   # shortest wait. A reconnect already due stands: more than one path can decide
@@ -1429,10 +1474,15 @@ defmodule NervesHubLink.Socket do
   def mint_opts(config) do
     ssl_opts = if config.socket[:url].scheme == "wss", do: config.ssl, else: []
 
+    transport_opts =
+      send_timeout_opts(config)
+      |> Keyword.merge(connect_timeout_opts(config))
+      |> Keyword.merge(ssl_opts)
+
     base =
-      case Keyword.merge(send_timeout_opts(config), ssl_opts) do
+      case transport_opts do
         [] -> [protocols: [:http1]]
-        transport_opts -> [protocols: [:http1], transport_opts: transport_opts]
+        opts -> [protocols: [:http1], transport_opts: opts]
       end
 
     merge_http_opts(base, config.socket[:http_opts] || [])
@@ -1450,6 +1500,16 @@ defmodule NervesHubLink.Socket do
 
   defp send_timeout_opts(%{send_timeout_msec: timeout}),
     do: [send_timeout: timeout, send_timeout_close: true]
+
+  # Bounds how long opening the connection - DNS, TCP, and the TLS handshake -
+  # may take. `Mint` allows 30 seconds, and the connect runs in this process,
+  # so until it returns every call into the socket queues behind it and callers
+  # waiting the default 5 seconds exit instead. 10 seconds is what
+  # `upgrade_timeout_msec` allows: the handshake and the upgrade that follows
+  # it get the same budget before the device gives up and backs off.
+  defp connect_timeout_opts(%{connect_timeout_msec: timeout}) when timeout in [0, nil], do: []
+
+  defp connect_timeout_opts(%{connect_timeout_msec: timeout}), do: [timeout: timeout]
 
   # NervesHub distributes signing keys over the socket, but it also supplies the
   # firmware those keys verify. Letting it replace a locally configured key list
