@@ -301,6 +301,7 @@ defmodule NervesHubLink.SocketMessagesTest do
       assert_receive :identified
     end
 
+    @tag socket_config: [params: %{"fwup_public_keys" => "on_connect"}]
     test "firmware public keys sent by the server are used for the next update", %{socket: socket} do
       test_pid = self()
 
@@ -315,6 +316,7 @@ defmodule NervesHubLink.SocketMessagesTest do
       assert_receive {:start_update, ["key from the server"]}
     end
 
+    @tag socket_config: [params: %{"archive_public_keys" => "on_connect"}]
     test "archive public keys sent by the server replace the configured ones", %{socket: socket} do
       push(socket, @device_topic, "archive_public_keys", %{"keys" => ["archive key from server"]})
 
@@ -326,6 +328,7 @@ defmodule NervesHubLink.SocketMessagesTest do
              ]
     end
 
+    @tag socket_config: [params: %{"fwup_public_keys" => "on_connect"}]
     test "an empty key list from the server does not clear the configured firmware keys", %{
       socket: socket
     } do
@@ -338,6 +341,7 @@ defmodule NervesHubLink.SocketMessagesTest do
       assert :sys.get_state(socket).assigns.config.fwup_public_keys == ["configured fwup key"]
     end
 
+    @tag socket_config: [params: %{"archive_public_keys" => "on_connect"}]
     test "an empty key list from the server does not clear the configured archive keys", %{
       socket: socket
     } do
@@ -350,12 +354,39 @@ defmodule NervesHubLink.SocketMessagesTest do
              ]
     end
 
+    @tag socket_config: [params: %{"fwup_public_keys" => "on_connect"}]
     test "keys from the server that are not binaries are discarded", %{socket: socket} do
       push(socket, @device_topic, "fwup_public_keys", %{"keys" => [nil, 42]})
 
       assert NervesHubLink.socket_connected?(socket)
 
       assert :sys.get_state(socket).assigns.config.fwup_public_keys == ["configured fwup key"]
+    end
+
+    test "firmware public keys the device did not request are ignored", %{socket: socket} do
+      # NervesHub only sends keys a device asks for on join. Keys it didn't ask
+      # for didn't come from NervesHub, so they must not replace configured ones.
+      test_pid = self()
+
+      expect(UpdaterMock, :start_update, fn _update_info, _fwup_config, fwup_public_keys ->
+        send(test_pid, {:start_update, fwup_public_keys})
+        {:ok, spawn(fn -> Process.sleep(:infinity) end)}
+      end)
+
+      push(socket, @device_topic, "fwup_public_keys", %{"keys" => ["unrequested key"]})
+      push(socket, @device_topic, "update", update_payload())
+
+      assert_receive {:start_update, ["configured fwup key"]}
+    end
+
+    test "archive public keys the device did not request are ignored", %{socket: socket} do
+      push(socket, @device_topic, "archive_public_keys", %{"keys" => ["unrequested key"]})
+
+      assert NervesHubLink.socket_connected?(socket)
+
+      assert :sys.get_state(socket).assigns.config.archive_public_keys == [
+               "configured archive key"
+             ]
     end
 
     test "an extensions:get message asks to join the extensions topic", %{socket: socket} do

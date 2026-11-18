@@ -50,6 +50,7 @@
     "rollouts",
     "strftime",
     "subkey",
+    "unrequested",
     "vcgencmd",
     "whenwhere"
   ]

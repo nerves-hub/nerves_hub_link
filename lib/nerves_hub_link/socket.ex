@@ -775,22 +775,27 @@ defmodule NervesHubLink.Socket do
     :alarm_handler.set_alarm({NervesHubLink.Disconnected, [reason: reason]})
     channel_config = %{socket.channel_config | reconnect_after_msec: Client.reconnect_backoff()}
 
+    # A connection signed with a shared secret is signed again for every attempt,
+    # whichever configurator built it.
     channel_config =
-      case Configurator.fetch_configurator() do
-        SharedSecret ->
-          # TODO: I don't know when reconnect/1 actually gets validated. It could be that
-          # the signature we create here will be too old before the headers are used
-          # in a connection attempt again.
-          #
-          # When the failed upgrade response carried a `Date` header, sign
-          # with that time instead of the device clock — recovers devices
-          # whose RTC/NTP isn't trustworthy yet.
-          hint = SharedSecret.server_time_hint(reason)
-          headers = SharedSecret.headers(socket.assigns.config, hint)
-          %{channel_config | headers: headers}
+      if List.keymember?(channel_config.headers, "x-nh-signature", 0) do
+        # TODO: I don't know when reconnect/1 actually gets validated. It could be that
+        # the signature we create here will be too old before the headers are used
+        # in a connection attempt again.
+        #
+        # When the failed upgrade response carried a `Date` header, sign
+        # with that time instead of the device clock — recovers devices
+        # whose RTC/NTP isn't trustworthy yet.
+        hint = SharedSecret.server_time_hint(reason)
 
-        _ ->
-          channel_config
+        headers =
+          SharedSecret.headers(socket.assigns.config, hint)
+          |> Stream.concat(channel_config.headers)
+          |> Enum.uniq_by(&elem(&1, 0))
+
+        %{channel_config | headers: headers}
+      else
+        channel_config
       end
 
     %{socket | channel_config: channel_config}
@@ -972,6 +977,13 @@ defmodule NervesHubLink.Socket do
     existing_keys = Map.fetch!(config, field)
 
     cond do
+      keys_not_requested?(config, field) ->
+        Logger.warning(
+          "[NervesHubLink] Ignoring public keys for #{label} verification that were not requested : keeping the #{length(existing_keys)} locally configured key(s)"
+        )
+
+        config
+
       received_keys != [] ->
         Logger.info(
           "[NervesHubLink] Public keys for #{label} verification updated - #{length(received_keys)} key(s) received"
@@ -993,6 +1005,12 @@ defmodule NervesHubLink.Socket do
 
         config
     end
+  end
+
+  # The configurator asks for keys by putting "on_connect" in the join params
+  # under the field's name. Without it the device didn't ask for keys.
+  defp keys_not_requested?(config, field) do
+    config.params[Atom.to_string(field)] != "on_connect"
   end
 
   # Shallow-merge user-supplied opts on top of the base, but for :transport_opts
