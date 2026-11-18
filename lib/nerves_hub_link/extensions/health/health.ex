@@ -9,10 +9,15 @@ defmodule NervesHubLink.Extensions.Health do
   @moduledoc """
   The Health Extension.
 
-  Provides metrics, metadata and alarms to allow building an understanding of
+  Provides metrics, alarms and checks to allow building an understanding of
   the operational state of a device. The device's "health". This information
   is reported over the extensions mechanism to NervesHub for display, alerting
   and more.
+
+  Metadata is no longer part of a report. It describes what a device is rather
+  than how it is doing, and NervesHub holds it against the connection, so it is
+  sent once per connection on the device channel instead. See
+  `c:NervesHubLink.Client.metadata/0`.
 
   While `NervesHubLink.Extensions.Alarms` is attached, alarms are sent there as
   they happen and left out of health reports.
@@ -120,7 +125,6 @@ defmodule NervesHubLink.Extensions.Health do
 
       DeviceStatus.new(
         timestamp: report.timestamp(),
-        metadata: report.metadata(),
         alarms: report.alarms(),
         metrics: report.metrics(),
         checks: report.checks()
@@ -143,7 +147,6 @@ defmodule NervesHubLink.Extensions.Health do
 
       DeviceStatus.new(
         timestamp: DateTime.utc_now(),
-        metadata: %{},
         alarms: %{to_string(NervesHubLink.Extensions.Health.CheckFailed) => reason},
         metrics: %{},
         checks: %{}

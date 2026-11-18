@@ -12,7 +12,6 @@ defmodule NervesHubLink.Extensions.Health.DeviceStatusTest do
       status =
         DeviceStatus.new(
           timestamp: ~U[2026-08-12 01:02:03Z],
-          metadata: %{"placement" => "the shed"},
           alarms: %{"SomeAlarm" => "[]"},
           metrics: %{"cpu_usage_percent" => 12.5},
           checks: %{"cattery" => %{pass: true}},
@@ -20,7 +19,6 @@ defmodule NervesHubLink.Extensions.Health.DeviceStatusTest do
         )
 
       assert status.timestamp == ~U[2026-08-12 01:02:03Z]
-      assert status.metadata == %{"placement" => "the shed"}
       assert status.alarms == %{"SomeAlarm" => "[]"}
       assert status.metrics == %{"cpu_usage_percent" => 12.5}
       assert status.checks == %{"cattery" => %{pass: true}}
@@ -31,7 +29,6 @@ defmodule NervesHubLink.Extensions.Health.DeviceStatusTest do
       status = DeviceStatus.new([])
 
       assert %DateTime{} = status.timestamp
-      assert status.metadata == %{}
       assert status.alarms == %{}
       assert status.metrics == %{}
       assert status.checks == %{}
@@ -44,7 +41,6 @@ defmodule NervesHubLink.Extensions.Health.DeviceStatusTest do
       status =
         DeviceStatus.new(
           timestamp: ~U[2026-08-12 01:02:03Z],
-          metadata: %{},
           alarms: %{},
           metrics: %{},
           checks: %{}
@@ -73,7 +69,6 @@ defmodule NervesHubLink.Extensions.Health.DeviceStatusTest do
       status =
         DeviceStatus.new(
           timestamp: ~U[2026-08-12 01:02:03Z],
-          metadata: %{"placement" => "the shed"},
           alarms: %{"SomeAlarm" => "[]"},
           metrics: %{"cpu_usage_percent" => 12.5},
           checks: %{"cattery" => %{"pass" => true}},
@@ -82,7 +77,6 @@ defmodule NervesHubLink.Extensions.Health.DeviceStatusTest do
 
       decoded = status |> Msgpax.pack!() |> Msgpax.unpack!()
 
-      assert decoded["metadata"] == %{"placement" => "the shed"}
       assert decoded["alarms"] == %{"SomeAlarm" => "[]"}
       assert decoded["metrics"] == %{"cpu_usage_percent" => 12.5}
       assert decoded["checks"] == %{"cattery" => %{"pass" => true}}

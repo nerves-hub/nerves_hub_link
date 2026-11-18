@@ -15,7 +15,7 @@ defmodule NervesHubLink.Extensions.Health.DeviceStatus do
     @derive Jason.Encoder
   end
 
-  defstruct [:timestamp, :metadata, :alarms, :metrics, :checks, :connectivity]
+  defstruct [:timestamp, :alarms, :metrics, :checks, :connectivity]
 
   @type alarm_id() :: String.t()
   @type alarm_description() :: String.t()
@@ -26,7 +26,6 @@ defmodule NervesHubLink.Extensions.Health.DeviceStatus do
 
   @type t() :: %__MODULE__{
           timestamp: DateTime.t(),
-          metadata: %{String.t() => String.t()},
           alarms: %{alarm_id() => alarm_description()},
           metrics: %{String.t() => number()},
           checks: %{String.t() => %{pass: boolean(), note: String.t()}},
@@ -48,7 +47,6 @@ defmodule NervesHubLink.Extensions.Health.DeviceStatus do
   def new(kv) do
     %__MODULE__{
       timestamp: kv[:timestamp] || DateTime.utc_now(),
-      metadata: kv[:metadata] || %{},
       alarms: kv[:alarms] || %{},
       metrics: kv[:metrics] || %{},
       checks: kv[:checks] || %{},

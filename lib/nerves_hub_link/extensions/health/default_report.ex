@@ -8,7 +8,7 @@
 defmodule NervesHubLink.Extensions.Health.DefaultReport do
   @moduledoc """
   A default health report implementation with support for easily adding
-  new metadata, metrics and such via config.
+  new metrics, checks and such via config.
   """
   @behaviour NervesHubLink.Extensions.Health.Report
 
@@ -24,14 +24,6 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
   @impl Report
   def timestamp() do
     DateTime.utc_now()
-  end
-
-  @impl Report
-  def metadata() do
-    # A lot of typical metadata is included in the join
-    # we can skip that here
-    # NervesHub is responsible for joining that into the stored data
-    metadata_from_config()
   end
 
   @doc """
@@ -100,14 +92,6 @@ defmodule NervesHubLink.Extensions.Health.DefaultReport do
   defp get_health_config(key, default) do
     config = Application.get_env(:nerves_hub_link, :health, [])
     Keyword.get(config, key, default)
-  end
-
-  defp metadata_from_config() do
-    metadata = get_health_config(:metadata, %{})
-
-    for {key, val_or_fun} <- metadata, into: %{} do
-      {normalize_key(key), vof(val_or_fun)}
-    end
   end
 
   defp metrics_from_config() do

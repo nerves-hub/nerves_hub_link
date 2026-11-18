@@ -45,6 +45,7 @@ defmodule NervesHubLink.SocketMessagesTest do
 
     # Optional callbacks aren't covered by ClientStub
     stub(ClientMock, :connected, fn -> :ok end)
+    stub(ClientMock, :metadata, fn -> %{} end)
     stub(ClientMock, :reconnect_backoff, fn -> [1_000] end)
     stub(ClientMock, :firmware_validated?, fn -> true end)
     stub(ClientMock, :firmware_auto_revert_detected?, fn -> false end)
@@ -131,6 +132,40 @@ defmodule NervesHubLink.SocketMessagesTest do
 
       assert Task.await(task) == {:error, :not_permitted}
       assert Socket.update_mode(socket) == :automatic
+    end
+  end
+
+  describe "device metadata" do
+    test "is sent once the device channel is joined", %{socket: _socket} do
+      stub(ClientMock, :metadata, fn -> %{"placement" => "the shed"} end)
+
+      join_device_topic()
+
+      assert_push(@device_topic, "metadata", %{metadata: %{"placement" => "the shed"}})
+    end
+
+    test "is collected again, and sent again, when asked", %{socket: socket} do
+      stub(ClientMock, :metadata, fn -> %{"placement" => "the shed"} end)
+
+      join_device_topic()
+
+      assert_push(@device_topic, "metadata", %{metadata: %{"placement" => "the shed"}})
+
+      stub(ClientMock, :metadata, fn -> %{"placement" => "the barn"} end)
+
+      assert NervesHubLink.send_metadata(socket) == :ok
+
+      assert_push(@device_topic, "metadata", %{metadata: %{"placement" => "the barn"}})
+    end
+
+    test "is not sent at all by a device that has none", %{socket: socket} do
+      join_device_topic()
+
+      # NervesHub merges what it is given, so an empty map would only cost a
+      # message. The call is answered after the join has been handled, and so
+      # after any metadata would have been pushed.
+      assert NervesHubLink.connected?(socket)
+      refute_push(@device_topic, "metadata", _payload)
     end
   end
 
@@ -732,7 +767,9 @@ defmodule NervesHubLink.SocketMessagesTest do
   end
 
   # A topic has to be joined before the client will push to it.
-  defp join_device_topic(%{socket: _socket}) do
+  defp join_device_topic(%{socket: _socket}), do: join_device_topic()
+
+  defp join_device_topic() do
     assert_join(@device_topic, _params, :ok)
     answer_network_interface_probe()
     :ok

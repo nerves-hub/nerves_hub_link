@@ -10,9 +10,6 @@ defmodule NervesHubLink.Extensions.HealthTest.StubReport do
   def timestamp(), do: ~U[2026-01-01 00:00:00Z]
 
   @impl NervesHubLink.Extensions.Health.Report
-  def metadata(), do: %{"placement" => "the shed"}
-
-  @impl NervesHubLink.Extensions.Health.Report
   def alarms(), do: %{"SomeAlarm" => "[]"}
 
   @impl NervesHubLink.Extensions.Health.Report
@@ -31,9 +28,6 @@ defmodule NervesHubLink.Extensions.HealthTest.BrokenReport do
 
   @impl NervesHubLink.Extensions.Health.Report
   def timestamp(), do: raise("the sensor is on fire")
-
-  @impl NervesHubLink.Extensions.Health.Report
-  def metadata(), do: %{}
 
   @impl NervesHubLink.Extensions.Health.Report
   def alarms(), do: %{}
@@ -91,7 +85,6 @@ defmodule NervesHubLink.Extensions.HealthTest do
       status = Health.check_health(StubReport)
 
       assert status.timestamp == ~U[2026-01-01 00:00:00Z]
-      assert status.metadata == %{"placement" => "the shed"}
       assert status.alarms == %{"SomeAlarm" => "[]"}
       assert status.metrics == %{"cat_count" => 3}
       assert status.checks == %{"cattery" => %{pass: true}}
@@ -156,19 +149,7 @@ defmodule NervesHubLink.Extensions.HealthTest do
     end
   end
 
-  describe "DefaultReport metadata and checks" do
-    test "metadata is read from the config" do
-      put_health_config(metadata: %{"placement" => "the shed"})
-
-      assert DefaultReport.metadata() == %{"placement" => "the shed"}
-    end
-
-    test "metadata can be produced by an MFA" do
-      put_health_config(metadata: %{"placement" => {String, :upcase, ["the shed"]}})
-
-      assert DefaultReport.metadata() == %{"placement" => "THE SHED"}
-    end
-
+  describe "DefaultReport checks" do
     test "checks are read from the config" do
       put_health_config(checks: %{"cattery" => %{pass: true}})
 

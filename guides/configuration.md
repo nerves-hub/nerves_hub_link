@@ -203,6 +203,45 @@ defmodule MyApp.NervesHubLinkClient do
 end
 ```
 
+## Reporting device metadata
+
+Metadata says what a device is rather than how it is doing: where it was installed, which customer it belongs to, the revision of the board under it. NervesHub holds it against the connection and shows it on the device's page.
+
+Implement `c:NervesHubLink.Client.metadata/0` in your client:
+
+```elixir
+defmodule MyApp.NervesHubLinkClient do
+  use NervesHubLink.Client
+
+  @impl NervesHubLink.Client
+  def metadata() do
+    %{
+      "placement" => CatCounter.venue(),
+      "board_revision" => CatCounter.Hardware.revision()
+    }
+  end
+end
+```
+
+It is called when the device joins, and again on every reconnect, since a connection starts with no metadata against it. The callback runs on the socket process, so anything slow to work out belongs in your application, with the callback reading the answer.
+
+When metadata changes while the device is connected - an installer naming the room it sits in, say - send it again:
+
+```elixir
+NervesHubLink.send_metadata()
+```
+
+Without a callback, metadata is read from the application environment, where each value is either a term or an `{module, function, args}` tuple called when the metadata is collected:
+
+```elixir
+config :nerves_hub_link,
+  metadata: %{
+    "placement" => {CatCounter, :venue, []}
+  }
+```
+
+Metadata configured under `health: [metadata: ...]`, where it lived while the Health extension reported it, is still read from there when neither of the above is in place.
+
 ## Enabling remote IEx access
 
 It's possible to remotely log into your device via the NervesHub web interface. This feature is disabled by default. To enable, add the following to your `config.exs`:

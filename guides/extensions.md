@@ -7,7 +7,7 @@ There are seven extensions currently:
 - [**Alarms**](#alarms) sends the device's alarms to NervesHub as they are raised and cleared.
 - [**Error Reports**](#error-reports) sends the device's exceptions and crashes to NervesHub, where they are grouped into issues you can resolve.
 - [**Geo**](#geo) provides hooks to send a device's GeoIP information.
-- [**Health**](#health) reports device metrics, alarms, metadata and similar.
+- [**Health**](#health) reports device metrics, alarms, checks and similar.
 - [**Local Shell**](#local-shell) gives NervesHub the ability to expose an interactive shell in the UI.
 - [**Logging**](#logging) sends the device's log lines to NervesHub, where they are stored and searchable.
 - [**Network Identity**](#network-identity) reports the device's identity on networks NervesHub doesn't run, such as iroh or NetBird.
@@ -168,7 +168,7 @@ Please see `NervesHubLink.Extensions.Geo.Resolver` for more information.
 
 ## Health
 
-You can add your own metrics, metadata and alarms.
+You can add your own metrics, checks and alarms.
 
 The default set of metrics used by the `Health.DefaultReport` are:
 
@@ -221,20 +221,7 @@ config :nerves_hub_link,
   ]
 ```
 
-If you want to add custom metadata to the default health report, you can specify it with:
-
-```
-config :nerves_hub_link,
-  health: [
-    # metadata is added with a key and MFA
-    # the function should return a string
-    metadata: %{
-      "placement" => {CatCounter, :venue, []}
-    }
-  ]
-```
-
-Or you can implement a completely custom reporting module by implementing `NervesHubLink.Extensions.Health.Report` and configuring it:
+You can also implement a completely custom reporting module by implementing `NervesHubLink.Extensions.Health.Report` and configuring it:
 
 ```
 config :nerves_hub_link,
@@ -242,6 +229,8 @@ config :nerves_hub_link,
     report: CatCounter.MyHealthReport
   ]
 ```
+
+Health reports no longer carry metadata. Metadata says what a device is rather than how it is doing, and NervesHub holds it against the connection, so it is sent once per connection on the device channel instead - see [Reporting device metadata](configuration.md#reporting-device-metadata).
 
 The `Health.DefaultReport` also sends the current system alarms to the connected NervesHub platform.
 
