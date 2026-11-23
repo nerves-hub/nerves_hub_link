@@ -790,8 +790,7 @@ defmodule NervesHubLink.SocketMessagesTest do
       assert Task.await(task) == :ok
       assert asleep?(socket)
 
-      Process.sleep(200)
-      refute asleep?(socket)
+      assert eventually?(fn -> not asleep?(socket) end)
     end
 
     test "a sleep longer than a timer can wait for is still sent whole", %{socket: socket} do
@@ -814,8 +813,8 @@ defmodule NervesHubLink.SocketMessagesTest do
       assert_disconnect()
       assert Task.await(task) == :ok
 
-      Process.sleep(50)
       assert asleep?(socket)
+      assert :sys.get_state(socket).assigns.wake_timer == nil
     end
 
     test "options it can't send are refused before anything is sent", %{socket: socket} do
@@ -969,6 +968,18 @@ defmodule NervesHubLink.SocketMessagesTest do
   # Under `Slipstream.SocketTest` a reconnect opens nothing, so whether the
   # client still means to stay disconnected is only visible in its state.
   defp asleep?(socket), do: :sys.get_state(socket).assigns.asleep
+
+  defp eventually?(fun, timeout \\ 1_000)
+  defp eventually?(fun, timeout) when timeout <= 0, do: fun.()
+
+  defp eventually?(fun, timeout) do
+    if fun.() do
+      true
+    else
+      Process.sleep(10)
+      eventually?(fun, timeout - 10)
+    end
+  end
 
   defp alarm_set?(alarm_id) do
     Enum.any?(NervesHubLink.Alarms.get_alarms(), &(elem(&1, 0) == alarm_id))

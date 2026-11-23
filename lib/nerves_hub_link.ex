@@ -110,7 +110,8 @@ defmodule NervesHubLink do
   NervesHub shows a device that said so as asleep, with when it is due back,
   rather than as offline, and leaves the sleep out of its disconnect counts.
   Call this just before the device sleeps. It returns once the message is
-  written and the connection closed, so the device can sleep straight after.
+  written and the connection closed, or after five seconds if the close is
+  slow, so the device can sleep straight after.
   See the [Devices That Sleep guide](device_sleep.md).
 
       NervesHubLink.going_to_sleep(mode: :deep, duration_ms: :timer.minutes(5))
@@ -135,7 +136,8 @@ defmodule NervesHubLink do
   and the connection still closes.
 
   Returns `{:error, :disconnected}` when the device channel isn't joined,
-  leaving the connection as it was.
+  leaving the connection as it was. Raises `ArgumentError` on an unknown
+  option, a bad `:mode`, or a `:duration_ms` that isn't a positive integer.
   """
   @spec going_to_sleep(GenServer.server(), [sleep_option()]) :: :ok | {:error, term()}
   def going_to_sleep(server \\ Socket, opts) when is_list(opts) do
