@@ -49,6 +49,15 @@ defmodule NervesHubLink.Socket do
 
   @max_redirects 2
 
+  # How long to wait for the connection to close once a device has said it is
+  # going to sleep, and for the whole call: the push, the close, and a margin.
+  @sleep_close_timeout :timer.seconds(5)
+  @sleep_call_timeout :timer.seconds(15)
+
+  # The longest delay `Process.send_after/3` takes, about 49 days. A device
+  # can say it will sleep for longer than that.
+  @max_timer_ms 4_294_967_295
+
   @spec start_link(Configurator.Config.t(), GenServer.options()) :: GenServer.on_start()
   def start_link(config, opts \\ []) do
     opts = Keyword.put_new(opts, :name, __MODULE__)
@@ -157,6 +166,18 @@ defmodule NervesHubLink.Socket do
     GenServer.call(server, {:set_update_mode, mode}, @update_request_call_timeout)
   end
 
+  @doc """
+  Tell NervesHub this device is about to sleep, then close the connection.
+
+  The connection stays closed until `reconnect!/1`, or until `duration_ms` has
+  passed when one was given.
+  """
+  @spec going_to_sleep(GenServer.server(), :deep | :light, pos_integer() | nil) ::
+          :ok | {:error, term()}
+  def going_to_sleep(server \\ __MODULE__, mode, duration_ms) do
+    GenServer.call(server, {:going_to_sleep, mode, duration_ms}, @sleep_call_timeout)
+  end
+
   @spec push_extensions_message(
           GenServer.server(),
           event :: String.t(),
@@ -189,6 +210,8 @@ defmodule NervesHubLink.Socket do
       |> assign(update_mode: nil)
       |> assign(managed_updates_allowed: false)
       |> assign(pending_update_requests: %{})
+      |> assign(asleep: false)
+      |> assign(wake_timer: nil)
 
     if config.connect_wait_for_network do
       schedule_network_availability_check()
@@ -323,6 +346,40 @@ defmodule NervesHubLink.Socket do
     start_update_request(socket, :set_update_mode, from, "set_update_mode", %{mode: mode})
   end
 
+  def handle_call({:going_to_sleep, mode, duration_ms}, _from, socket) do
+    payload = %{"mode" => Atom.to_string(mode), "duration_ms" => duration_ms}
+
+    case push(socket, @device_topic, "sleeping", payload) do
+      {:ok, _ref} ->
+        Logger.info("[NervesHubLink] going to sleep (#{mode}), closing the connection")
+
+        socket =
+          socket
+          |> assign(asleep: true)
+          |> assign(wake_timer: schedule_wake(duration_ms))
+          |> disconnect()
+
+        # A push returns once it is written to the connection, and the close
+        # is queued behind it, so by the time the close is through the message
+        # has gone. A close that takes longer still reaches handle_disconnect/2,
+        # which leaves a sleeping device disconnected.
+        case await_disconnect(socket, @sleep_close_timeout) do
+          {:ok, socket} ->
+            Alarms.set_alarm({NervesHubLink.Disconnected, [reason: :asleep]})
+            {:reply, :ok, socket}
+
+          {:error, :timeout} ->
+            {:reply, :ok, socket}
+        end
+
+      {:error, :not_joined} ->
+        {:reply, {:error, :disconnected}, socket}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, socket}
+    end
+  end
+
   def handle_call({:push, topic, event, payload}, _from, socket) do
     {:reply, push(socket, topic, event, payload), socket}
   end
@@ -384,6 +441,10 @@ defmodule NervesHubLink.Socket do
   end
 
   @impl Slipstream
+  def handle_cast(:reconnect, %{assigns: %{asleep: true}} = socket) do
+    {:noreply, wake(socket)}
+  end
+
   def handle_cast(:reconnect, socket) do
     # See handle_disconnect/2 for the reconnect call once the connection is closed.
     {:noreply, disconnect(socket)}
@@ -630,6 +691,16 @@ defmodule NervesHubLink.Socket do
     end
   end
 
+  # The fallback for a device that slept for as long as it said and nobody
+  # called reconnect!/1 when it woke.
+  def handle_info(:wake, %{assigns: %{asleep: true}} = socket) do
+    {:noreply, wake(socket)}
+  end
+
+  def handle_info(:wake, socket) do
+    {:noreply, socket}
+  end
+
   def handle_info({:update_request_timeout, kind}, socket) do
     {:noreply, resolve_update_request(socket, kind, {:error, :timeout})}
   end
@@ -770,9 +841,22 @@ defmodule NervesHubLink.Socket do
   end
 
   @impl Slipstream
+  def handle_disconnect(_reason, %{assigns: %{asleep: true}} = socket) do
+    # Closed on purpose, and reopened when the device wakes.
+    Alarms.set_alarm({NervesHubLink.Disconnected, [reason: :asleep]})
+    {:ok, socket}
+  end
+
   def handle_disconnect(reason, socket) do
     _ = Client.handle_error(reason)
     :alarm_handler.set_alarm({NervesHubLink.Disconnected, [reason: reason]})
+
+    socket
+    |> prepare_reconnect(reason)
+    |> handle_redirect(reason)
+  end
+
+  defp prepare_reconnect(socket, reason) do
     channel_config = %{socket.channel_config | reconnect_after_msec: Client.reconnect_backoff()}
 
     # A connection signed with a shared secret is signed again for every attempt,
@@ -799,8 +883,33 @@ defmodule NervesHubLink.Socket do
       end
 
     %{socket | channel_config: channel_config}
-    |> handle_redirect(reason)
   end
+
+  defp wake(socket) do
+    Logger.info("[NervesHubLink] awake, reconnecting")
+    maybe_cancel_timer(socket.assigns.wake_timer)
+
+    socket =
+      socket
+      |> assign(asleep: false)
+      |> assign(wake_timer: nil)
+      |> prepare_reconnect(:awake)
+
+    case reconnect(socket) do
+      {:ok, socket} ->
+        socket
+
+      # The close the device asked for before sleeping hasn't come through yet.
+      # Now that it is awake, handle_disconnect/2 reconnects when it does.
+      {:error, _reason} ->
+        socket
+    end
+  end
+
+  defp schedule_wake(nil), do: nil
+
+  defp schedule_wake(duration_ms),
+    do: Process.send_after(self(), :wake, min(duration_ms, @max_timer_ms))
 
   defp handle_redirect(
          %{assigns: %{redirect_count: redirect_count}} = socket,
