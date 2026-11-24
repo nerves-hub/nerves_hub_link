@@ -39,6 +39,7 @@ defmodule NervesHubLink.Supervisor do
   alias NervesHubLink.ArchiveManager
   alias NervesHubLink.Configurator
   alias NervesHubLink.Extensions
+  alias NervesHubLink.Extensions.Components
   alias NervesHubLink.Extensions.ErrorReports
   alias NervesHubLink.Extensions.Logging
   alias NervesHubLink.ExtensionsSupervisor
@@ -77,6 +78,9 @@ defmodule NervesHubLink.Supervisor do
         # extension: a crash during boot is the one worth having, and it is
         # long gone by the time NervesHub decides it wants error reports.
         error_report_collector(),
+        # And again: an application describes its components when it finds
+        # them, usually at boot, and NervesHub asks for them later.
+        components_store(),
         {UpdateManager, {fwup_config, config.updater}},
         {ArchiveManager, config},
         {Socket, config},
@@ -93,6 +97,14 @@ defmodule NervesHubLink.Supervisor do
   defp log_collector() do
     if Logging.Batched in Extensions.configured_modules() do
       [{Logging.Collector, level: Logging.Config.level(), max_lines: Logging.Config.max_lines()}]
+    else
+      []
+    end
+  end
+
+  defp components_store() do
+    if Components in Extensions.configured_modules() do
+      [{Components.Store, max_readings: Components.Config.max_readings()}]
     else
       []
     end

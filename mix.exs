@@ -87,6 +87,9 @@ defmodule NervesHubLink.MixProject do
         ],
         Extensions: [
           NervesHubLink.Extensions,
+          NervesHubLink.Extensions.Components,
+          NervesHubLink.Extensions.Components.Component,
+          NervesHubLink.Extensions.Components.Refresher,
           NervesHubLink.Extensions.NetworkIdentity,
           NervesHubLink.Extensions.NetworkIdentity.Provider,
           NervesHubLink.Extensions.Geo,
