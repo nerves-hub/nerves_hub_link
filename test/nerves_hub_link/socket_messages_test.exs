@@ -583,6 +583,59 @@ defmodule NervesHubLink.SocketMessagesTest do
     end
   end
 
+  describe "saying how a file from the console is going" do
+    @describetag socket_config: [remote_iex: true]
+
+    setup [:join_console_topic, :start_console]
+
+    test "says how saving it goes when NervesHub asks", %{socket: socket, data_path: data_path} do
+      filename = "notes.txt"
+
+      push(socket, @console_topic, "file-data/start", %{"filename" => filename, "ack" => true})
+      push(socket, @console_topic, "file-data", file_chunk(filename, "hello ", 0))
+      assert_push(@console_topic, "file-data/ack", %{filename: ^filename, chunk: 0, bytes: 6})
+
+      push(socket, @console_topic, "file-data", file_chunk(filename, "world", 1))
+      assert_push(@console_topic, "file-data/ack", %{filename: ^filename, chunk: 1, bytes: 11})
+
+      push(socket, @console_topic, "file-data/stop", %{"filename" => filename})
+      assert_push(@console_topic, "file-data/saved", %{filename: ^filename, bytes: 11})
+
+      assert File.read!(Path.join(data_path, filename)) == "hello world"
+    end
+
+    test "says nothing when NervesHub doesn't ask", %{socket: socket} do
+      filename = "notes.txt"
+
+      push(socket, @console_topic, "file-data/start", %{"filename" => filename})
+      push(socket, @console_topic, "file-data", file_chunk(filename, "hello"))
+      push(socket, @console_topic, "file-data/stop", %{"filename" => filename})
+
+      assert NervesHubLink.socket_connected?(socket)
+
+      refute_push(@console_topic, "file-data/ack", _payload)
+      refute_push(@console_topic, "file-data/saved", _payload)
+    end
+
+    test "reports a file it can't write, once, and keeps the console", %{socket: socket} do
+      # The data path has no `missing` directory, so the file can't be created.
+      filename = "missing/notes.txt"
+
+      push(socket, @console_topic, "file-data/start", %{"filename" => filename, "ack" => true})
+      assert_push(@console_topic, "file-data/error", %{filename: ^filename, reason: reason})
+      assert reason =~ "no such file"
+
+      push(socket, @console_topic, "file-data", file_chunk(filename, "hello", 0))
+      push(socket, @console_topic, "file-data/stop", %{"filename" => filename})
+
+      assert NervesHubLink.socket_connected?(socket)
+
+      refute_push(@console_topic, "file-data/ack", _payload)
+      refute_push(@console_topic, "file-data/saved", _payload)
+      refute_push(@console_topic, "file-data/error", _payload)
+    end
+  end
+
   describe "sending a file to the console" do
     @describetag socket_config: [remote_iex: true]
 
@@ -743,6 +796,21 @@ defmodule NervesHubLink.SocketMessagesTest do
     :ok
   end
 
+  # Any console message starts IEx, whose banner and prompt are pushed up. A
+  # push blocks until it's asserted, so they're taken here, before the test
+  # asserts on its own pushes.
+  defp start_console(%{socket: socket}) do
+    push(socket, @console_topic, "window_size", %{"height" => 24, "width" => 80})
+    take_console_output()
+  end
+
+  defp take_console_output() do
+    assert_push(@console_topic, "up", _output, _ref, 500)
+    take_console_output()
+  rescue
+    ExUnit.AssertionError -> :ok
+  end
+
   # Joining the device topic makes the client work out which network interface
   # it connected over by calling `:sys.get_state/1` on the connection process.
   # Under `Slipstream.SocketTest` that process is this test, which doesn't speak
@@ -819,8 +887,8 @@ defmodule NervesHubLink.SocketMessagesTest do
     })
   end
 
-  defp file_chunk(filename, data) do
-    %{"filename" => filename, "data" => Base.encode64(data)}
+  defp file_chunk(filename, data, chunk \\ 0) do
+    %{"filename" => filename, "chunk" => chunk, "data" => Base.encode64(data)}
   end
 
   defp update_payload() do

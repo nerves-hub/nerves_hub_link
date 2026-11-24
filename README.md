@@ -192,5 +192,6 @@ Any [valid Erlang ssl socket option](http://erlang.org/doc/man/ssl.html#TLS/DTLS
 
 ### `console_version`
 
+- `2.1.0` - Report how saving a file sent to the device goes (`file-data/ack`, `file-data/saved` and `file-data/error`), when NervesHub asks for it with `"ack" => true` in `file-data/start`
 - `2.0.0` - Send and receive files from a device
 - `1.0.0` - Remote IEx console
