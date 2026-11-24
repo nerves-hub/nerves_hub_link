@@ -1107,7 +1107,7 @@ defmodule NervesHubLink.Socket do
   end
 
   # The file `file-data/start` began. A chunk for any other file is saved
-  # without telling anyone, as before acks.
+  # without telling anyone, as every chunk was before NervesHub could ask.
   defp receiving_file(socket, name) do
     case socket.assigns[:console_file] do
       %{name: ^name} = file -> file
