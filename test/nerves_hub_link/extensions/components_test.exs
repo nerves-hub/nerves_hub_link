@@ -71,7 +71,7 @@ defmodule NervesHubLink.Extensions.ComponentsTest do
     serial: "00:12:4b:00:2a:3f:91:c7",
     name: "Freezer probe A",
     vendor_name: "Sonoff",
-    firmware_version: "2.1.0"
+    versions: %{firmware: "2.1.0"}
   }
 
   @mcu %{
@@ -166,7 +166,7 @@ defmodule NervesHubLink.Extensions.ComponentsTest do
                "serial" => "00:12:4b:00:2a:3f:91:c7",
                "name" => "Freezer probe A",
                "vendor_name" => "Sonoff",
-               "firmware_version" => "2.1.0"
+               "versions" => %{"firmware" => "2.1.0"}
              }
     end
 
@@ -240,9 +240,58 @@ defmodule NervesHubLink.Extensions.ComponentsTest do
       assert entry["serial"] == "00:12:4b:00:2a:3f:91:c7"
       assert log =~ "dropped name"
 
-      {result, _log} = with_log(fn -> Component.new(Map.put(@probe, :firmware_version, 2)) end)
+      {result, _log} = with_log(fn -> Component.new(Map.put(@probe, :hardware_revision, 2)) end)
       assert {:ok, entry} = result
-      refute Map.has_key?(entry, "firmware_version")
+      refute Map.has_key?(entry, "hardware_revision")
+    end
+
+    test "writes versions as strings, accepting atom keys and a Version" do
+      versions = %{"sensor_model" => "", firmware: Version.parse!("2.2.1"), keypad_config: "7"}
+
+      assert {:ok, %{"versions" => %{"firmware" => "2.2.1", "keypad_config" => "7"} = sent}} =
+               Component.new(Map.put(@probe, :versions, versions))
+
+      refute Map.has_key?(sent, "sensor_model")
+    end
+
+    test "leaves versions out when there are none" do
+      assert {:ok, entry} = Component.new(Map.put(@probe, :versions, %{}))
+      refute Map.has_key?(entry, "versions")
+    end
+
+    test "drops a version NervesHub would refuse, and keeps the rest" do
+      versions = %{
+        "firmware" => "2.2.1",
+        "Keypad Config" => "7",
+        "sensor_model" => 3,
+        "calibration" => String.duplicate("1", 256)
+      }
+
+      {result, log} = with_log(fn -> Component.new(Map.put(@probe, :versions, versions)) end)
+
+      assert {:ok, %{"versions" => %{"firmware" => "2.2.1"} = kept}} = result
+      assert map_size(kept) == 1
+      assert log =~ "dropped a version"
+
+      {result, log} = with_log(fn -> Component.new(Map.put(@probe, :versions, "2.2.1")) end)
+      assert {:ok, entry} = result
+      refute Map.has_key?(entry, "versions")
+      assert log =~ "dropped versions"
+    end
+
+    test "keeps at most 16 versions, firmware and then the first by key" do
+      versions =
+        Map.new(1..20, &{"part_#{&1 |> Integer.to_string() |> String.pad_leading(2, "0")}", "1"})
+        |> Map.put("firmware", "2.2.1")
+
+      {result, log} = with_log(fn -> Component.new(Map.put(@probe, :versions, versions)) end)
+
+      assert {:ok, %{"versions" => kept}} = result
+      assert map_size(kept) == 16
+      assert kept["firmware"] == "2.2.1"
+      assert Map.has_key?(kept, "part_15")
+      refute Map.has_key?(kept, "part_16")
+      assert log =~ "more than 16 versions"
     end
 
     test "sends reachable only when it is said, and only as a boolean" do
@@ -345,7 +394,7 @@ defmodule NervesHubLink.Extensions.ComponentsTest do
                  "serial" => "00:12:4b:00:2a:3f:91:c7",
                  "name" => "Freezer probe A",
                  "vendor_name" => "Sonoff",
-                 "firmware_version" => "2.1.0"
+                 "versions" => %{"firmware" => "2.1.0"}
                }
              ]
     end
@@ -453,14 +502,14 @@ defmodule NervesHubLink.Extensions.ComponentsTest do
 
       :ok =
         Components.put_component(
-          %{@probe | firmware_version: "2.2.0"}
+          %{@probe | versions: %{firmware: "2.2.0"}}
           |> Map.put(:reachable, false)
         )
 
       assert_receive {:pushed, "extensions", "components:snapshot",
                       %{"components" => [_mcu, probe]}}
 
-      assert probe["firmware_version"] == "2.2.0"
+      assert probe["versions"] == %{"firmware" => "2.2.0"}
       assert probe["reachable"] == false
     end
 

@@ -41,7 +41,7 @@ defmodule NervesHubLink.Extensions.Components do
           serial: "e6614c311b4a2c2f",
           name: "Power controller",
           address: "UART0",
-          firmware_version: "1.4.2"
+          versions: %{firmware: "1.4.2"}
         },
         %{
           namespace: "zigbee",

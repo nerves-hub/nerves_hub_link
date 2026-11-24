@@ -36,6 +36,20 @@ defmodule NervesHubLink.Extensions.Components.Check do
   end
 
   @doc """
+  A key in a component's `versions`, as a string: written as a namespace is.
+  An atom is accepted, since `firmware:` is how Elixir code writes one.
+  """
+  @spec version_key(term()) :: {:ok, String.t()} | {:error, String.t()}
+  def version_key(key) do
+    with {:ok, key} <- text(key, "version key") do
+      if Regex.match?(@namespace_pattern, key),
+        do: {:ok, key},
+        else:
+          {:error, "version key #{inspect(key)} must match #{inspect(@namespace_pattern.source)}"}
+    end
+  end
+
+  @doc """
   A reading or state name, as a string: lower case letters, digits and `_`,
   starting with a letter, at most 64 characters.
   """

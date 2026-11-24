@@ -15,15 +15,21 @@ defmodule NervesHubLink.Extensions.Components.Component do
         serial: "00:12:4b:00:2a:3f:91:c7",
         name: "Freezer probe A",
         vendor_name: "Sonoff",
-        firmware_version: "2.1.0",
+        versions: %{firmware: "2.1.0"},
         last_seen_at: ~U[2026-11-24 10:42:11Z]
       }
 
   `namespace`, `vendor`, `model` and `serial` are required. Everything else is
   optional:
 
-    * `name`, `vendor_name`, `model_name`, `hardware_revision`,
-      `firmware_version`, `address` - strings. An empty one is left out.
+    * `name`, `vendor_name`, `model_name`, `hardware_revision`, `address` -
+      strings. An empty one is left out.
+    * `versions` - what the component holds and which version of each, as
+      `%{key => version}`: `%{firmware: "2.2.1", keypad_config: "7"}`. Use
+      `firmware` for its firmware, and a name of your own for anything else
+      it holds, such as a configuration or a model. Report every one: a
+      version NervesHub can't see is an update it can't confirm. Versions are
+      strings, compared exactly; a `Version` is written as one.
     * `reachable` - `false` when the device has the component but couldn't
       reach it the last time it tried. Leave it out, or pass `true`, otherwise.
     * `last_seen_at` - a `DateTime`, or an ISO 8601 string with an offset. Leave
@@ -52,8 +58,9 @@ defmodule NervesHubLink.Extensions.Components.Component do
   require Logger
 
   @max_states 8
+  @max_versions 16
 
-  @optional ~w(name vendor_name model_name hardware_revision firmware_version address)a
+  @optional ~w(name vendor_name model_name hardware_revision address)a
 
   @typedoc """
   A component as your application describes it. Keys may be atoms or strings.
@@ -81,7 +88,7 @@ defmodule NervesHubLink.Extensions.Components.Component do
       ...>   vendor: "raspberrypi",
       ...>   model: "rp2350",
       ...>   serial: "e6614c311b4a2c2f",
-      ...>   firmware_version: "1.4.2"
+      ...>   versions: %{firmware: "1.4.2"}
       ...> })
       {:ok,
        %{
@@ -89,7 +96,7 @@ defmodule NervesHubLink.Extensions.Components.Component do
          "vendor" => "raspberrypi",
          "model" => "rp2350",
          "serial" => "e6614c311b4a2c2f",
-         "firmware_version" => "1.4.2"
+         "versions" => %{"firmware" => "1.4.2"}
        }}
 
       iex> NervesHubLink.Extensions.Components.Component.new(%{namespace: "mcu", vendor: "st"})
@@ -107,6 +114,7 @@ defmodule NervesHubLink.Extensions.Components.Component do
       entry =
         %{"namespace" => namespace, "vendor" => vendor, "model" => model, "serial" => serial}
         |> put_optional_strings(component, key)
+        |> put_versions(field(component, :versions), key)
         |> put_reachable(field(component, :reachable), key)
         |> put_last_seen_at(field(component, :last_seen_at), key)
         |> put_state(field(component, :state), key)
@@ -150,6 +158,50 @@ defmodule NervesHubLink.Extensions.Components.Component do
 
     checked |> Enum.take(@max_states) |> Map.new()
   end
+
+  @doc """
+  Check a component's versions, `%{key => version}`, and write them for the
+  wire.
+
+  A key or a version NervesHub would refuse is dropped with a warning, and an
+  empty version is left out. Past #{@max_versions} the rest are dropped,
+  keeping `firmware` and then the first by key, since NervesHub would refuse
+  the whole snapshot.
+  """
+  @spec versions(map(), key()) :: %{String.t() => String.t()}
+  def versions(versions, key) when is_map(versions) do
+    checked =
+      versions
+      |> Enum.flat_map(fn {name, version} ->
+        with {:ok, name} <- Check.version_key(name),
+             {:ok, version} when is_binary(version) <- version_string(version, name) do
+          [{name, version}]
+        else
+          {:ok, nil} ->
+            []
+
+          {:error, reason} ->
+            warn(key, "dropped a version: #{reason}")
+            []
+        end
+      end)
+      |> Enum.sort_by(fn {name, _version} -> {name != "firmware", name} end)
+
+    if length(checked) > @max_versions do
+      warn(key, "has more than #{@max_versions} versions; sending firmware and the first by key")
+    end
+
+    checked |> Enum.take(@max_versions) |> Map.new()
+  end
+
+  @doc false
+  @spec max_versions() :: 16
+  def max_versions(), do: @max_versions
+
+  defp version_string(%Version{} = version, name),
+    do: Check.optional(to_string(version), "version #{name}")
+
+  defp version_string(version, name), do: Check.optional(version, "version #{name}")
 
   @doc false
   @spec max_states() :: 8
@@ -212,6 +264,26 @@ defmodule NervesHubLink.Extensions.Components.Component do
         warn(key, "dropped last_seen_at: #{reason}")
         entry
     end
+  end
+
+  # Left out when there are none, which NervesHub reads the same as an empty
+  # map: the component holds nothing it reports a version for.
+  defp put_versions(entry, nil, _key), do: entry
+
+  defp put_versions(entry, versions, key) when is_map(versions) do
+    case versions(versions, key) do
+      checked when map_size(checked) == 0 -> entry
+      checked -> Map.put(entry, "versions", checked)
+    end
+  end
+
+  defp put_versions(entry, versions, key) do
+    warn(
+      key,
+      "dropped versions: must be a map of key to version, got #{inspect(versions, limit: 5)}"
+    )
+
+    entry
   end
 
   # Left out to say nothing about state, which is not the same as an empty map:
