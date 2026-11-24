@@ -314,8 +314,8 @@ defmodule NervesHubLink.Extensions.ComponentsTest do
     end
 
     test "ignores fields the contract doesn't have" do
-      assert {:ok, entry} = Component.new(Map.put(@probe, :colour, "blue"))
-      refute Map.has_key?(entry, "colour")
+      assert {:ok, entry} = Component.new(Map.put(@probe, :color, "blue"))
+      refute Map.has_key?(entry, "color")
     end
   end
 
