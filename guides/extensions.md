@@ -41,7 +41,7 @@ Enabling it here only makes the extension available. Like every extension, it se
 
 ### Telling NervesHub what the device has
 
-NervesHubLink can't discover your components, because only your application knows what is on its buses and radios. So your application describes them:
+NervesHubLink can't discover your components, because only your application knows what is on its buses and radios. Your application describes them in one of two ways: it answers when NervesHub asks, from your `NervesHubLink.Client` (see [Answering NervesHub from your client](#answering-nerveshub-from-your-client)), or it tells the extension whenever they change:
 
 ```elixir
 NervesHubLink.Extensions.Components.set_components([
@@ -110,31 +110,46 @@ A state change is sent straight away, and also remembered: every snapshot carrie
 
 Both are only accepted for a component in the set. A component that has just been added waits for the snapshot that lists it before its readings are sent, since NervesHub ignores readings for a component it hasn't been told about.
 
-### Answering a refresh
+### Answering NervesHub from your client
 
-Someone in the NervesHub web UI can ask the device to look at its components again. Without a refresher the device answers with what it already knows, which is a correct answer. If your device can check on them, such as by pinging each Zigbee node, implement `NervesHubLink.Extensions.Components.Refresher`:
+NervesHub asks for the set every time the device connects, and again when someone in the web UI asks the device to look at its components again. Each time, the device calls `components_sync/1` on your `NervesHubLink.Client` and answers with what it returns. A device can report everything this way and never call `set_components/1`:
 
 ```elixir
-defmodule MyApp.ComponentRefresher do
-  @behaviour NervesHubLink.Extensions.Components.Refresher
+defmodule MyApp.NervesHubLinkClient do
+  use NervesHubLink.Client
 
-  @impl true
-  def refresh() do
+  # Someone asked the device to look again: check on every node first.
+  @impl NervesHubLink.Client
+  def components_sync(refresh: true) do
     {:ok, Enum.map(MyApp.Zigbee.ping_all(), &MyApp.Zigbee.to_component/1)}
+  end
+
+  # On connect: what the device already knows.
+  def components_sync(refresh: false) do
+    {:ok, Enum.map(MyApp.Zigbee.known_nodes(), &MyApp.Zigbee.to_component/1)}
   end
 end
 ```
 
+Return `{:ok, components}` with the whole set, `:ok` to answer with the set as it stands, or `{:error, reason}`, which is logged and answered as `:ok` would be. The default returns `:ok`, so a device that reports nothing answers that it has no components, and one that uses `set_components/1` answers with what it was given.
+
+The two work together. A client that answers syncs, and an application that calls `put_component/1` when a node joins, gets the join to NervesHub within five seconds instead of at the next connect.
+
+To answer from somewhere other than the client, set `refresher` to a module implementing `NervesHubLink.Extensions.Components.Refresher`, or to an MFA, which is called with the options appended to its arguments:
+
 ```elixir
 config :nerves_hub_link,
   components: [
-    refresher: MyApp.ComponentRefresher,
-    # How long to wait for it before answering with what the device knew.
+    # Or MyApp.ComponentRefresher.
+    refresher: {MyApp.Zigbee, :components, [:coordinator_0]},
+    # How long to wait before answering with the set as it stands.
     refresh_timeout_seconds: 30,
     # How many readings to hold while they can't be sent.
     max_readings: 600
   ]
 ```
+
+Whatever answers runs in a process of its own, so a slow check holds up nothing but the answer. One that raises, exits or takes longer than `refresh_timeout_seconds` is logged, and the device answers with the set as it stands.
 
 ### What is checked on the device
 

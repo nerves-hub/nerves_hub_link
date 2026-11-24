@@ -17,6 +17,8 @@ defmodule NervesHubLink.Extensions.Components.Config do
   # Turning the extension on is naming it in `extension_modules`, not a key
   # here.
 
+  require Logger
+
   @default_refresh_timeout_seconds 30
 
   # Ten messages' worth. The platform takes 60 reports a message and a message
@@ -24,12 +26,36 @@ defmodule NervesHubLink.Extensions.Components.Config do
   # and a few minutes of a busy gateway's readings while it is not.
   @default_max_readings 600
 
-  @doc "The module to call when NervesHub asks for a refresh, if any."
-  @spec refresher() :: module() | nil
+  @typedoc """
+  What answers a sync: the configured `NervesHubLink.Client`, a module
+  implementing `NervesHubLink.Extensions.Components.Refresher`, or an MFA.
+  """
+  @type refresher() :: :client | module() | {module(), atom(), list()}
+
+  @doc """
+  What to call when NervesHub asks for the device's components. The client
+  unless `refresher` says otherwise.
+  """
+  @spec refresher() :: refresher()
   def refresher() do
     case Keyword.get(config(), :refresher) do
-      module when is_atom(module) and module not in [nil, true, false] -> module
-      _not_configured -> nil
+      nil ->
+        :client
+
+      {module, function, args} = mfa
+      when is_atom(module) and is_atom(function) and is_list(args) ->
+        mfa
+
+      module when is_atom(module) and module not in [true, false] ->
+        module
+
+      other ->
+        Logger.warning(
+          "[NervesHubLink.Extensions.Components] ignoring refresher #{inspect(other)}: " <>
+            "expected a module or {module, function, args}; using the client"
+        )
+
+        :client
     end
   end
 

@@ -29,8 +29,9 @@ defmodule NervesHubLink.Extensions.Components do
   ## Telling NervesHub what the device has
 
   NervesHubLink can't find your components: your application knows what is on
-  its buses and radios. So your application tells this extension, and the
-  extension tells NervesHub.
+  its buses and radios. It can answer when NervesHub asks, from its
+  `NervesHubLink.Client` (see [Answering NervesHub](#module-answering-nerveshub)),
+  or tell this extension whenever they change:
 
       NervesHubLink.Extensions.Components.set_components([
         %{
@@ -115,16 +116,37 @@ defmodule NervesHubLink.Extensions.Components do
   component's current state, so a change NervesHub missed is put right by the
   next one.
 
-  ## Answering a refresh
+  ## Answering NervesHub
 
-  Someone in the NervesHub web UI can ask the device to look at its components
-  again. Without a refresher the device answers with what it knows. With one,
-  it checks first; see `NervesHubLink.Extensions.Components.Refresher`.
+  NervesHub asks for the set every time the device connects, and again when
+  someone in the web UI asks the device to look at its components again. Each
+  time, the device asks its `NervesHubLink.Client` first, through
+  `c:NervesHubLink.Client.components_sync/1`, and answers with what it
+  returns. So a device can report its components from its client and never
+  call `set_components/1` at all:
+
+      defmodule MyApp.NervesHubLinkClient do
+        use NervesHubLink.Client
+
+        @impl NervesHubLink.Client
+        def components_sync(_opts) do
+          {:ok, MyApp.Hardware.components()}
+        end
+      end
+
+  The default returns `:ok`, which answers with the set as it stands: whatever
+  `set_components/1` and `put_component/1` were last given, or no components
+  if nothing was. Changes pushed that way still go out within five seconds,
+  rather than waiting for NervesHub to ask.
+
+  The client can be swapped for a module or an MFA with `refresher`; see
+  `NervesHubLink.Extensions.Components.Refresher`.
 
   ## Configuration
 
       config :nerves_hub_link,
         components: [
+          # The client by default; or a module, or {module, function, args}.
           refresher: MyApp.ComponentRefresher,
           refresh_timeout_seconds: 30,
           # How many readings to hold while they can't be sent.
@@ -313,12 +335,16 @@ defmodule NervesHubLink.Extensions.Components do
   @impl GenServer
   def init(_opts) do
     # So `terminate/2` runs when the extension is detached, and can stop a
-    # refresh that would otherwise outlive it.
+    # refresher that would otherwise outlive it.
     Process.flag(:trap_exit, true)
 
     # Nothing is sent on start. NervesHub sends `components:sync` when it
     # attaches the extension, and the answer is the first snapshot.
-    {:ok, %{refresh: nil}}
+    #
+    # `again` is a sync that arrived while the refresher was running for one
+    # that it doesn't answer: a refresh asked for while a plain sync's
+    # refresher, which won't check, was already running.
+    {:ok, %{refresh: nil, again: nil}}
   end
 
   @impl GenServer
@@ -331,14 +357,7 @@ defmodule NervesHubLink.Extensions.Components do
 
   @impl NervesHubLink.Extensions
   def handle_event("sync", payload, state) do
-    refresher = Config.refresher()
-
-    if refresh?(payload) and refresher != nil do
-      {:noreply, start_refresh(state, refresher)}
-    else
-      :ok = Store.answer_sync()
-      {:noreply, state}
-    end
+    {:noreply, start_refresh(state, refresh?(payload))}
   end
 
   def handle_event(event, _payload, state) do
@@ -360,8 +379,8 @@ defmodule NervesHubLink.Extensions.Components do
         %{refresh: %{monitor: monitor}} = state
       ) do
     Logger.warning(
-      "[#{inspect(__MODULE__)}] #{inspect(state.refresh.refresher)} failed while refreshing components: " <>
-        Exception.format_exit(reason)
+      "[#{inspect(__MODULE__)}] #{describe(state.refresh.refresher)} failed: " <>
+        Exception.format_exit(reason) <> "; answering with the set as it stands"
     )
 
     {:noreply, finish_refresh(state)}
@@ -371,51 +390,80 @@ defmodule NervesHubLink.Extensions.Components do
     Process.exit(pid, :kill)
 
     Logger.warning(
-      "[#{inspect(__MODULE__)}] #{inspect(state.refresh.refresher)} took too long to refresh components; " <>
-        "answering with what the device already knew"
+      "[#{inspect(__MODULE__)}] #{describe(state.refresh.refresher)} took too long; " <>
+        "answering with the set as it stands"
     )
 
     {:noreply, finish_refresh(state)}
   end
 
-  # A refresh result or timeout that arrived after the refresh was finished.
+  # A refresher's result or timeout that arrived after it was finished with,
+  # or the exit of a process this one was linked to.
   def handle_info(_message, state), do: {:noreply, state}
 
   defp refresh?(%{"refresh" => true}), do: true
   defp refresh?(_payload), do: false
 
-  # In a process of its own, so a slow check doesn't hold up a sync that
-  # doesn't ask for one. Monitored rather than linked: a refresher that crashes
-  # costs the refresh, not the extension.
-  defp start_refresh(%{refresh: nil} = state, refresher) do
+  # In a process of its own, so a slow refresher holds up nothing but the
+  # answer. Monitored rather than linked: one that crashes costs that answer,
+  # not the extension.
+  defp start_refresh(%{refresh: nil} = state, refresh?) do
+    refresher = Config.refresher()
+    opts = [refresh: refresh?]
     parent = self()
 
     {pid, monitor} =
-      spawn_monitor(fn -> send(parent, {:refreshed, self(), refresher.refresh()}) end)
+      spawn_monitor(fn -> send(parent, {:refreshed, self(), call(refresher, opts)}) end)
 
     timer = Process.send_after(self(), {:refresh_timeout, pid}, Config.refresh_timeout())
 
-    %{state | refresh: %{pid: pid, monitor: monitor, timer: timer, refresher: refresher}}
+    running = %{
+      pid: pid,
+      monitor: monitor,
+      timer: timer,
+      refresher: refresher,
+      refresh?: refresh?
+    }
+
+    %{state | refresh: running, again: nil}
   end
 
-  # One is already running, and its answer will answer this one too.
-  defp start_refresh(state, _refresher), do: state
+  # The one already running answers this sync too, unless this one asks the
+  # device to look again and that one won't. Then it runs again once that one
+  # has answered.
+  defp start_refresh(%{refresh: %{refresh?: false}} = state, true), do: %{state | again: true}
+  defp start_refresh(state, _refresh?), do: state
+
+  defp call(:client, opts), do: NervesHubLink.Client.components_sync(opts)
+  defp call({module, function, args}, opts), do: apply(module, function, args ++ [opts])
+  defp call(module, opts), do: module.refresh(opts)
+
+  defp describe(:client), do: "#{inspect(NervesHubLink.Client)}.components_sync/1"
+
+  defp describe({module, function, args}),
+    do: "#{inspect(module)}.#{function}/#{length(args) + 1}"
+
+  defp describe(module), do: "#{inspect(module)}.refresh/1"
 
   defp apply_refresh(:ok, _refresher), do: :ok
 
   defp apply_refresh({:ok, components}, _refresher) when is_list(components),
     do: set_components(components)
 
+  # `NervesHubLink.Client` turns a raise or exit in the client into these, and
+  # has already logged it.
+  defp apply_refresh({:exit, _reason}, _refresher), do: :ok
+
   defp apply_refresh({:error, reason}, refresher) do
     Logger.warning(
-      "[#{inspect(__MODULE__)}] #{inspect(refresher)} couldn't refresh components: #{inspect(reason)}; " <>
-        "answering with what the device already knew"
+      "[#{inspect(__MODULE__)}] #{describe(refresher)} couldn't list components: #{inspect(reason)}; " <>
+        "answering with the set as it stands"
     )
   end
 
   defp apply_refresh(other, refresher) do
     Logger.warning(
-      "[#{inspect(__MODULE__)}] #{inspect(refresher)} returned #{inspect(other, limit: 5)}, " <>
+      "[#{inspect(__MODULE__)}] #{describe(refresher)} returned #{inspect(other, limit: 5)}, " <>
         "expected :ok, {:ok, components} or {:error, reason}"
     )
   end
@@ -427,7 +475,10 @@ defmodule NervesHubLink.Extensions.Components do
     _ = Process.cancel_timer(refresh.timer)
     :ok = Store.answer_sync()
 
-    %{state | refresh: nil}
+    case state.again do
+      nil -> %{state | refresh: nil}
+      refresh? -> start_refresh(%{state | refresh: nil}, refresh?)
+    end
   end
 
   defp checked(components) do

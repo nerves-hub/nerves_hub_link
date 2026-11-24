@@ -6,11 +6,23 @@ defmodule NervesHubLink.Extensions.ComponentsTest.Refresher do
   @moduledoc false
   @behaviour NervesHubLink.Extensions.Components.Refresher
 
-  # Reads what to do from application env, so each test can say how the
-  # device's check on its components goes.
+  # Tells the test it was called and with what, then does whatever the test
+  # said with `will/1`: `:ok` unless told otherwise, as the default client is.
   @impl NervesHubLink.Extensions.Components.Refresher
-  def refresh() do
-    case Application.get_env(:nerves_hub_link, :test_components_refresh) do
+  def refresh(opts), do: answer({:refresh, opts})
+
+  # For a refresher configured as an MFA, called with the options appended.
+  @spec listed(atom(), keyword()) :: term()
+  def listed(tag, opts), do: answer({:listed, tag, opts})
+
+  @spec answer(term()) :: term()
+  def answer(call) do
+    case Application.get_env(:nerves_hub_link, :test_components_pid) do
+      nil -> :ok
+      pid -> send(pid, {:refresher_called, call})
+    end
+
+    case Application.get_env(:nerves_hub_link, :test_components_refresh, :ok) do
       fun when is_function(fun, 0) -> fun.()
       result -> result
     end
@@ -18,6 +30,21 @@ defmodule NervesHubLink.Extensions.ComponentsTest.Refresher do
 
   @spec will(term()) :: :ok
   def will(result), do: Application.put_env(:nerves_hub_link, :test_components_refresh, result)
+end
+
+defmodule NervesHubLink.Extensions.ComponentsTest.Client do
+  @moduledoc false
+  use NervesHubLink.Client
+
+  alias NervesHubLink.Extensions.ComponentsTest.Refresher
+
+  @impl NervesHubLink.Client
+  def components_sync(opts), do: Refresher.answer({:client, opts})
+end
+
+defmodule NervesHubLink.Extensions.ComponentsTest.DefaultClient do
+  @moduledoc false
+  use NervesHubLink.Client
 end
 
 defmodule NervesHubLink.Extensions.ComponentsTest do
@@ -30,6 +57,8 @@ defmodule NervesHubLink.Extensions.ComponentsTest do
   alias NervesHubLink.Extensions.Components
   alias NervesHubLink.Extensions.Components.Component
   alias NervesHubLink.Extensions.Components.Store
+  alias NervesHubLink.Extensions.ComponentsTest.Client
+  alias NervesHubLink.Extensions.ComponentsTest.DefaultClient
   alias NervesHubLink.Extensions.ComponentsTest.Refresher
   alias NervesHubLink.Support.SocketStub
 
@@ -70,14 +99,21 @@ defmodule NervesHubLink.Extensions.ComponentsTest do
   setup context do
     previous_modules = Application.get_env(:nerves_hub_link, :extension_modules)
     previous_config = Application.get_env(:nerves_hub_link, :components)
+    previous_client = Application.get_env(:nerves_hub_link, :client)
 
     Application.put_env(:nerves_hub_link, :extension_modules, [Components])
     Application.put_env(:nerves_hub_link, :components, context[:components] || [])
+    # The suite's client is a Mox mock, which only answers the process that
+    # set an expectation, and the refresher runs in a process of its own.
+    Application.put_env(:nerves_hub_link, :client, context[:client] || Client)
+    Application.put_env(:nerves_hub_link, :test_components_pid, self())
 
     on_exit(fn ->
       Application.delete_env(:nerves_hub_link, :test_components_refresh)
+      Application.delete_env(:nerves_hub_link, :test_components_pid)
       restore(:extension_modules, previous_modules)
       restore(:components, previous_config)
+      restore(:client, previous_client)
     end)
 
     _ = start_supervised!({SocketStub, self()})
@@ -512,23 +548,41 @@ defmodule NervesHubLink.Extensions.ComponentsTest do
     end
   end
 
-  describe "refreshing" do
-    @describetag components: [refresher: Refresher]
-
+  describe "asking the client" do
     setup do
       connected([@probe])
+      assert_received {:refresher_called, {:client, refresh: false}}
+
+      :ok
     end
 
-    test "answers with the set the refresher found" do
-      Refresher.will({:ok, [@mcu]})
+    test "every sync asks the client, saying whether it's a refresh" do
+      sync()
+      assert_receive {:refresher_called, {:client, refresh: false}}
+      assert_receive {:pushed, "extensions", "components:snapshot", _payload}
 
       sync(%{"refresh" => true})
+      assert_receive {:refresher_called, {:client, refresh: true}}
+      assert_receive {:pushed, "extensions", "components:snapshot", _payload}
+    end
+
+    test "answers with the set the client returns" do
+      Refresher.will({:ok, [@mcu]})
+
+      sync()
 
       assert_receive {:pushed, "extensions", "components:snapshot", %{"components" => [mcu]}}
       assert mcu["namespace"] == "mcu"
     end
 
-    test "answers with what the refresher set itself" do
+    test "answers with the set as it stands when the client returns :ok" do
+      sync()
+
+      assert_receive {:pushed, "extensions", "components:snapshot", %{"components" => [probe]}}
+      assert probe["namespace"] == "zigbee"
+    end
+
+    test "answers with what the client set itself" do
       Refresher.will(fn ->
         :ok = Components.put_component(Map.put(@probe, :reachable, false))
         :ok
@@ -540,12 +594,12 @@ defmodule NervesHubLink.Extensions.ComponentsTest do
       assert probe["reachable"] == false
     end
 
-    test "answers with what it knew when the refresher fails" do
+    test "answers with the set as it stands when the client fails" do
       Refresher.will({:error, :radio_offline})
 
       log =
         capture_log(fn ->
-          sync(%{"refresh" => true})
+          sync()
 
           assert_receive {:pushed, "extensions", "components:snapshot",
                           %{"components" => [_probe]}}
@@ -554,28 +608,28 @@ defmodule NervesHubLink.Extensions.ComponentsTest do
       assert log =~ "radio_offline"
     end
 
-    test "answers with what it knew when the refresher raises" do
+    test "answers with the set as it stands when the client raises" do
       Refresher.will(fn -> raise "the coordinator is on fire" end)
 
       log =
         capture_log(fn ->
-          sync(%{"refresh" => true})
+          sync()
 
           assert_receive {:pushed, "extensions", "components:snapshot",
                           %{"components" => [_probe]}}
         end)
 
-      assert log =~ "failed while refreshing"
+      assert log =~ "the coordinator is on fire"
       assert Process.alive?(Process.whereis(Components))
     end
 
-    @tag components: [refresher: Refresher, refresh_timeout_seconds: 1]
-    test "answers with what it knew when the refresher takes too long" do
+    @tag components: [refresh_timeout_seconds: 1]
+    test "answers with the set as it stands when the client takes too long" do
       Refresher.will(fn -> Process.sleep(:infinity) end)
 
       log =
         capture_log(fn ->
-          sync(%{"refresh" => true})
+          sync()
 
           assert_receive {:pushed, "extensions", "components:snapshot",
                           %{"components" => [_probe]}},
@@ -585,35 +639,106 @@ defmodule NervesHubLink.Extensions.ComponentsTest do
       assert log =~ "took too long"
     end
 
-    test "a refresh still running when the extension is detached is stopped" do
+    test "a refresh asked for while a plain sync is being answered gets its own run" do
+      # The run already going won't check on the components, so it can't
+      # answer a request to look again.
       test_pid = self()
 
       Refresher.will(fn ->
-        send(test_pid, {:refreshing, self()})
+        send(test_pid, {:running, self()})
+
+        receive do
+          :go -> :ok
+        end
+      end)
+
+      sync()
+      assert_receive {:running, first}
+
+      sync(%{"refresh" => true})
+      sync()
+      send(first, :go)
+
+      assert_receive {:pushed, "extensions", "components:snapshot", _payload}
+      assert_receive {:refresher_called, {:client, refresh: true}}
+      assert_receive {:running, second}
+      send(second, :go)
+
+      assert_receive {:pushed, "extensions", "components:snapshot", _payload}
+      refute_receive {:running, _third}, 200
+    end
+
+    test "one that is still running when the extension is detached is stopped" do
+      test_pid = self()
+
+      Refresher.will(fn ->
+        send(test_pid, {:running, self()})
         Process.sleep(:infinity)
       end)
 
       sync(%{"refresh" => true})
-      assert_receive {:refreshing, refresher}
+      assert_receive {:running, refresher}
 
       ref = Process.monitor(refresher)
       :ok = Extensions.detach("components")
 
       assert_receive {:DOWN, ^ref, :process, ^refresher, :killed}
     end
+  end
 
-    test "doesn't call the refresher for a sync that doesn't ask for one" do
-      test_pid = self()
+  describe "the default client" do
+    @describetag client: DefaultClient
 
-      Refresher.will(fn ->
-        send(test_pid, :refreshed)
-        :ok
-      end)
-
+    test "answers with no components when the device reports none" do
+      attach()
       sync()
 
+      assert_receive {:pushed, "extensions", "components:snapshot", %{"components" => []}}
+    end
+
+    test "answers with what set_components/1 was given" do
+      :ok = Components.set_components([@probe])
+      attach()
+      sync(%{"refresh" => true})
+
+      assert_receive {:pushed, "extensions", "components:snapshot", %{"components" => [_probe]}}
+    end
+  end
+
+  describe "a configured refresher" do
+    @tag components: [refresher: Refresher]
+    test "a module is called instead of the client" do
+      attach()
+      sync(%{"refresh" => true})
+
+      assert_receive {:refresher_called, {:refresh, refresh: true}}
+      refute_received {:refresher_called, {:client, _opts}}
       assert_receive {:pushed, "extensions", "components:snapshot", _payload}
-      refute_received :refreshed
+    end
+
+    @tag components: [refresher: {Refresher, :listed, [:coordinator_0]}]
+    test "an MFA is called with the options appended" do
+      Refresher.will({:ok, [@mcu]})
+
+      attach()
+      sync()
+
+      assert_receive {:refresher_called, {:listed, :coordinator_0, refresh: false}}
+      assert_receive {:pushed, "extensions", "components:snapshot", %{"components" => [_mcu]}}
+    end
+
+    @tag components: [refresher: "MyApp.Refresher"]
+    test "anything else is logged, and the client asked instead" do
+      log =
+        capture_log(fn ->
+          attach()
+          sync()
+
+          assert_receive {:refresher_called, {:client, refresh: false}}
+          assert_receive {:pushed, "extensions", "components:snapshot", _payload}
+        end)
+
+      assert log =~ "ignoring refresher"
     end
   end
 

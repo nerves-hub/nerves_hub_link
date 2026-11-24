@@ -4,60 +4,82 @@
 #
 defmodule NervesHubLink.Extensions.Components.Refresher do
   @moduledoc """
-  Behaviour for checking on the device's components when NervesHub asks.
+  Behaviour for answering NervesHub when it asks for the device's components.
 
-  Someone looking at a device in the NervesHub web UI can ask it to look at its
-  components again. The device is sent `components:sync` with
-  `{"refresh": true}`, and a device that can check on its components, such as
-  by pinging each Zigbee node, should do so before it answers rather than send
-  what it last knew.
+  NervesHub sends `components:sync` every time the device connects, and again
+  when someone asks from the web UI for the device to look at its components
+  again (`{"refresh": true}`). The device answers each with its whole
+  component set, and it gets that set from its refresher.
 
-  A device without a refresher answers straight away with what it knows, which
-  is also a correct answer.
+  ## Choosing the refresher
 
-      defmodule MyApp.ComponentRefresher do
-        @behaviour NervesHubLink.Extensions.Components.Refresher
+  By default the refresher is your `NervesHubLink.Client`, and
+  `c:NervesHubLink.Client.components_sync/1` is called. Most devices need
+  nothing else:
 
-        @impl true
-        def refresh() do
+      defmodule MyApp.NervesHubLinkClient do
+        use NervesHubLink.Client
+
+        @impl NervesHubLink.Client
+        def components_sync(refresh: true) do
           {:ok, Enum.map(MyApp.Zigbee.ping_all(), &MyApp.Zigbee.to_component/1)}
+        end
+
+        def components_sync(refresh: false) do
+          {:ok, Enum.map(MyApp.Zigbee.known_nodes(), &MyApp.Zigbee.to_component/1)}
         end
       end
 
+  To answer from somewhere else, set `refresher` to a module implementing this
+  behaviour:
+
       config :nerves_hub_link,
         components: [refresher: MyApp.ComponentRefresher]
+
+  or to an MFA, which is called with the options appended to its arguments:
+
+      config :nerves_hub_link,
+        components: [refresher: {MyApp.Zigbee, :components, [:coordinator_0]}]
+
+      # Called as MyApp.Zigbee.components(:coordinator_0, refresh: false)
 
   ## What to return
 
     * `{:ok, components}` - the device's whole component set, as
       `NervesHubLink.Extensions.Components.set_components/1` takes it. It
       replaces what the device had.
-    * `:ok` - the set is up to date, because nothing changed or because the
-      refresher updated it itself with
+    * `:ok` - answer with the set as it stands: whatever was last given to
       `NervesHubLink.Extensions.Components.set_components/1` or
-      `NervesHubLink.Extensions.Components.put_component/1`.
-    * `{:error, reason}` - the check failed. It is logged, and the device
-      answers with what it already knew.
+      `NervesHubLink.Extensions.Components.put_component/1`, and empty if
+      nothing was. This is what the default client returns, so a device that
+      reports nothing answers that it has no components.
+    * `{:error, reason}` - the check failed. It is logged, and answered as
+      `:ok` would be.
+
+  Returning `:ok` is how an application that pushes changes with
+  `set_components/1` as they happen says it has nothing to add.
 
   ## How long it may take
 
-  `refresh/0` runs in a process of its own, so a slow check holds up nothing
-  else. NervesHub is answered when it returns, or after
-  `refresh_timeout_seconds` (30 by default), whichever is first. Past the
-  timeout the refresher is stopped and the device answers with what it knew.
+  It runs in a process of its own, so a slow check holds up nothing else.
+  NervesHub is answered when it returns, or after `refresh_timeout_seconds`
+  (30 by default), whichever is first. Past the timeout it is stopped and the
+  device answers with the set as it stands.
 
       config :nerves_hub_link,
-        components: [refresher: MyApp.ComponentRefresher, refresh_timeout_seconds: 60]
+        components: [refresh_timeout_seconds: 60]
 
-  A refresher that raises or exits is logged, and the device answers with what
-  it knew.
+  A refresher that raises or exits is logged, and the device answers with the
+  set as it stands.
   """
 
   @doc """
-  Check on the device's components, and return them or say they are current.
+  Return the device's components, or say the set as it stands is current.
+
+  `opts[:refresh]` is `true` when someone asked the device to look at its
+  components again, and the device should check on them before answering if it
+  can.
   """
-  @callback refresh() ::
-              :ok
-              | {:ok, [NervesHubLink.Extensions.Components.Component.input()]}
-              | {:error, reason :: term()}
+  @callback refresh(opts :: [refresh: boolean()]) ::
+              NervesHubLink.Client.components_sync_response()
 end
