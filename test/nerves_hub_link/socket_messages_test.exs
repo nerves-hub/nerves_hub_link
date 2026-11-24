@@ -617,6 +617,52 @@ defmodule NervesHubLink.SocketMessagesTest do
       refute_push(@console_topic, "file-data/saved", _payload)
     end
 
+    test "reports a chunk that isn't Base64, and saves nothing after it", %{
+      socket: socket,
+      data_path: data_path
+    } do
+      filename = "notes.txt"
+
+      push(socket, @console_topic, "file-data/start", %{"filename" => filename, "ack" => true})
+
+      push(socket, @console_topic, "file-data", %{
+        "filename" => filename,
+        "chunk" => 0,
+        "data" => "not base64!"
+      })
+
+      assert_push(@console_topic, "file-data/error", %{
+        filename: ^filename,
+        reason: "a chunk wasn't valid Base64"
+      })
+
+      push(socket, @console_topic, "file-data", file_chunk(filename, "hello", 1))
+      push(socket, @console_topic, "file-data/stop", %{"filename" => filename})
+
+      assert NervesHubLink.socket_connected?(socket)
+
+      refute_push(@console_topic, "file-data/ack", _payload)
+      refute_push(@console_topic, "file-data/saved", _payload)
+      assert File.read!(Path.join(data_path, filename)) == ""
+    end
+
+    test "keeps reporting on its file when a chunk for another arrives", %{
+      socket: socket,
+      data_path: data_path
+    } do
+      push(socket, @console_topic, "file-data/start", %{"filename" => "a.txt", "ack" => true})
+      push(socket, @console_topic, "file-data", file_chunk("b.txt", "stray", 0))
+      push(socket, @console_topic, "file-data", file_chunk("a.txt", "hello", 0))
+      assert_push(@console_topic, "file-data/ack", %{filename: "a.txt", chunk: 0, bytes: 5})
+
+      push(socket, @console_topic, "file-data/stop", %{"filename" => "b.txt"})
+      push(socket, @console_topic, "file-data/stop", %{"filename" => "a.txt"})
+      assert_push(@console_topic, "file-data/saved", %{filename: "a.txt", bytes: 5})
+
+      assert File.read!(Path.join(data_path, "a.txt")) == "hello"
+      assert File.read!(Path.join(data_path, "b.txt")) == "stray"
+    end
+
     test "reports a file it can't write, once, and keeps the console", %{socket: socket} do
       # The data path has no `missing` directory, so the file can't be created.
       filename = "missing/notes.txt"
@@ -797,18 +843,21 @@ defmodule NervesHubLink.SocketMessagesTest do
   end
 
   # Any console message starts IEx, whose banner and prompt are pushed up. A
-  # push blocks until it's asserted, so they're taken here, before the test
-  # asserts on its own pushes.
+  # push blocks until it's asserted, so they're taken here, up to the prompt,
+  # before the test asserts on its own pushes.
   defp start_console(%{socket: socket}) do
     push(socket, @console_topic, "window_size", %{"height" => 24, "width" => 80})
     take_console_output()
   end
 
   defp take_console_output() do
-    assert_push(@console_topic, "up", _output, _ref, 500)
-    take_console_output()
-  rescue
-    ExUnit.AssertionError -> :ok
+    assert_push(@console_topic, "up", %{data: data})
+
+    if data =~ ~r/iex\(\d+\)> / do
+      :ok
+    else
+      take_console_output()
+    end
   end
 
   # Joining the device topic makes the client work out which network interface

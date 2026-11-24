@@ -576,17 +576,14 @@ defmodule NervesHubLink.Socket do
     {:ok, set_iex_timer(socket)}
   end
 
-  # A file NervesHub is sending to the data path: `file-data/start`, its
-  # chunks, then `file-data/stop`. Each chunk is saved before anything after it
-  # is read, typing included, so the console doesn't answer until the file is
-  # saved.
+  # `file-data/start`, its chunks, then `file-data/stop` write a file to the
+  # data path. Each chunk is saved before the next message is read, typing
+  # included, so the console doesn't answer until the file is saved.
   #
-  # A NervesHub that can hear how it's going adds `"ack" => true` to
-  # `file-data/start`, and is then told: `file-data/ack` after each chunk is
-  # saved, with the bytes saved so far, then `file-data/saved` once the file is
-  # complete, or `file-data/error` if it can't be written. Without it nothing
-  # is sent back, since an older NervesHub would close the console on a
-  # message it doesn't know.
+  # With `"ack" => true` in `file-data/start`, the device pushes `file-data/ack`
+  # after each chunk with the bytes saved so far, then `file-data/saved` at
+  # stop, or `file-data/error` if the file can't be written. Otherwise nothing
+  # is pushed, since an older NervesHub closes the console on an unknown event.
   def handle_message(@console_topic, "file-data/start", params, socket) do
     file = %{name: params["filename"], ack?: params["ack"] == true, bytes: 0, failed?: false}
     path = Path.join(socket.assigns.data_path, file.name)
@@ -628,7 +625,7 @@ defmodule NervesHubLink.Socket do
             bytes: file.bytes
           })
 
-        {:ok, assign(socket, :console_file, file)}
+        {:ok, track_file(socket, file)}
     end
   end
 
@@ -637,7 +634,7 @@ defmodule NervesHubLink.Socket do
 
     :ok = report(socket, file, "file-data/saved", %{filename: file.name, bytes: file.bytes})
 
-    {:ok, assign(socket, :console_file, nil)}
+    {:ok, stop_tracking_file(socket, file.name)}
   end
 
   def handle_message(@extensions_topic, event, payload, socket) do
@@ -1107,11 +1104,27 @@ defmodule NervesHubLink.Socket do
   end
 
   # The file `file-data/start` began. A chunk for any other file is saved
-  # without telling anyone, as every chunk was before NervesHub could ask.
+  # without reporting anything.
   defp receiving_file(socket, name) do
     case socket.assigns[:console_file] do
       %{name: ^name} = file -> file
       _ -> %{name: name, ack?: false, bytes: 0, failed?: false}
+    end
+  end
+
+  # Only the file `file-data/start` began is kept, so a stray chunk for another
+  # file can't replace it and stop its reports.
+  defp track_file(socket, %{name: name} = file) do
+    case socket.assigns[:console_file] do
+      %{name: ^name} -> assign(socket, :console_file, file)
+      _ -> socket
+    end
+  end
+
+  defp stop_tracking_file(socket, name) do
+    case socket.assigns[:console_file] do
+      %{name: ^name} -> assign(socket, :console_file, nil)
+      _ -> socket
     end
   end
 
