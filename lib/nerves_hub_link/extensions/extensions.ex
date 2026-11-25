@@ -21,6 +21,9 @@ defmodule NervesHubLink.Extensions do
 
   use GenServer
 
+  alias NervesHubLink.Extensions.Alarms
+  alias NervesHubLink.Extensions.Health
+  alias NervesHubLink.Extensions.Metrics
   alias NervesHubLink.ExtensionsSupervisor
   alias NervesHubLink.Socket
 
@@ -29,14 +32,15 @@ defmodule NervesHubLink.Extensions do
   # `NervesHubLink.Extensions.Logging` is deliberately absent while it is in
   # early release. See `guides/extensions.md` for how to opt in.
   #
-  # `NervesHubLink.Extensions.Health` is absent because metrics and alarms, the
-  # only two things it still carries, now have extensions of their own. It is
-  # there for a NervesHub that has no extension for them: one without
-  # ClickHouse takes metrics through health, so a device talking to one has to
-  # name health here; see `guides/extensions.md`.
+  # Health is here alongside metrics and alarms rather than instead of them: a
+  # NervesHub without ClickHouse has no metrics extension and takes metrics
+  # through health, and one older than these extensions takes both that way.
+  # Which of the three a device ends up reporting through is the platform's to
+  # decide, not this list's; see `offer/1`.
   @default_extension_modules [
                                NervesHubLink.Extensions.Alarms,
                                NervesHubLink.Extensions.Geo,
+                               NervesHubLink.Extensions.Health,
                                NervesHubLink.Extensions.Metrics,
                                NervesHubLink.Extensions.NetworkIdentity
                              ] ++
@@ -198,9 +202,26 @@ defmodule NervesHubLink.Extensions do
   @spec configured_modules() :: [module()]
   def configured_modules() do
     Application.get_env(:nerves_hub_link, :extension_modules, @default_extension_modules)
+    |> Enum.flat_map(&superseded_by/1)
     |> Enum.flat_map(&siblings/1)
     |> Enum.uniq()
   end
+
+  # Naming health is naming what health did. Metrics and alarms left it for
+  # extensions of their own, and a device configured before those existed -
+  # which is every device in the field, and every config copied from the guide
+  # that documented them - would otherwise go on reporting through health
+  # against a platform that has somewhere better to put them, until somebody
+  # edited the list and built new firmware.
+  #
+  # Offering all three costs the device nothing: the platform is asked, and
+  # answers with the ones it has, which an operator still has to enable per
+  # product before anything is attached.
+  defp superseded_by(Health) do
+    [Health, Alarms, Metrics]
+  end
+
+  defp superseded_by(mod), do: [mod]
 
   # An extension implemented at more than one version names all of them, so
   # configuring one is configuring the extension. Otherwise a device would have

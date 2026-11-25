@@ -124,9 +124,70 @@ defmodule NervesHubLink.ExtensionsTest do
 
       assert Extensions.configured_modules() == [Reporter]
     end
+
+    test "naming health registers the extensions that took over from it" do
+      # Every device in the field was configured before metrics and alarms
+      # existed, and health is what those configs name. Without this they would
+      # go on reporting through health against a platform with somewhere better
+      # to put it, until somebody edited the list and built new firmware.
+      Application.put_env(:nerves_hub_link, :extension_modules, [
+        NervesHubLink.Extensions.Health
+      ])
+
+      modules = Extensions.configured_modules()
+
+      assert NervesHubLink.Extensions.Health in modules
+      assert NervesHubLink.Extensions.Alarms in modules
+      assert NervesHubLink.Extensions.Metrics in modules
+    end
+
+    test "naming all three is the same as naming health" do
+      Application.put_env(:nerves_hub_link, :extension_modules, [
+        NervesHubLink.Extensions.Alarms,
+        NervesHubLink.Extensions.Health,
+        NervesHubLink.Extensions.Metrics
+      ])
+
+      assert length(Extensions.configured_modules()) == 3
+    end
+
+    test "the defaults carry health and both of its successors" do
+      Application.delete_env(:nerves_hub_link, :extension_modules)
+
+      modules = Extensions.configured_modules()
+
+      assert NervesHubLink.Extensions.Health in modules
+      assert NervesHubLink.Extensions.Alarms in modules
+      assert NervesHubLink.Extensions.Metrics in modules
+    end
   end
 
   describe "offer/1" do
+    test "a platform that only has health is offered only health" do
+      # The whole point of registering all three: a device may offer what the
+      # platform cannot serve without losing what it can.
+      Application.put_env(:nerves_hub_link, :extension_modules, [
+        NervesHubLink.Extensions.Health
+      ])
+
+      assert Extensions.offer(%{"health" => ["0.0.1"]}) == %{"health" => "0.0.1"}
+    end
+
+    test "a platform that has the newer extensions is offered those as well" do
+      Application.put_env(:nerves_hub_link, :extension_modules, [
+        NervesHubLink.Extensions.Health
+      ])
+
+      offered =
+        Extensions.offer(%{
+          "health" => ["0.0.1"],
+          "alarms" => ["0.1.0"],
+          "metrics" => ["0.1.0"]
+        })
+
+      assert offered == %{"health" => "0.0.1", "alarms" => "0.1.0", "metrics" => "0.1.0"}
+    end
+
     test "offers an extension the platform has, at the version it named" do
       assert Extensions.offer(%{"reporter" => ["1.2.3"], "broken" => ["0.0.1"]}) == %{
                "reporter" => "1.2.3",

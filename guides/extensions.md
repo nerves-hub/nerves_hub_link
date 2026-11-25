@@ -13,7 +13,9 @@ There are eight extensions currently:
 - [**Metrics**](#metrics) sends the numbers a device measures about itself, such as CPU temperature and memory used.
 - [**Network Identity**](#network-identity) reports the device's identity on networks NervesHub doesn't run, such as iroh or NetBird.
 
-Alarms, Geo, Metrics and Network Identity are named in `extension_modules` by default, as is Local Shell when [`ExPTY`](https://hex.pm/packages/expty) is available. Error Reports, Health and Logging are not; see each one for how to turn it on.
+Alarms, Geo, Health, Metrics and Network Identity are named in `extension_modules` by default, as is Local Shell when [`ExPTY`](https://hex.pm/packages/expty) is available. Error Reports and Logging are not; see each one for how to turn it on.
+
+Health, Metrics and Alarms overlap on purpose. Metrics and alarms used to be reported through health and now have extensions of their own, so a device offers all three and the server attaches whichever it has: the newer ones where they exist, health where they don't. Naming health in `extension_modules` names all three for that reason, so a configuration written before they existed keeps working and still gets them.
 
 Your NervesHub server controls enabling and disabling extensions to allow you to switch them off if they impact operations.
 
@@ -30,6 +32,7 @@ config :nerves_hub_link,
   extension_modules: [
     NervesHubLink.Extensions.Alarms,
     NervesHubLink.Extensions.Geo,
+    NervesHubLink.Extensions.Health,
     NervesHubLink.Extensions.LocalShell,
     NervesHubLink.Extensions.Metrics,
     NervesHubLink.Extensions.NetworkIdentity
@@ -40,7 +43,7 @@ config :nerves_hub_link,
 >
 > `extension_modules` replaces the default list rather than adding to it, so every extension you want has to be named, not just the one you are adding. `NervesHubLink.Extensions.LocalShell` is only in the default list when [`ExPTY`](https://hex.pm/packages/expty) is available, so leave it out of your list if you don't depend on it.
 
-Like every extension, it sends nothing until NervesHub asks the device to attach it, which you control in your Product settings. It needs a NervesHub that has the Alarms extension; against one that doesn't, nothing is sent at all, so a device talking to an older server should name the [Health extension](#health) too and go on reporting alarms in its health reports.
+Like every extension, it sends nothing until NervesHub asks the device to attach it, which you control in your Product settings. It needs a NervesHub that has the Alarms extension; against one that doesn't, the device reports its alarms in its health reports as it always did, since [Health](#health) is on by default too.
 
 ### What is sent
 
@@ -70,6 +73,7 @@ config :nerves_hub_link,
     NervesHubLink.Extensions.Alarms,
     NervesHubLink.Extensions.ErrorReports,
     NervesHubLink.Extensions.Geo,
+    NervesHubLink.Extensions.Health,
     NervesHubLink.Extensions.LocalShell,
     NervesHubLink.Extensions.Metrics,
     NervesHubLink.Extensions.NetworkIdentity
@@ -172,25 +176,11 @@ Please see `NervesHubLink.Extensions.Geo.Resolver` for more information.
 
 ## Health
 
-The Health extension reports the device's metrics and alarms to a NervesHub that has no extension for either of them.
+The Health extension reports the device's metrics and alarms to a NervesHub that has no extension for either of them: one without ClickHouse has no [Metrics extension](#metrics), and one older than these extensions has neither.
 
-It is not named in `extension_modules` by default, because metrics and alarms - the two things most devices reported through it - now have extensions of their own. To turn it on, name it:
+It is named in `extension_modules` by default, and naming it there yourself also names [Metrics](#metrics) and [Alarms](#alarms), since those are what health used to do. A device offers all three and the server attaches what it has, so nothing has to change in a configuration written before they existed, and a device that moves to a newer NervesHub starts using them without new firmware.
 
-```elixir
-config :nerves_hub_link,
-  extension_modules: [
-    NervesHubLink.Extensions.Alarms,
-    NervesHubLink.Extensions.Geo,
-    NervesHubLink.Extensions.Health,
-    NervesHubLink.Extensions.LocalShell,
-    NervesHubLink.Extensions.Metrics,
-    NervesHubLink.Extensions.NetworkIdentity
-  ]
-```
-
-> #### An older NervesHub needs this {: .warning}
->
-> A NervesHub without ClickHouse doesn't offer the [Metrics extension](#metrics) at all and takes metrics through health instead, and one that predates these extensions has no extension for metrics or alarms at all. A device talking to either reports neither unless health is named here. Naming all three is safe whatever your server has: a device offers back only what the server says it supports, and health leaves out whatever another attached extension is already reporting.
+While either of them is attached, health leaves what it carries out of its reports, so nothing is reported twice. A device whose server has both ends up sending health reports that carry only a timestamp, which is harmless; one whose server has neither sends what it always sent.
 
 What is sampled, and how, is configured in one place for both extensions - see [Metrics](#metrics). A report carries the metrics and the alarms, and nothing else: `checks` and `connectivity` are gone, the first because NervesHub never stored them and the second because it was never sent.
 
@@ -250,6 +240,7 @@ config :nerves_hub_link,
   extension_modules: [
     NervesHubLink.Extensions.Alarms,
     NervesHubLink.Extensions.Geo,
+    NervesHubLink.Extensions.Health,
     NervesHubLink.Extensions.LocalShell,
     NervesHubLink.Extensions.Logging,
     NervesHubLink.Extensions.Metrics,
@@ -318,7 +309,7 @@ The Metrics extension sends the numbers a device measures about itself: CPU temp
 
 Health carries metrics too, but alongside its alarms, in one report on one timer. Split out, the numbers run at their own pace: as often as anyone wants to watch them, rather than as often as the slowest thing in the report needs sending.
 
-It is named in `extension_modules` by default, so there is nothing to turn on. Like every extension, it sends nothing until NervesHub asks the device to attach it, which you control in your Product settings. It needs a NervesHub that has the Metrics extension, which needs ClickHouse; against one that doesn't, turn on the [Health extension](#health) and report metrics through that.
+It is named in `extension_modules` by default, so there is nothing to turn on. Like every extension, it sends nothing until NervesHub asks the device to attach it, which you control in your Product settings. It needs a NervesHub that has the Metrics extension, which needs ClickHouse; against one that doesn't, the device reports its metrics through [Health](#health) instead, which is also on by default.
 
 ### What is sent
 
