@@ -93,7 +93,8 @@ defmodule NervesHubLink.Extensions do
   One extension as `list/0` reports it.
 
   `version` and `module` are the version `offer/1` settled on with the platform,
-  or the oldest this device implements when nothing has been offered yet.
+  or the oldest this device implements when no offer has named it: before the
+  first offer, or after one that left it out.
   `versions` is every version this device implements, each with its module.
   """
   @type entry :: %{
@@ -251,13 +252,10 @@ defmodule NervesHubLink.Extensions do
     %{entry | version: version, module: entry.versions[version]}
   end
 
-  # A reconnect asks for the offer again, but the extension processes keep
-  # running through it. One offered again at the same version is still the
-  # process that was attached, so it stays attached rather than having its
-  # pushes refused until the platform attaches it again. At another version it
-  # is a different module, which hasn't been started. One the platform no
-  # longer names isn't offered at all, and is left detached: nothing will
-  # attach it, so it has no business pushing.
+  # A reconnect offers again while extension processes keep running. At the
+  # same version the attached process is still there, so it stays attached and
+  # can keep pushing. At another version its module hasn't been started, and one
+  # no longer offered is left detached, since nothing will attach it.
   defp keep_attached(%{module: module} = entry, %{module: module} = previous) do
     %{entry | attached?: previous.attached?, attach_ref: previous.attach_ref}
   end
