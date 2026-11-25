@@ -576,28 +576,65 @@ defmodule NervesHubLink.Socket do
     {:ok, set_iex_timer(socket)}
   end
 
+  # `file-data/start`, its chunks, then `file-data/stop` write a file to the
+  # data path. Each chunk is saved before the next message is read, typing
+  # included, so the console doesn't answer until the file is saved.
+  #
+  # With `"ack" => true` in `file-data/start`, the device pushes `file-data/ack`
+  # after each chunk with the bytes saved so far, then `file-data/saved` at
+  # stop, or `file-data/error` if the file can't be written. Otherwise nothing
+  # is pushed, since an older NervesHub closes the console on an unknown event.
   def handle_message(@console_topic, "file-data/start", params, socket) do
-    :ok = File.mkdir_p!(socket.assigns.data_path)
-    path = Path.join(socket.assigns.data_path, params["filename"])
-    _ = File.rm_rf!(path)
-    :ok = File.touch!(path)
-    {:ok, socket}
+    file = %{name: params["filename"], ack?: params["ack"] == true, bytes: 0, failed?: false}
+    path = Path.join(socket.assigns.data_path, file.name)
+
+    result =
+      with :ok <- File.mkdir_p(socket.assigns.data_path),
+           {:ok, _removed} <- File.rm_rf(path) do
+        File.touch(path)
+      end
+
+    {:ok, assign(socket, :console_file, saved(socket, file, result))}
   end
 
   def handle_message(@console_topic, "file-data", params, socket) do
-    path = Path.join(socket.assigns.data_path, params["filename"])
+    case receiving_file(socket, params["filename"]) do
+      %{failed?: true} ->
+        {:ok, socket}
 
-    _res =
-      File.open!(path, [:append], fn fd ->
-        chunk = Base.decode64!(params["data"])
-        IO.binwrite(fd, chunk)
-      end)
+      file ->
+        path = Path.join(socket.assigns.data_path, file.name)
 
-    {:ok, socket}
+        file =
+          case Base.decode64(params["data"] || "") do
+            {:ok, chunk} ->
+              saved(
+                socket,
+                %{file | bytes: file.bytes + byte_size(chunk)},
+                File.write(path, chunk, [:append])
+              )
+
+            :error ->
+              saved(socket, file, {:error, :invalid_data})
+          end
+
+        :ok =
+          report(socket, file, "file-data/ack", %{
+            filename: file.name,
+            chunk: params["chunk"],
+            bytes: file.bytes
+          })
+
+        {:ok, track_file(socket, file)}
+    end
   end
 
-  def handle_message(@console_topic, "file-data/stop", _params, socket) do
-    {:ok, socket}
+  def handle_message(@console_topic, "file-data/stop", params, socket) do
+    file = receiving_file(socket, params["filename"])
+
+    :ok = report(socket, file, "file-data/saved", %{filename: file.name, bytes: file.bytes})
+
+    {:ok, stop_tracking_file(socket, file.name)}
   end
 
   def handle_message(@extensions_topic, event, payload, socket) do
@@ -1065,6 +1102,61 @@ defmodule NervesHubLink.Socket do
       socket
     end
   end
+
+  # The file `file-data/start` began. A chunk for any other file is saved
+  # without reporting anything.
+  defp receiving_file(socket, name) do
+    case socket.assigns[:console_file] do
+      %{name: ^name} = file -> file
+      _ -> %{name: name, ack?: false, bytes: 0, failed?: false}
+    end
+  end
+
+  # Only the file `file-data/start` began is kept, so a stray chunk for another
+  # file can't replace it and stop its reports.
+  defp track_file(socket, %{name: name} = file) do
+    case socket.assigns[:console_file] do
+      %{name: ^name} -> assign(socket, :console_file, file)
+      _ -> socket
+    end
+  end
+
+  defp stop_tracking_file(socket, name) do
+    case socket.assigns[:console_file] do
+      %{name: ^name} -> assign(socket, :console_file, nil)
+      _ -> socket
+    end
+  end
+
+  # How writing part of a file went. The first failure is logged and, if
+  # asked, reported, and the rest of the file is then ignored.
+  defp saved(_socket, file, :ok), do: file
+
+  defp saved(socket, file, {:error, reason, _path}), do: saved(socket, file, {:error, reason})
+
+  defp saved(socket, file, {:error, reason}) do
+    message = describe_file_error(reason)
+
+    Logger.warning(
+      "[NervesHubLink] Couldn't save #{inspect(file.name)} from the console: #{message}"
+    )
+
+    :ok = report(socket, file, "file-data/error", %{filename: file.name, reason: message})
+
+    %{file | failed?: true}
+  end
+
+  # Tells NervesHub how a file is going, if it asked. Once a file has failed,
+  # only the failure is told.
+  defp report(socket, %{ack?: true, failed?: false}, event, payload) do
+    _ = push(socket, @console_topic, event, payload)
+    :ok
+  end
+
+  defp report(_socket, _file, _event, _payload), do: :ok
+
+  defp describe_file_error(:invalid_data), do: "a chunk wasn't valid Base64"
+  defp describe_file_error(reason), do: reason |> :file.format_error() |> to_string()
 
   defp set_iex_timer(socket) do
     timeout = socket.assigns.config.remote_iex_timeout * 1000
