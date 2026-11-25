@@ -4,9 +4,9 @@
 #
 defmodule NervesHubLink.Extensions.MetricsTest.CatMetrics do
   @moduledoc false
-  @behaviour NervesHubLink.MetricSet
+  @behaviour NervesHubLink.Metrics.MetricSet
 
-  @impl NervesHubLink.MetricSet
+  @impl NervesHubLink.Metrics.MetricSet
   def sample() do
     # Sampled from the sampler's process and from the health extension's, so
     # the test process is found by name rather than passed in.

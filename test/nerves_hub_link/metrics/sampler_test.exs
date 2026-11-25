@@ -4,9 +4,9 @@
 #
 defmodule NervesHubLink.Metrics.SamplerTest.CatMetrics do
   @moduledoc false
-  @behaviour NervesHubLink.MetricSet
+  @behaviour NervesHubLink.Metrics.MetricSet
 
-  @impl NervesHubLink.MetricSet
+  @impl NervesHubLink.Metrics.MetricSet
   def sample(), do: %{"cats_seen" => :counters.get(counter(), 1)}
 
   @doc "The reading each sample returns, so a test can tell them apart."
@@ -28,9 +28,9 @@ end
 
 defmodule NervesHubLink.Metrics.SamplerTest.OnFire do
   @moduledoc false
-  @behaviour NervesHubLink.MetricSet
+  @behaviour NervesHubLink.Metrics.MetricSet
 
-  @impl NervesHubLink.MetricSet
+  @impl NervesHubLink.Metrics.MetricSet
   def sample(), do: raise("the sensor is on fire")
 end
 

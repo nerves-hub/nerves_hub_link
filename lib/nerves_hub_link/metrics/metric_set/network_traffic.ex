@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-defmodule NervesHubLink.MetricSet.NetworkTraffic do
+defmodule NervesHubLink.Metrics.MetricSet.NetworkTraffic do
   @moduledoc """
   Health report metrics for bytes sent and received (total) per interface.
 
@@ -10,11 +10,11 @@ defmodule NervesHubLink.MetricSet.NetworkTraffic do
     - [interface]_bytes_received_total: Total bytes received by the interface
     - [interface]_bytes_sent_total: Total bytes sent by the interface
   """
-  @behaviour NervesHubLink.MetricSet
+  @behaviour NervesHubLink.Metrics.MetricSet
 
   require Logger
 
-  @impl NervesHubLink.MetricSet
+  @impl NervesHubLink.Metrics.MetricSet
   def sample() do
     if File.exists?("/proc/net/dev") do
       {output, _} = System.cmd("cat", ["/proc/net/dev"])

@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-defmodule NervesHubLink.MetricSet.CPU do
+defmodule NervesHubLink.Metrics.MetricSet.CPU do
   @moduledoc """
   Health report metrics for CPU temperature, utilization, and load averages.
 
@@ -13,9 +13,9 @@ defmodule NervesHubLink.MetricSet.CPU do
     - load_5min: Load average over the last five minutes
     - load_15min: Load average over the last fifteen minutes
   """
-  @behaviour NervesHubLink.MetricSet
+  @behaviour NervesHubLink.Metrics.MetricSet
 
-  @impl NervesHubLink.MetricSet
+  @impl NervesHubLink.Metrics.MetricSet
   def sample() do
     [
       cpu_temperature(),

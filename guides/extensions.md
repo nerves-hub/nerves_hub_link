@@ -331,14 +331,14 @@ A reading is timed against the monotonic clock and given a wall-clock time only 
 
 The default set of metrics are:
 
-- `NervesHubLink.MetricSet.CPU` - CPU temperature, usage (percentage), and load averages.
-- `NervesHubLink.MetricSet.Memory` - Memory size (MB), used (MB), and percentage used.
-- `NervesHubLink.MetricSet.Disk` - Disk size (KB), available (KB), and percentage used.
+- `NervesHubLink.Metrics.MetricSet.CPU` - CPU temperature, usage (percentage), and load averages.
+- `NervesHubLink.Metrics.MetricSet.Memory` - Memory size (MB), used (MB), and percentage used.
+- `NervesHubLink.Metrics.MetricSet.Disk` - Disk size (KB), available (KB), and percentage used.
 
 And one optional metric set:
-- `NervesHubLink.MetricSet.NetworkTraffic` - Total bytes sent and received (per interface).
+- `NervesHubLink.Metrics.MetricSet.NetworkTraffic` - Total bytes sent and received (per interface).
 
-You can also create your own metric sets by implementing the `NervesHubLink.MetricSet`
+You can also create your own metric sets by implementing the `NervesHubLink.Metrics.MetricSet`
 behaviour. It lived under the health extension's namespace until the metrics extension arrived, and those
 older names still work: both the behaviour and the four sets above answer to them.
 
@@ -365,8 +365,8 @@ If you only want to use some of the default metrics, you can specify them explic
 config :nerves_hub_link,
   metrics: [
     metric_sets: [
-      NervesHubLink.MetricSet.CPU,
-      NervesHubLink.MetricSet.Memory
+      NervesHubLink.Metrics.MetricSet.CPU,
+      NervesHubLink.Metrics.MetricSet.Memory
       # the disk metrics have been excluded
     ]
   ]

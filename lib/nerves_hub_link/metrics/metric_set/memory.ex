@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-defmodule NervesHubLink.MetricSet.Memory do
+defmodule NervesHubLink.Metrics.MetricSet.Memory do
   @moduledoc """
   Health report metrics for total, available, and used (percentage) memory.
 
@@ -11,9 +11,9 @@ defmodule NervesHubLink.MetricSet.Memory do
     - mem_used_mb: Used memory size in megabytes
     - mem_used_percent: Used memory percentage
   """
-  @behaviour NervesHubLink.MetricSet
+  @behaviour NervesHubLink.Metrics.MetricSet
 
-  @impl NervesHubLink.MetricSet
+  @impl NervesHubLink.Metrics.MetricSet
   def sample() do
     {free_output, 0} = System.cmd("free", [])
     [_title_row, memory_row | _] = String.split(free_output, "\n")

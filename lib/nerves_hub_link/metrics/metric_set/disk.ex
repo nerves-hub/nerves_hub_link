@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-defmodule NervesHubLink.MetricSet.Disk do
+defmodule NervesHubLink.Metrics.MetricSet.Disk do
   @moduledoc """
   Health report metrics for total, available, and used disk space.
 
@@ -11,9 +11,9 @@ defmodule NervesHubLink.MetricSet.Disk do
     - disk_available_kb: Available disk space in kilobytes
     - disk_used_percentage: Used disk space percentage
   """
-  @behaviour NervesHubLink.MetricSet
+  @behaviour NervesHubLink.Metrics.MetricSet
 
-  @impl NervesHubLink.MetricSet
+  @impl NervesHubLink.Metrics.MetricSet
   def sample() do
     case Application.ensure_all_started(:os_mon) do
       {:ok, _} ->

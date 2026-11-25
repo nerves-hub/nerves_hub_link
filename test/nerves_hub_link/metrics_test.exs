@@ -4,9 +4,9 @@
 #
 defmodule NervesHubLink.MetricsTest.CatMetrics do
   @moduledoc false
-  @behaviour NervesHubLink.MetricSet
+  @behaviour NervesHubLink.Metrics.MetricSet
 
-  @impl NervesHubLink.MetricSet
+  @impl NervesHubLink.Metrics.MetricSet
   def sample(), do: %{cats_seen: 4, cats_fed: 2}
 end
 
@@ -20,7 +20,7 @@ defmodule NervesHubLink.MetricsTest do
   use ExUnit.Case, async: false
 
   alias NervesHubLink.Metrics
-  alias NervesHubLink.MetricSet
+  alias NervesHubLink.Metrics.MetricSet
   alias NervesHubLink.MetricsTest.Battery
   alias NervesHubLink.MetricsTest.CatMetrics
 

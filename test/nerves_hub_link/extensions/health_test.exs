@@ -32,9 +32,9 @@ end
 
 defmodule NervesHubLink.Extensions.HealthTest.CatMetrics do
   @moduledoc false
-  @behaviour NervesHubLink.MetricSet
+  @behaviour NervesHubLink.Metrics.MetricSet
 
-  @impl NervesHubLink.MetricSet
+  @impl NervesHubLink.Metrics.MetricSet
   def sample(), do: %{cats_seen: 4, cats_fed: 2}
 end
 
