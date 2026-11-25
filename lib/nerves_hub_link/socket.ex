@@ -108,9 +108,13 @@ defmodule NervesHubLink.Socket do
   # same ref, which is how the two are matched up.
   @type push_ref :: String.t()
 
-  # How long a caller waits for a device to say it is going to sleep: the push
-  # and the close, with a margin.
-  @sleep_call_timeout :timer.seconds(15)
+  # How long a caller waits for a device to say it is going to sleep. The push
+  # is written here rather than queued, so this has to outlast a write that
+  # stalls, which `send_timeout_msec` bounds at 30 seconds by default - a
+  # shorter wait than that would have the caller give up while the socket was
+  # still writing. A device that raises `send_timeout_msec` should expect this
+  # call to be able to take that long too.
+  @sleep_call_timeout :timer.seconds(35)
 
   # The longest delay `Process.send_after/3` takes, about 49 days. A device
   # can say it will sleep for longer than that.
@@ -985,6 +989,14 @@ defmodule NervesHubLink.Socket do
     {:noreply, resolve_update_request(socket, kind, {:error, :timeout})}
   end
 
+  # A sleeping device has no connection to report validation over, and this
+  # reschedules itself, so one left in the mailbox would poll for the whole
+  # sleep - calling the client callback and failing a push every time round.
+  # The check is started again by the connection that follows waking.
+  def handle_info(:firmware_validation_status_check, %State{asleep: true} = socket) do
+    {:noreply, %{socket | firmware_validation_timer: nil}}
+  end
+
   def handle_info(:firmware_validation_status_check, socket) do
     if Client.firmware_validated?() do
       Logger.info("[NervesHubLink] Firmware is validated, notifying NervesHub")
@@ -1104,6 +1116,14 @@ defmodule NervesHubLink.Socket do
 
   def handle_info({:extensions_offered, chosen}, socket) do
     {:noreply, join(socket, @extensions_topic, chosen)}
+  end
+
+  # `cancel_reconnect/1` cannot retract a `:connect` that has already been
+  # delivered, so a reconnect timer that fired just before the device went to
+  # sleep leaves one here. Opening the connection the device has just closed on
+  # purpose is the one thing a sleeping device must not do.
+  def handle_info(:connect, %State{asleep: true} = socket) do
+    {:noreply, %{socket | reconnect_timer: nil}}
   end
 
   def handle_info(:connect, socket) do

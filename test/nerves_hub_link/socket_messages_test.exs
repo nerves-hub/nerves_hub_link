@@ -1265,6 +1265,46 @@ defmodule NervesHubLink.SocketMessagesTest do
       assert :sys.get_state(socket).wake_timer == nil
     end
 
+    # `Process.cancel_timer/1` cannot retract a message already delivered, so a
+    # reconnect timer that fired just before the sleep leaves a `:connect`
+    # behind. Acting on it would open the connection the device just closed.
+    test "a reconnect already in the mailbox does not wake it", %{socket: socket} do
+      assert NervesHubLink.going_to_sleep(socket, mode: :deep) == :ok
+
+      assert_push(@device_topic, "sleeping")
+      assert_closed()
+
+      send(socket, :connect)
+
+      refute_receive {:connection_test, {:server, _}}, 1_500
+      assert asleep?(socket)
+    end
+
+    # Same again for the firmware validation poll: one still in the mailbox
+    # would reschedule itself and go on polling for the whole sleep, calling
+    # the client callback and failing a push every time round.
+    test "a firmware validation check in the mailbox does not outlive the sleep", %{
+      socket: socket
+    } do
+      # The poll only reschedules for a device whose firmware was not validated
+      # when it connected, which is what the join params record.
+      stub(ClientMock, :firmware_validated?, fn -> false end)
+
+      :sys.replace_state(socket, fn state ->
+        %{state | params: put_in(state.params, ["meta", "firmware_validated"], false)}
+      end)
+
+      assert NervesHubLink.going_to_sleep(socket, mode: :deep) == :ok
+
+      assert_push(@device_topic, "sleeping")
+      assert_closed()
+
+      send(socket, :firmware_validation_status_check)
+
+      assert :sys.get_state(socket).firmware_validation_timer == nil
+      assert asleep?(socket)
+    end
+
     test "options it can't send are refused before anything is sent", %{socket: socket} do
       assert_raise ArgumentError, fn -> NervesHubLink.going_to_sleep(socket, mode: :hibernate) end
       assert_raise ArgumentError, fn -> NervesHubLink.going_to_sleep(socket, duration_ms: 0) end
