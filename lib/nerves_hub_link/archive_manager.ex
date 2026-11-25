@@ -206,8 +206,10 @@ defmodule NervesHubLink.ArchiveManager do
           :ok
         end
 
+        # An archive isn't firmware, and NervesHub takes a download that
+        # reports it has started for a firmware update.
         {:ok, download} =
-          Downloader.start_download(info.url, handler_fun)
+          Downloader.start_download(info.url, handler_fun, report_started: false)
 
         _ = File.mkdir_p(directory)
         _ = File.rm_rf(temp_file_path)
