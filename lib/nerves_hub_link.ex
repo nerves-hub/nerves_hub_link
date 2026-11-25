@@ -104,11 +104,14 @@ defmodule NervesHubLink do
   defdelegate send_update_status(server \\ Socket, status), to: Socket
 
   @doc """
-  Report this device's metadata to NervesHub again.
+  Collect this device's metadata again, and send what comes back.
 
-  Metadata is collected from `c:NervesHubLink.Client.device_metadata/0` and sent once
-  the device channel is joined, and at no other time: NervesHub holds it against
-  the connection, so sending it on a timer would be repeating something that
+  Nothing is passed in: `c:NervesHubLink.Client.device_metadata/0` is asked for
+  the metadata, exactly as it is asked when the device channel is joined, so
+  this call reports whatever the client answers at the time of the call.
+
+  It is asked on joining and at no other time, because NervesHub holds metadata
+  against the connection: sending it on a timer would repeat something that
   only changes when the device does. This is for when it does change while the
   device is connected - an installer naming the room the device sits in, say.
 
@@ -116,8 +119,8 @@ defmodule NervesHubLink do
   queued: the next join collects the metadata afresh, which is the same value
   this call would have sent.
   """
-  @spec send_device_metadata(GenServer.server()) :: :ok
-  defdelegate send_device_metadata(server \\ Socket), to: Socket
+  @spec refresh_device_metadata(GenServer.server()) :: :ok
+  defdelegate refresh_device_metadata(server \\ Socket), to: Socket
 
   @doc """
   Send a file to the connected console

@@ -185,8 +185,9 @@ defmodule NervesHubLink.Client do
   Metadata says what a device *is* rather than how it is doing: where it was
   installed, which customer it belongs to, the revision of the board under it.
   NervesHub holds it against the connection, so it is sent when the device
-  joins and again on every reconnect, and `NervesHubLink.send_device_metadata/1`
-  sends it again when it changes while the device is connected.
+  joins and again on every reconnect. `NervesHubLink.refresh_device_metadata/1`
+  asks this callback again, and sends what it answers, for when the metadata
+  changes while the device is connected.
 
   Keys are strings, and so are the values NervesHub expects. This runs on the
   socket process, so anything slow to work out belongs in your application,
