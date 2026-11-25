@@ -89,19 +89,27 @@ defmodule NervesHubLink.Extensions do
     :ok
   end
 
-  @doc """
-  List extensions currently available
+  @typedoc """
+  One extension as `list/0` reports it.
+
+  `version` and `module` are the version `offer/1` settled on with the platform,
+  or the oldest this device implements when no offer has named it: before the
+  first offer, or after one that left it out.
+  `versions` is every version this device implements, each with its module.
   """
-  @spec list() :: [
-          %{
-            String.t() => %{
-              attached?: boolean(),
-              attach_ref: String.t(),
-              module: module(),
-              version: boolean()
-            }
-          }
-        ]
+  @type entry :: %{
+          attached?: boolean(),
+          attach_ref: Slipstream.push_reference() | nil,
+          module: module(),
+          version: String.t(),
+          versions: %{String.t() => module()}
+        }
+
+  @doc """
+  List the extensions this device is configured with, keyed by name, and
+  whether each is attached.
+  """
+  @spec list() :: %{String.t() => entry()}
   def list(), do: GenServer.call(__MODULE__, :list)
 
   @doc """
@@ -244,9 +252,19 @@ defmodule NervesHubLink.Extensions do
     %{entry | version: version, module: entry.versions[version]}
   end
 
+  # A reconnect offers again while extension processes keep running. At the
+  # same version the attached process is still there, so it stays attached and
+  # can keep pushing. At another version its module hasn't been started, and one
+  # no longer offered is left detached, since nothing will attach it.
+  defp keep_attached(%{module: module} = entry, %{module: module} = previous) do
+    %{entry | attached?: previous.attached?, attach_ref: previous.attach_ref}
+  end
+
+  defp keep_attached(entry, _previous), do: entry
+
   @impl GenServer
   def handle_call(:list, _from, state) do
-    {:reply, find_extensions(), state}
+    {:reply, state.extensions, state}
   end
 
   def handle_call({:offer, advertisement}, _from, state) do
@@ -264,8 +282,12 @@ defmodule NervesHubLink.Extensions do
     extensions =
       for {name, entry} <- extensions, into: %{} do
         case chosen[name] do
-          nil -> {name, entry}
-          version -> {name, %{entry | version: version, module: entry.versions[version]}}
+          nil ->
+            {name, entry}
+
+          version ->
+            entry = %{entry | version: version, module: entry.versions[version]}
+            {name, keep_attached(entry, state.extensions[name])}
         end
       end
 

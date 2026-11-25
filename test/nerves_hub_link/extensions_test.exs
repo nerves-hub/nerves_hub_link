@@ -39,12 +39,53 @@ defmodule NervesHubLink.ExtensionsTest.Broken do
   end
 end
 
+defmodule NervesHubLink.ExtensionsTest.Versioned do
+  @moduledoc """
+  The older of two versions of one extension, as `logging` has.
+  """
+
+  use NervesHubLink.Extensions,
+    name: "versioned",
+    version: "1.0.0",
+    versions: [
+      NervesHubLink.ExtensionsTest.Versioned,
+      NervesHubLink.ExtensionsTest.Versioned.Next
+    ]
+
+  @impl GenServer
+  def init(_opts), do: {:ok, %{}}
+
+  @impl NervesHubLink.Extensions
+  def handle_event(_event, _payload, state), do: {:noreply, state}
+end
+
+defmodule NervesHubLink.ExtensionsTest.Versioned.Next do
+  @moduledoc """
+  The newer of two versions of one extension.
+  """
+
+  use NervesHubLink.Extensions,
+    name: "versioned",
+    version: "2.0.0",
+    versions: [
+      NervesHubLink.ExtensionsTest.Versioned,
+      NervesHubLink.ExtensionsTest.Versioned.Next
+    ]
+
+  @impl GenServer
+  def init(_opts), do: {:ok, %{}}
+
+  @impl NervesHubLink.Extensions
+  def handle_event(_event, _payload, state), do: {:noreply, state}
+end
+
 defmodule NervesHubLink.ExtensionsTest do
   use ExUnit.Case, async: false
 
   alias NervesHubLink.Extensions
   alias NervesHubLink.ExtensionsTest.Broken
   alias NervesHubLink.ExtensionsTest.Reporter
+  alias NervesHubLink.ExtensionsTest.Versioned
   alias NervesHubLink.Support.SocketStub
 
   setup do
@@ -78,9 +119,51 @@ defmodule NervesHubLink.ExtensionsTest do
     test "ignores modules that aren't extensions" do
       Application.put_env(:nerves_hub_link, :extension_modules, [Reporter, NervesHubLink.Socket])
 
+      # The configuration is read when the process starts
+      :ok = stop_supervised!(Extensions)
+      _ = start_supervised!(Extensions)
+
       extensions = Extensions.list()
 
       assert Map.keys(extensions) == ["reporter"]
+    end
+
+    test "reports an extension that hasn't attached as detached" do
+      assert %{"reporter" => %{attached?: false, attach_ref: nil}} = Extensions.list()
+    end
+
+    test "reports an attached extension at the version that was offered" do
+      # The version offered is the one the platform will talk, so it is what
+      # the device is running. `versioned` implements 1.0.0 too, which is what
+      # a device that hasn't offered anything would fall back to.
+      Application.put_env(:nerves_hub_link, :extension_modules, [Reporter, Versioned])
+
+      assert Extensions.offer(%{"versioned" => ["1.0.0", "2.0.0"]}) == %{"versioned" => "2.0.0"}
+
+      :ok = Extensions.attach("versioned")
+      assert_receive {:pushed, "extensions", "versioned:attached", %{}}
+
+      assert %{
+               "versioned" => %{
+                 attached?: true,
+                 attach_ref: attach_ref,
+                 module: Versioned.Next,
+                 version: "2.0.0"
+               },
+               "reporter" => %{attached?: false}
+             } = Extensions.list()
+
+      assert attach_ref
+    end
+
+    test "reports a detached extension as detached" do
+      :ok = Extensions.attach("reporter")
+      assert_receive {:pushed, "extensions", "reporter:attached", %{}}
+
+      :ok = Extensions.detach("reporter")
+      assert_receive {:pushed, "extensions", "reporter:detached", %{}}
+
+      assert %{"reporter" => %{attached?: false}} = Extensions.list()
     end
   end
 
@@ -163,6 +246,45 @@ defmodule NervesHubLink.ExtensionsTest do
     test "treats a payload it cannot read as no advertisement" do
       # A malformed message should not cost this device every extension it has.
       assert Extensions.offer("nonsense") == %{"reporter" => "1.2.3", "broken" => "0.0.1"}
+    end
+  end
+
+  describe "offering again after a reconnect" do
+    setup do
+      :ok = Extensions.attach("reporter")
+      assert_receive {:pushed, "extensions", "reporter:attached", %{}}
+      :ok
+    end
+
+    test "an extension offered again at the same version stays attached" do
+      %{"reporter" => %{attach_ref: attach_ref}} = Extensions.list()
+
+      assert Extensions.offer(%{"reporter" => ["1.2.3"]}) == %{"reporter" => "1.2.3"}
+
+      # Its process kept running through the reconnect, so it can still push
+      assert %{"reporter" => %{attached?: true, attach_ref: ^attach_ref}} = Extensions.list()
+      assert {:ok, _ref} = Reporter.push("report", %{})
+    end
+
+    test "an extension the platform no longer names is detached" do
+      # Nothing will attach it, so it has no business pushing
+      assert Extensions.offer(%{}) == %{}
+
+      assert %{"reporter" => %{attached?: false}} = Extensions.list()
+      assert Reporter.push("report", %{}) == {:error, :detached}
+    end
+
+    test "an extension offered at another version is detached until it attaches" do
+      Application.put_env(:nerves_hub_link, :extension_modules, [Versioned])
+
+      assert Extensions.offer(%{"versioned" => ["1.0.0"]}) == %{"versioned" => "1.0.0"}
+      :ok = Extensions.attach("versioned")
+      assert_receive {:pushed, "extensions", "versioned:attached", %{}}
+
+      assert Extensions.offer(%{"versioned" => ["2.0.0"]}) == %{"versioned" => "2.0.0"}
+
+      assert %{"versioned" => %{attached?: false, attach_ref: nil, module: Versioned.Next}} =
+               Extensions.list()
     end
   end
 
