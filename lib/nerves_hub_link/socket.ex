@@ -861,13 +861,17 @@ defmodule NervesHubLink.Socket do
   # a reconnect starts with none and this is sent on every join rather than
   # only when it changes. Nothing is sent when there is none to send: NervesHub
   # merges what it is given, so an empty map would only cost a message.
+  #
+  # Named like `report_network_interface`, which is the same kind of message:
+  # a fact about the device that the platform stores against the connection,
+  # with no reply expected.
   defp push_metadata(socket) do
     case Client.device_metadata() do
       metadata when metadata == %{} ->
         socket
 
       metadata ->
-        _ = push(socket, @device_topic, "metadata", %{metadata: metadata})
+        _ = push(socket, @device_topic, "report_device_metadata", %{metadata: metadata})
         socket
     end
   end

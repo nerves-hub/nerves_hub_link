@@ -141,7 +141,9 @@ defmodule NervesHubLink.SocketMessagesTest do
 
       join_device_topic()
 
-      assert_push(@device_topic, "metadata", %{metadata: %{"placement" => "the shed"}})
+      assert_push(@device_topic, "report_device_metadata", %{
+        metadata: %{"placement" => "the shed"}
+      })
     end
 
     test "is collected again, and sent again, when asked", %{socket: socket} do
@@ -149,13 +151,17 @@ defmodule NervesHubLink.SocketMessagesTest do
 
       join_device_topic()
 
-      assert_push(@device_topic, "metadata", %{metadata: %{"placement" => "the shed"}})
+      assert_push(@device_topic, "report_device_metadata", %{
+        metadata: %{"placement" => "the shed"}
+      })
 
       stub(ClientMock, :device_metadata, fn -> %{"placement" => "the barn"} end)
 
       assert NervesHubLink.refresh_device_metadata(socket) == :ok
 
-      assert_push(@device_topic, "metadata", %{metadata: %{"placement" => "the barn"}})
+      assert_push(@device_topic, "report_device_metadata", %{
+        metadata: %{"placement" => "the barn"}
+      })
     end
 
     test "is not sent at all by a device that has none", %{socket: socket} do
@@ -165,7 +171,7 @@ defmodule NervesHubLink.SocketMessagesTest do
       # message. The call is answered after the join has been handled, and so
       # after any metadata would have been pushed.
       assert NervesHubLink.connected?(socket)
-      refute_push(@device_topic, "metadata", _payload)
+      refute_push(@device_topic, "report_device_metadata", _payload)
     end
   end
 
