@@ -7,13 +7,23 @@ defmodule NervesHubLink.Extensions.MetricsTest.CatMetrics do
   @behaviour NervesHubLink.MetricSet
 
   @impl NervesHubLink.MetricSet
-  def sample(), do: %{"cats_seen" => 4}
+  def sample() do
+    # Sampled from the sampler's process and from the health extension's, so
+    # the test process is found by name rather than passed in.
+    case Process.whereis(__MODULE__.Watcher) do
+      nil -> :ok
+      watcher -> send(watcher, :sampled)
+    end
+
+    %{"cats_seen" => 4}
+  end
 end
 
 defmodule NervesHubLink.Extensions.MetricsTest do
   use ExUnit.Case, async: false
 
   alias NervesHubLink.Extensions
+  alias NervesHubLink.Extensions.Alarms, as: AlarmsExtension
   alias NervesHubLink.Extensions.Health
   alias NervesHubLink.Extensions.Metrics, as: MetricsExtension
   alias NervesHubLink.Extensions.MetricsTest.CatMetrics
@@ -24,7 +34,13 @@ defmodule NervesHubLink.Extensions.MetricsTest do
     previous_modules = Application.get_env(:nerves_hub_link, :extension_modules)
     previous_metrics = Application.get_env(:nerves_hub_link, :metrics)
 
-    Application.put_env(:nerves_hub_link, :extension_modules, [MetricsExtension, Health])
+    Process.register(self(), CatMetrics.Watcher)
+
+    Application.put_env(:nerves_hub_link, :extension_modules, [
+      AlarmsExtension,
+      MetricsExtension,
+      Health
+    ])
 
     # A set of this test's own, so a reading doesn't depend on the host's CPU
     # or disk, and an interval long enough that only the test takes readings.
@@ -45,7 +61,12 @@ defmodule NervesHubLink.Extensions.MetricsTest do
     _ = start_supervised!(Sampler)
 
     unless context[:offer] == false do
-      _ = Extensions.offer(%{"metrics" => ["0.1.0"], "health" => ["0.0.1"]})
+      _ =
+        Extensions.offer(%{
+          "alarms" => ["0.1.0"],
+          "metrics" => ["0.1.0"],
+          "health" => ["0.0.1"]
+        })
     end
 
     :ok
@@ -157,6 +178,41 @@ defmodule NervesHubLink.Extensions.MetricsTest do
 
       assert_receive {:pushed, "extensions", "health:report", %{"value" => value}}
       refute Map.has_key?(value, :metrics)
+    end
+
+    test "health doesn't sample the metrics it is about to leave out" do
+      attach("metrics")
+      attach("health")
+
+      # Whatever attaching the extension sampled
+      receive do
+        :sampled -> :ok
+      after
+        100 -> flunk("attaching should have taken a reading")
+      end
+
+      :ok = Health.send_report()
+
+      assert_receive {:pushed, "extensions", "health:report", %{"value" => value}}
+
+      # Collecting them would mean shelling out to `free` and `df` every check
+      # to throw the answer away.
+      refute_received :sampled
+      refute Map.has_key?(value, :metrics)
+    end
+
+    test "health sends nothing at all once both of its keys are reported elsewhere" do
+      attach("metrics")
+      attach("alarms")
+      attach("health")
+
+      :ok = Health.send_report()
+
+      # A report carrying only a timestamp still costs a message, and on the
+      # platform a stored reading of nothing and a `device.health_reported`
+      # event with nothing in it.
+      refute_receive {:pushed, "extensions", "health:report", _payload}, 100
+      refute Health.report_sent?()
     end
 
     test "health reports metrics itself while this is not attached" do

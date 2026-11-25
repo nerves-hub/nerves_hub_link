@@ -180,7 +180,7 @@ The Health extension reports the device's metrics and alarms to a NervesHub that
 
 It is named in `extension_modules` by default, and naming it there yourself also names [Metrics](#metrics) and [Alarms](#alarms), since those are what health used to do. A device offers all three and the server attaches what it has, so nothing has to change in a configuration written before they existed, and a device that moves to a newer NervesHub starts using them without new firmware.
 
-While either of them is attached, health leaves what it carries out of its reports, so nothing is reported twice. A device whose server has both ends up sending health reports that carry only a timestamp, which is harmless; one whose server has neither sends what it always sent.
+While either of them is attached, health leaves what it carries out of its reports, and doesn't collect it either, so a check costs nothing for the half it isn't sending. A device whose server attaches both sends no health reports at all, since there would be nothing in them; one whose server has neither sends what it always sent.
 
 What is sampled, and how, is configured in one place for both extensions - see [Metrics](#metrics). A report carries the metrics and the alarms, and nothing else: `checks` and `connectivity` are gone, the first because NervesHub never stored them and the second because it was never sent.
 

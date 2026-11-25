@@ -94,50 +94,70 @@ defmodule NervesHubLink.Extensions.Health do
   end
 
   defp send_health_report(state) do
-    case push("report", %{"value" => report_value()}) do
-      {:ok, _} -> {:ok, %{state | report_sent: true}}
-      {:error, _reason} -> {:error, state}
-    end
-  end
-
-  # Without the keys at all, rather than with empty maps: NervesHub reads an
-  # empty `alarms` map as "no alarms" and would clear everything the alarms
-  # extension had raised, where a missing key says nothing about alarms. A
-  # missing `metrics` key records no readings, where an empty one would be a
-  # report with nothing in it against readings the metrics extension sent a
-  # moment ago.
-  defp report_value() do
-    case check_health() do
-      %DeviceStatus{} = status ->
-        case reported_elsewhere() do
-          [] -> status
-          keys -> status |> Map.from_struct() |> Map.drop(keys)
-        end
-
+    case report_value() do
       nil ->
-        nil
+        # Nothing left to say: the alarms and the metrics are both going out
+        # through their own extensions. A report carrying only a timestamp
+        # still costs a message, a stored reading of nothing, and a
+        # `device.health_reported` event with nothing in it.
+        {:ok, state}
+
+      value ->
+        case push("report", %{"value" => value}) do
+          {:ok, _} -> {:ok, %{state | report_sent: true}}
+          {:error, _reason} -> {:error, state}
+        end
     end
   end
 
-  defp reported_elsewhere() do
+  # A plain map carrying only what this extension is still responsible for,
+  # rather than a `DeviceStatus`. NervesHub reads an empty `alarms` map as "no
+  # alarms" and would clear everything the alarms extension had raised, where a
+  # missing key says nothing about alarms at all.
+  #
+  # Those keys are also not collected in the first place. Sampling metrics
+  # shells out to `free` and `df`, which is not work to do every check to throw
+  # the answer away because the metrics extension is sending its own.
+  defp report_value() do
+    case reporting_here() do
+      [] -> nil
+      keys -> collect(DefaultReport, keys)
+    end
+  end
+
+  defp reporting_here() do
     for {extension, key} <- [{AlarmsExtension, :alarms}, {MetricsExtension, :metrics}],
-        extension.attached?(),
+        not extension.attached?(),
         do: key
   end
 
   @spec check_health(module()) :: DeviceStatus.t() | nil
   def check_health(default_report \\ DefaultReport) do
+    case collect(default_report, [:alarms, :metrics]) do
+      nil -> nil
+      collected -> DeviceStatus.new(Map.to_list(collected))
+    end
+  end
+
+  # The timestamp and whichever of `keys` the caller asked for, as a plain map.
+  # `nil` when reporting is switched off.
+  #
+  # A report module that raises costs its report, not the connection: the
+  # failure is reported as an alarm of its own instead. That alarm goes out
+  # through whichever extension is carrying alarms, which is why the failure
+  # path answers with the same keys as the rest.
+  defp collect(default_report, keys) do
     config = Application.get_env(:nerves_hub_link, :health, [])
     report = Keyword.get(config, :report, default_report)
 
     if report do
       Alarms.clear_alarm(NervesHubLink.Extensions.Health.CheckFailed)
 
-      DeviceStatus.new(
-        timestamp: report.timestamp(),
-        alarms: report.alarms(),
-        metrics: report.metrics()
-      )
+      Map.new([:timestamp | keys], fn
+        :timestamp -> {:timestamp, report.timestamp()}
+        :alarms -> {:alarms, report.alarms()}
+        :metrics -> {:metrics, report.metrics()}
+      end)
     end
   rescue
     err ->
@@ -154,10 +174,15 @@ defmodule NervesHubLink.Extensions.Health do
       Alarms.clear_alarm(NervesHubLink.Extensions.Health.CheckFailed)
       Alarms.set_alarm({NervesHubLink.Extensions.Health.CheckFailed, [reason: reason]})
 
-      DeviceStatus.new(
-        timestamp: DateTime.utc_now(),
-        alarms: %{to_string(NervesHubLink.Extensions.Health.CheckFailed) => reason},
-        metrics: %{}
-      )
+      Map.new([:timestamp | keys], fn
+        :timestamp ->
+          {:timestamp, DateTime.utc_now()}
+
+        :alarms ->
+          {:alarms, %{to_string(NervesHubLink.Extensions.Health.CheckFailed) => reason}}
+
+        :metrics ->
+          {:metrics, %{}}
+      end)
   end
 end
