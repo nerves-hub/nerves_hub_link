@@ -34,6 +34,11 @@ defmodule NervesHubLink do
   """
   @type update_mode :: :off | :automatic | :device_managed
 
+  @typedoc """
+  An option to `going_to_sleep/2`.
+  """
+  @type sleep_option :: {:mode, :deep | :light} | {:duration_ms, pos_integer() | nil}
+
   @type update_status ::
           :received
           | {:started, downloader_network_interface :: String.t() | nil}
@@ -90,11 +95,66 @@ defmodule NervesHubLink do
   defdelegate status(server \\ UpdateManager), to: UpdateManager
 
   @doc """
-  Restart the socket and device channel
+  Restart the socket and device channel.
+
+  After `going_to_sleep/2`, this is how a device that woke reconnects.
   """
   @spec reconnect(GenServer.server()) :: :ok
   def reconnect(server \\ Socket) do
     Socket.reconnect!(server)
+  end
+
+  @doc """
+  Tell NervesHub this device is about to sleep, then close the connection.
+
+  NervesHub shows a device that said so as asleep, with when it is due back,
+  rather than as offline, and leaves the sleep out of its disconnect counts.
+  Call this just before the device sleeps. It returns once the message is
+  written and the connection closed, or after five seconds if the close is
+  slow, so the device can sleep straight after.
+  See the [Devices That Sleep guide](device_sleep.md).
+
+      NervesHubLink.going_to_sleep(mode: :deep, duration_ms: :timer.minutes(5))
+
+  The connection stays closed until the device wakes. Call `reconnect/1` when
+  it does. A device that said how long it would sleep also reconnects on its
+  own once that much time has passed, in case nothing called `reconnect/1`. A
+  device that restarts on waking connects as it always does at boot.
+
+  ## Options
+
+    * `:mode` - `:deep` (the default) or `:light`. NervesHub shows it to people
+      and does nothing else with it. Use `:deep` when the device loses what it
+      was running and starts again on waking, and `:light` when it carries on
+      where it left off.
+    * `:duration_ms` - how long the device will sleep, in milliseconds. Leave
+      it out for a device something else wakes, such as a GPIO. This is a
+      duration rather than a time, because a device that has just woken may
+      not have its clock set: NervesHub counts from when the message arrives.
+
+  NervesHub doesn't reply. A server that predates this message ignores it,
+  and the connection still closes.
+
+  Returns `{:error, :disconnected}` when the device channel isn't joined,
+  leaving the connection as it was. Raises `ArgumentError` on an unknown
+  option, a bad `:mode`, or a `:duration_ms` that isn't a positive integer.
+  """
+  @spec going_to_sleep(GenServer.server(), [sleep_option()]) :: :ok | {:error, term()}
+  def going_to_sleep(server \\ Socket, opts) when is_list(opts) do
+    opts = Keyword.validate!(opts, mode: :deep, duration_ms: nil)
+    mode = Keyword.fetch!(opts, :mode)
+    duration_ms = Keyword.fetch!(opts, :duration_ms)
+
+    if mode not in [:deep, :light] do
+      raise ArgumentError, "expected :mode to be :deep or :light, got: #{inspect(mode)}"
+    end
+
+    if not (is_nil(duration_ms) or (is_integer(duration_ms) and duration_ms > 0)) do
+      raise ArgumentError,
+            "expected :duration_ms to be a positive integer or nil, got: #{inspect(duration_ms)}"
+    end
+
+    Socket.going_to_sleep(server, mode, duration_ms)
   end
 
   @doc """

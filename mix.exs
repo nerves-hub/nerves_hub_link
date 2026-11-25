@@ -60,6 +60,7 @@ defmodule NervesHubLink.MixProject do
         "guides/configuration.md": [title: "Configuration"],
         "guides/extensions.md": [title: "Extensions"],
         "guides/device_managed_updates.md": [title: "Device-Managed Updates"],
+        "guides/device_sleep.md": [title: "Devices That Sleep"],
         "guides/debugging.md": [title: "Debugging"],
         "CHANGELOG.md": [title: "Changelog"]
       ],
