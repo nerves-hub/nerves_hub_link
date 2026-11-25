@@ -89,19 +89,27 @@ defmodule NervesHubLink.Extensions do
     :ok
   end
 
-  @doc """
-  List extensions currently available
+  @typedoc """
+  One extension as `list/0` reports it.
+
+  `version` and `module` are the version `offer/1` settled on with the platform,
+  or the oldest this device implements when no offer has named it: before the
+  first offer, or after one that left it out.
+  `versions` is every version this device implements, each with its module.
   """
-  @spec list() :: [
-          %{
-            String.t() => %{
-              attached?: boolean(),
-              attach_ref: String.t(),
-              module: module(),
-              version: boolean()
-            }
-          }
-        ]
+  @type entry :: %{
+          attached?: boolean(),
+          attach_ref: NervesHubLink.Socket.push_ref() | nil,
+          module: module(),
+          version: String.t(),
+          versions: %{String.t() => module()}
+        }
+
+  @doc """
+  List the extensions this device is configured with, keyed by name, and
+  whether each is attached.
+  """
+  @spec list() :: %{String.t() => entry()}
   def list(), do: GenServer.call(__MODULE__, :list)
 
   @doc """
@@ -123,6 +131,13 @@ defmodule NervesHubLink.Extensions do
   An extension the platform did not name is left out. It either does not
   implement it or has it switched off, and either way there is nothing to
   attach.
+
+  Every reconnect offers again while extension processes keep running. Once
+  the offer is answered, any running extension whose module was not offered,
+  such as `logging` 0.0.1 when 0.1.0 is offered or one the platform no longer
+  names, is stopped and `<name>:detached` is pushed, as `detach/1` does. That
+  push only reaches NervesHub when the extensions topic stayed joined. One
+  offered again at the version it is running keeps running and stays attached.
 
   > #### One version per extension {: .info}
   >
@@ -259,43 +274,82 @@ defmodule NervesHubLink.Extensions do
     %{entry | version: version, module: entry.versions[version]}
   end
 
+  # A reconnect offers again while extension processes keep running. At the
+  # same version the attached process is still there, so it stays attached and
+  # can keep pushing. At another version its module hasn't been started, and one
+  # no longer offered is left detached, since nothing will attach it. Either
+  # way, the process that was running is stopped once the offer is answered.
+  defp keep_attached(%{module: module} = entry, %{module: module} = previous) do
+    %{entry | attached?: previous.attached?, attach_ref: previous.attach_ref}
+  end
+
+  defp keep_attached(entry, _previous), do: entry
+
   @impl GenServer
   def handle_call(:list, _from, state) do
-    {:reply, find_extensions(), state}
+    {:reply, state.extensions, state}
   end
 
   def handle_call({:offer, advertisement}, _from, state) do
-    {chosen, state} = choose_offer(advertisement, state)
+    {chosen, offered, state} = choose_offer(advertisement, state)
 
-    {:reply, chosen, state}
+    {:reply, chosen, state, {:continue, {:stop_replaced, offered}}}
   end
 
-  def handle_call({:push, extension, event, payload}, _from, state) do
+  def handle_call({:push, extension, module, event, payload}, _from, state) do
     # This serves as the gatekeeper for the socket and prevents
     # extension messages that may still be trying to send when they
-    # have been detached and are not wanted over the socket
+    # have been detached and are not wanted over the socket.
+    #
+    # The module has to match as well as the name. Every version of an
+    # extension has the same name, and only the one that was offered talks
+    # the format the platform expects.
     result =
-      if state.extensions[extension][:attached?] == true do
-        scoped_event =
-          if String.starts_with?(event, "#{extension}:"),
-            do: event,
-            else: "#{extension}:#{event}"
+      case state.extensions[extension] do
+        %{attached?: true, module: ^module} ->
+          scoped_event =
+            if String.starts_with?(event, "#{extension}:"),
+              do: event,
+              else: "#{extension}:#{event}"
 
-        push_to_socket(scoped_event, payload)
-      else
-        {:error, :detached}
+          push_to_socket(scoped_event, payload)
+
+        _ ->
+          {:error, :detached}
       end
 
     {:reply, result, state}
   end
 
+  # Anything still running that wasn't just offered: a version the offer
+  # replaced, or an extension the platform no longer names. Left running, it
+  # would carry on working, and once the new version attached under the same
+  # name, its pushes would go out alongside the new one's, in its own format.
+  #
+  # A continue rather than part of answering the offer, because stopping a
+  # process can take as long as its shutdown and whoever asked should not wait
+  # on that. A continue still runs before anything else this process is sent,
+  # so nothing attaches until these have gone.
+  @impl GenServer
+  def handle_continue({:stop_replaced, offered}, state) do
+    for {_id, pid, _type, [module]} <- DynamicSupervisor.which_children(ExtensionsSupervisor),
+        is_pid(pid),
+        module not in offered do
+      # Ignore since either :ok, or {:error, :not_found}
+      _ = DynamicSupervisor.terminate_child(ExtensionsSupervisor, pid)
+      _ = push_to_socket("#{module.__name__()}:detached", %{})
+    end
+
+    {:noreply, state}
+  end
+
   @impl GenServer
   def handle_cast({:offer, advertisement, reply_to}, state) do
-    {chosen, state} = choose_offer(advertisement, state)
+    {chosen, offered, state} = choose_offer(advertisement, state)
 
     send(reply_to, {:extensions_offered, chosen})
 
-    {:noreply, state}
+    {:noreply, state, {:continue, {:stop_replaced, offered}}}
   end
 
   def handle_cast({:detach, extensions}, state) do
@@ -432,12 +486,18 @@ defmodule NervesHubLink.Extensions do
     extensions =
       for {name, entry} <- extensions, into: %{} do
         case chosen[name] do
-          nil -> {name, entry}
-          version -> {name, %{entry | version: version, module: entry.versions[version]}}
+          nil ->
+            {name, entry}
+
+          version ->
+            entry = %{entry | version: version, module: entry.versions[version]}
+            {name, keep_attached(entry, state.extensions[name])}
         end
       end
 
-    {chosen, %{state | extensions: extensions}}
+    offered = for {name, version} <- chosen, do: extensions[name].versions[version]
+
+    {chosen, offered, %{state | extensions: extensions}}
   end
 
   defp start_extension(extension_module) do
@@ -495,7 +555,10 @@ defmodule NervesHubLink.Extensions do
               {:ok, NervesHubLink.Socket.push_ref()}
               | {:error, reason :: :detached | term()}
       def push(event, payload) do
-        GenServer.call(NervesHubLink.Extensions, {:push, __name__(), event, payload})
+        GenServer.call(
+          NervesHubLink.Extensions,
+          {:push, __name__(), __MODULE__, event, payload}
+        )
       end
 
       @impl GenServer

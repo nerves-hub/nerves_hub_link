@@ -59,6 +59,7 @@ defmodule NervesHubLink.Downloader do
             resume_from_bytes: nil,
             range_end: nil,
             label: nil,
+            report_started: true,
             retry_timeout: nil,
             worst_case_timeout: nil,
             worst_case_timeout_remaining_ms: nil
@@ -83,6 +84,7 @@ defmodule NervesHubLink.Downloader do
           resume_from_bytes: nil | non_neg_integer(),
           range_end: nil | non_neg_integer(),
           label: nil | String.t(),
+          report_started: boolean(),
           retry_number: non_neg_integer(),
           handler_fun: event_handler_fun,
           retry_args: retry_args(),
@@ -113,6 +115,7 @@ defmodule NervesHubLink.Downloader do
           {:resume_from_bytes, integer()}
           | {:range_end, integer()}
           | {:label, String.t()}
+          | {:report_started, boolean()}
           | {:retry_config, RetryConfig.t()}
           | {:downloader_ssl, keyword()}
           | {:downloader_http_opts, keyword()}
@@ -129,6 +132,12 @@ defmodule NervesHubLink.Downloader do
   When several downloads are running at once, pass `:label` to say which is
   which. It is added to every log line this process writes, which are otherwise
   impossible to tell apart.
+
+  Each time it connects, a download tells NervesHub that a firmware update has
+  started, with `{:started, network_interface}`. Pass `report_started: false`
+  for a download that isn't firmware, such as an archive. NervesHub would
+  otherwise take it for a firmware update, and refuse the device's next real
+  one while it waited for this one to finish.
 
   # Example
 
@@ -184,7 +193,8 @@ defmodule NervesHubLink.Downloader do
         uri: uri,
         resume_from_bytes: opts[:resume_from_bytes],
         range_end: opts[:range_end],
-        label: opts[:label]
+        label: opts[:label],
+        report_started: Keyword.get(opts, :report_started, true)
       })
 
     send(self(), :resume)
@@ -531,7 +541,7 @@ defmodule NervesHubLink.Downloader do
     with {:ok, conn} <-
            Mint.HTTP.connect(String.to_existing_atom(scheme), host, port, connect_opts),
          {:ok, conn, request_ref} <- Mint.HTTP.request(conn, "GET", path, request_headers, nil),
-         :ok <- report_download_started(conn) do
+         :ok <- report_download_started(conn, state) do
       {:ok,
        %Downloader{
          state
@@ -675,7 +685,9 @@ defmodule NervesHubLink.Downloader do
     :ok
   end
 
-  defp report_download_started(conn) do
+  defp report_download_started(_conn, %Downloader{report_started: false}), do: :ok
+
+  defp report_download_started(conn, %Downloader{}) do
     downloader_network_interface = NetworkInterface.from_socket(Mint.HTTP.get_socket(conn))
     NervesHubLink.send_update_status({:started, downloader_network_interface})
   end

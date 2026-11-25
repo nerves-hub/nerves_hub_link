@@ -115,7 +115,12 @@ defmodule NervesHubLink.Client do
 
   * `apply` - Download and apply the update right now.
   * `ignore` - Don't download and apply this update.
+  * `{:ignore, reason}` - The same, with a reason that is sent to NervesHub.
   * `{:reschedule, timeout}` - Defer making a decision. Call this function again in `timeout` milliseconds.
+  * `{:reschedule, minutes, reason}` - Defer making a decision, with a reason that is sent to NervesHub.
+    Call this function again in `minutes` **minutes**. Unlike `timeout` above, this is not in milliseconds.
+
+  For both reschedule forms, the delay is sent to NervesHub in whole minutes, and is never less than 5.
   """
   @callback update_available(update_data()) :: update_response()
 

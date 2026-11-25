@@ -7,9 +7,17 @@ defmodule NervesHubLink.ArchiveManagerTest do
 
   import Mox
 
+  alias Fwup.TestSupport.Fixtures
   alias NervesHubLink.ArchiveManager
   alias NervesHubLink.ClientMock
   alias NervesHubLink.Message.ArchiveInfo
+  alias NervesHubLink.Support.FirmwareFilePlug
+  alias NervesHubLink.Support.SocketStub
+  alias NervesHubLink.Support.Utils
+
+  # Downloading a 1KB archive is quick, but `fwup -V` runs before the client
+  # hears it's ready. Be generous so this isn't flaky on CI.
+  @timeout 10_000
 
   setup :set_mox_global
   setup :verify_on_exit!
@@ -63,6 +71,54 @@ defmodule NervesHubLink.ArchiveManagerTest do
                :idle
 
       assert ArchiveManager.currently_downloading_uuid(context.manager) == nil
+    end
+  end
+
+  describe "downloading an archive" do
+    setup do
+      test_pid = self()
+
+      _ = start_supervised!({SocketStub, test_pid})
+
+      unique = System.unique_integer([:positive])
+      key_name = "archive-manager-#{unique}"
+      :ok = Fixtures.gen_key_pair(key_name)
+
+      {:ok, path} =
+        Fixtures.create_signed_firmware(
+          key_name,
+          "unsigned-archive-#{unique}",
+          "signed-archive-#{unique}"
+        )
+
+      {:ok, _server, port} = Utils.supervise_plug(FirmwareFilePlug, path: path)
+
+      stub(ClientMock, :archive_available, fn _ -> :download end)
+
+      stub(ClientMock, :archive_ready, fn _info, file_path ->
+        send(test_pid, {:archive_ready, file_path})
+        :ok
+      end)
+
+      {:ok,
+       archive_info: %{archive_info() | url: "http://localhost:#{port}/#{Path.basename(path)}"},
+       public_key: Fixtures.get_public_key(key_name)}
+    end
+
+    test "doesn't tell NervesHub a firmware update has started", context do
+      # NervesHub takes a download that reports it has started for a firmware
+      # update, and refuses the device's next real one while it waits for this
+      # one to finish.
+      assert ArchiveManager.apply_archive(context.manager, context.archive_info, [
+               context.public_key
+             ]) == :downloading
+
+      assert_receive {:archive_ready, _file_path}, @timeout
+
+      # Anything the download sent the socket has reached this process once the
+      # socket has answered a call made after it.
+      _ = :sys.get_state(NervesHubLink.Socket)
+      refute_received {:update_status, _status}
     end
   end
 
