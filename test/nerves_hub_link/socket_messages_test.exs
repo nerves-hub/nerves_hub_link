@@ -45,7 +45,7 @@ defmodule NervesHubLink.SocketMessagesTest do
 
     # Optional callbacks aren't covered by ClientStub
     stub(ClientMock, :connected, fn -> :ok end)
-    stub(ClientMock, :metadata, fn -> %{} end)
+    stub(ClientMock, :device_metadata, fn -> %{} end)
     stub(ClientMock, :reconnect_backoff, fn -> [1_000] end)
     stub(ClientMock, :firmware_validated?, fn -> true end)
     stub(ClientMock, :firmware_auto_revert_detected?, fn -> false end)
@@ -137,7 +137,7 @@ defmodule NervesHubLink.SocketMessagesTest do
 
   describe "device metadata" do
     test "is sent once the device channel is joined", %{socket: _socket} do
-      stub(ClientMock, :metadata, fn -> %{"placement" => "the shed"} end)
+      stub(ClientMock, :device_metadata, fn -> %{"placement" => "the shed"} end)
 
       join_device_topic()
 
@@ -145,13 +145,13 @@ defmodule NervesHubLink.SocketMessagesTest do
     end
 
     test "is collected again, and sent again, when asked", %{socket: socket} do
-      stub(ClientMock, :metadata, fn -> %{"placement" => "the shed"} end)
+      stub(ClientMock, :device_metadata, fn -> %{"placement" => "the shed"} end)
 
       join_device_topic()
 
       assert_push(@device_topic, "metadata", %{metadata: %{"placement" => "the shed"}})
 
-      stub(ClientMock, :metadata, fn -> %{"placement" => "the barn"} end)
+      stub(ClientMock, :device_metadata, fn -> %{"placement" => "the barn"} end)
 
       assert NervesHubLink.send_device_metadata(socket) == :ok
 

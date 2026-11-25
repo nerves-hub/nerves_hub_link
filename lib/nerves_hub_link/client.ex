@@ -22,7 +22,7 @@ defmodule NervesHubLink.Client do
   - `c:handle_error/1` - a firmware update has failed
   - `c:handle_fwup_message/1` - a message has been received by `NervesHubLink.UpdateManager`
   - `c:identify/0` - a request received from NervesHub to identify the device (eg. blink leds)
-  - `c:metadata/0` - the metadata describing this device, reported to NervesHub on connect
+  - `c:device_metadata/0` - the metadata describing this device, reported to NervesHub on connect
   - `c:reboot/0` - a request received from NervesHub to reboot the device
   - `c:reconnect_backoff/0` - how NervesHubLink should handle reconnection backoffs
   - `c:update_available/1` - should a firmware update be applied
@@ -194,7 +194,7 @@ defmodule NervesHubLink.Client do
 
   ```elixir
   @impl NervesHubLink.Client
-  def metadata() do
+  def device_metadata() do
     %{
       "placement" => CatCounter.venue(),
       "board_revision" => CatCounter.Hardware.revision()
@@ -217,7 +217,7 @@ defmodule NervesHubLink.Client do
   where it lived while the Health extension reported it, are still read from
   there when neither of the above is in place.
   """
-  @callback metadata() :: %{String.t() => String.t()}
+  @callback device_metadata() :: %{String.t() => String.t()}
 
   @doc """
   Optional callback to check if the current firmware has been validated.
@@ -244,9 +244,9 @@ defmodule NervesHubLink.Client do
 
   @optional_callbacks [
     connected: 0,
+    device_metadata: 0,
     firmware_auto_revert_detected?: 0,
     firmware_validated?: 0,
-    metadata: 0,
     reboot: 0,
     reconnect_backoff: 0
   ]
@@ -323,20 +323,20 @@ defmodule NervesHubLink.Client do
   This function is called internally by NervesHubLink to collect the device's metadata.
 
   The configured client is asked first. A client that doesn't implement
-  `c:metadata/0` falls back to the `:metadata` application environment key, and
+  `c:device_metadata/0` falls back to the `:metadata` application environment key, and
   then to `health: [metadata: ...]`, where metadata was configured while the
   Health extension reported it.
   """
-  @spec metadata() :: %{String.t() => String.t()}
-  def metadata() do
-    if function_exported?(mod(), :metadata, 0) do
-      case apply_wrap(mod(), :metadata, []) do
+  @spec device_metadata() :: %{String.t() => String.t()}
+  def device_metadata() do
+    if function_exported?(mod(), :device_metadata, 0) do
+      case apply_wrap(mod(), :device_metadata, []) do
         metadata when is_map(metadata) ->
           normalize_metadata(metadata)
 
         other ->
           Logger.warning(
-            "[NervesHubLink.Client] Invalid response from `#{inspect(mod())}.metadata/0`, sending none : #{inspect(other)}"
+            "[NervesHubLink.Client] Invalid response from `#{inspect(mod())}.device_metadata/0`, sending none : #{inspect(other)}"
           )
 
           %{}

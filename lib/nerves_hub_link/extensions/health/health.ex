@@ -15,7 +15,7 @@ defmodule NervesHubLink.Extensions.Health do
 
   Metadata is not part of a report. It says what a device is rather than how it
   is doing, and NervesHub holds it against the connection, so it is sent once
-  per connection on the device channel. See `c:NervesHubLink.Client.metadata/0`.
+  per connection on the device channel. See `c:NervesHubLink.Client.device_metadata/0`.
 
   While `NervesHubLink.Extensions.Alarms` or `NervesHubLink.Extensions.Metrics`
   is attached, what it carries is sent there instead and left out of health

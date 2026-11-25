@@ -862,7 +862,7 @@ defmodule NervesHubLink.Socket do
   # only when it changes. Nothing is sent when there is none to send: NervesHub
   # merges what it is given, so an empty map would only cost a message.
   defp push_metadata(socket) do
-    case Client.metadata() do
+    case Client.device_metadata() do
       metadata when metadata == %{} ->
         socket
 

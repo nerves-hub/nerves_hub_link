@@ -106,7 +106,7 @@ defmodule NervesHubLink do
   @doc """
   Report this device's metadata to NervesHub again.
 
-  Metadata is collected from `c:NervesHubLink.Client.metadata/0` and sent once
+  Metadata is collected from `c:NervesHubLink.Client.device_metadata/0` and sent once
   the device channel is joined, and at no other time: NervesHub holds it against
   the connection, so sending it on a timer would be repeating something that
   only changes when the device does. This is for when it does change while the

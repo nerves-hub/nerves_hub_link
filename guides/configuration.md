@@ -207,14 +207,14 @@ end
 
 Metadata says what a device is rather than how it is doing: where it was installed, which customer it belongs to, the revision of the board under it. NervesHub holds it against the connection and shows it on the device's page.
 
-Implement `c:NervesHubLink.Client.metadata/0` in your client:
+Implement `c:NervesHubLink.Client.device_metadata/0` in your client:
 
 ```elixir
 defmodule MyApp.NervesHubLinkClient do
   use NervesHubLink.Client
 
   @impl NervesHubLink.Client
-  def metadata() do
+  def device_metadata() do
     %{
       "placement" => CatCounter.venue(),
       "board_revision" => CatCounter.Hardware.revision()
