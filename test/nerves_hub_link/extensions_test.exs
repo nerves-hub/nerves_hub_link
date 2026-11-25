@@ -284,8 +284,6 @@ defmodule NervesHubLink.ExtensionsTest do
       assert Extensions.offer(%{}) == %{}
       assert_receive {:pushed, "extensions", "reporter:detached", %{}}
 
-      # Restarted by hand so `push/2` has a process to call from, standing in
-      # for one that is still trying to send as it is stopped
       _ = start_supervised!(Reporter)
 
       assert Reporter.push("report", %{}) == {:error, :detached}
@@ -335,10 +333,8 @@ defmodule NervesHubLink.ExtensionsTest do
       :ok = Extensions.attach("versioned")
       assert_receive {:pushed, "extensions", "versioned:attached", %{}}
 
-      # Restarted by hand so `push/2` has a process to call from, standing in
-      # for one that is still trying to send as it is stopped. Both versions
-      # have the same name, and only the new one talks the format the platform
-      # expects now.
+      # Both versions have the same name, and only the new one talks the format
+      # the platform expects now.
       _ = start_supervised!(Versioned)
 
       assert Versioned.push("report", %{}) == {:error, :detached}

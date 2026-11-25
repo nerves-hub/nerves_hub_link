@@ -132,12 +132,12 @@ defmodule NervesHubLink.Extensions do
   implement it or has it switched off, and either way there is nothing to
   attach.
 
-  Every reconnect offers again, and extension processes keep running through
-  it. Once the offer is answered, any of them that is no longer what was
-  offered is stopped, and NervesHub is told it detached, as `detach/1` would.
-  That is a version that was replaced, such as `logging` 0.0.1 when 0.1.0 is
-  offered, or an extension the platform no longer names. One offered again at
-  the version it is running keeps running, and stays attached.
+  Every reconnect offers again while extension processes keep running. Once
+  the offer is answered, any running extension whose module was not offered,
+  such as `logging` 0.0.1 when 0.1.0 is offered or one the platform no longer
+  names, is stopped and `<name>:detached` is pushed, as `detach/1` does. That
+  push only reaches NervesHub when the extensions topic stayed joined. One
+  offered again at the version it is running keeps running and stays attached.
 
   > #### One version per extension {: .info}
   >
@@ -301,10 +301,11 @@ defmodule NervesHubLink.Extensions do
 
     offered = for {name, version} <- chosen, do: extensions[name].versions[version]
 
-    # The rest are stopped after replying, not before. The socket is waiting on
-    # this answer, and stopping a process can take as long as its shutdown. A
-    # continue still runs before anything else this process is sent, so nothing
-    # attaches until they have gone.
+    # The rest are stopped after replying, not before. `offer/1` runs inside the
+    # Socket process, so pushing `detached` here would call into a Socket that is
+    # waiting on this answer, and stopping a process can take as long as its
+    # shutdown. A continue still runs before anything else this process is sent,
+    # so nothing attaches until they have gone.
     {:reply, chosen, %{state | extensions: extensions}, {:continue, {:stop_replaced, offered}}}
   end
 
