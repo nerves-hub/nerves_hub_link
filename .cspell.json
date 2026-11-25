@@ -29,6 +29,8 @@
     "defmock",
     "badarg",
     "disksup",
+    "eexist",
+    "enotdir",
     "expty",
     "fwupdate",
     "Geolocation",
