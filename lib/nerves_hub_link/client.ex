@@ -120,7 +120,7 @@ defmodule NervesHubLink.Client do
   * `{:reschedule, minutes, reason}` - Defer making a decision, with a reason that is sent to NervesHub.
     Call this function again in `minutes` **minutes**. Unlike `timeout` above, this is not in milliseconds.
 
-  Either way, the delay is sent to NervesHub in whole minutes, and is never less than 5.
+  For both reschedule forms, the delay is sent to NervesHub in whole minutes, and is never less than 5.
   """
   @callback update_available(update_data()) :: update_response()
 
