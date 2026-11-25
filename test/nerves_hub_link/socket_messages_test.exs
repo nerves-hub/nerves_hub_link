@@ -1169,6 +1169,123 @@ defmodule NervesHubLink.SocketMessagesTest do
     end
   end
 
+  describe "going to sleep" do
+    setup :join_device_topic
+
+    test "a deep sleep tells NervesHub how long, then closes the connection", %{socket: socket} do
+      assert NervesHubLink.going_to_sleep(socket, mode: :deep, duration_ms: 300_000) == :ok
+
+      assert_push(@device_topic, "sleeping", %{"mode" => "deep", "duration_ms" => 300_000})
+      assert_closed()
+
+      refute NervesHubLink.socket_connected?(socket)
+      assert alarm_eventually_set?(NervesHubLink.Disconnected)
+    end
+
+    test "a light sleep is sent as light", %{socket: socket} do
+      assert NervesHubLink.going_to_sleep(socket, mode: :light) == :ok
+
+      assert_push(@device_topic, "sleeping", %{"mode" => "light", "duration_ms" => nil})
+      assert_closed()
+    end
+
+    test "with no options it is a deep sleep with no time given", %{socket: socket} do
+      assert NervesHubLink.going_to_sleep(socket, []) == :ok
+
+      assert_push(@device_topic, "sleeping", %{"mode" => "deep", "duration_ms" => nil})
+      assert_closed()
+    end
+
+    test "closing the connection to sleep isn't reported as an error", %{socket: socket} do
+      assert NervesHubLink.going_to_sleep(socket, []) == :ok
+
+      assert_push(@device_topic, "sleeping")
+      assert_closed()
+
+      refute_receive {:handle_error, _reason}
+    end
+
+    # The reconnect is not scheduled, so nothing opens a connection until the
+    # device says it is awake.
+    test "nothing reconnects while it sleeps", %{socket: socket} do
+      assert NervesHubLink.going_to_sleep(socket, mode: :deep) == :ok
+
+      assert_push(@device_topic, "sleeping")
+      assert_closed()
+
+      refute_receive {:connection_test, {:server, _}}, 2_000
+      assert asleep?(socket)
+    end
+
+    test "reconnecting wakes the device and it joins again", %{socket: socket} = context do
+      assert NervesHubLink.going_to_sleep(socket, mode: :light) == :ok
+
+      assert_push(@device_topic, "sleeping")
+      assert_closed()
+
+      :ok = NervesHubLink.reconnect(socket)
+
+      await_connected(socket)
+      :ok = join_device_topic(context)
+
+      refute asleep?(socket)
+      assert NervesHubLink.connected?(socket)
+    end
+
+    test "a device that said how long it would sleep wakes on its own", %{socket: socket} do
+      assert NervesHubLink.going_to_sleep(socket, mode: :light, duration_ms: 20) == :ok
+
+      assert_push(@device_topic, "sleeping")
+      assert_closed()
+
+      assert_eventually(not asleep?(socket))
+      assert_receive {:connection_test, {:server, _}}, 3_000
+    end
+
+    # `Process.send_after/3` will not wait this long, so the timer is capped -
+    # but what NervesHub is told is what the device said.
+    test "a sleep longer than a timer can wait for is still sent whole", %{socket: socket} do
+      sixty_days = :timer.hours(24 * 60)
+
+      assert NervesHubLink.going_to_sleep(socket, duration_ms: sixty_days) == :ok
+
+      assert_push(@device_topic, "sleeping", %{"duration_ms" => ^sixty_days})
+      assert_closed()
+
+      assert asleep?(socket)
+    end
+
+    test "a device that gave no time stays asleep until it reconnects", %{socket: socket} do
+      assert NervesHubLink.going_to_sleep(socket, mode: :deep) == :ok
+
+      assert_push(@device_topic, "sleeping")
+      assert_closed()
+
+      assert asleep?(socket)
+      assert :sys.get_state(socket).wake_timer == nil
+    end
+
+    test "options it can't send are refused before anything is sent", %{socket: socket} do
+      assert_raise ArgumentError, fn -> NervesHubLink.going_to_sleep(socket, mode: :hibernate) end
+      assert_raise ArgumentError, fn -> NervesHubLink.going_to_sleep(socket, duration_ms: 0) end
+      assert_raise ArgumentError, fn -> NervesHubLink.going_to_sleep(socket, duration_ms: 1.5) end
+      assert_raise ArgumentError, fn -> NervesHubLink.going_to_sleep(socket, wake_at: 1) end
+
+      refute_push(@device_topic, "sleeping")
+      assert NervesHubLink.connected?(socket)
+    end
+  end
+
+  describe "going to sleep before the device channel is joined" do
+    test "nothing is sent and the connection is left open", %{socket: socket} do
+      assert NervesHubLink.going_to_sleep(socket, duration_ms: 1_000) == {:error, :disconnected}
+
+      refute_closed()
+      assert NervesHubLink.socket_connected?(socket)
+      refute asleep?(socket)
+    end
+  end
+
   describe "disconnecting" do
     setup :join_device_topic
 
@@ -1351,6 +1468,18 @@ defmodule NervesHubLink.SocketMessagesTest do
       Process.sleep(10)
       alarm_eventually_set?(alarm_id, timeout - 10)
     end
+  end
+
+  defp asleep?(socket), do: :sys.get_state(socket).asleep
+
+  # The server's end of the connection says when it has gone: the handler for
+  # it stops, and the test is told.
+  defp assert_closed(timeout \\ 2_000) do
+    assert_receive {:connection_test, :terminated}, timeout
+  end
+
+  defp refute_closed(timeout \\ 500) do
+    refute_receive {:connection_test, :terminated}, timeout
   end
 
   defp alarm_set?(alarm_id) do

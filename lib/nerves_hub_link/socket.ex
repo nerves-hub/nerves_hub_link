@@ -50,6 +50,8 @@ defmodule NervesHubLink.Socket do
       :signing_time_hint,
       :update_mode,
       :uploader_pid,
+      :wake_timer,
+      asleep: false,
       managed_updates_allowed: false,
       pending_update_requests: %{},
       redirect_count: 0
@@ -70,6 +72,8 @@ defmodule NervesHubLink.Socket do
             signing_time_hint: DateTime.t() | nil,
             update_mode: NervesHubLink.update_mode() | nil,
             uploader_pid: pid() | nil,
+            wake_timer: reference() | nil,
+            asleep: boolean(),
             managed_updates_allowed: boolean(),
             pending_update_requests: map(),
             redirect_count: non_neg_integer()
@@ -103,6 +107,14 @@ defmodule NervesHubLink.Socket do
   # The `ref` a push was sent with. The server's reply to that push carries the
   # same ref, which is how the two are matched up.
   @type push_ref :: String.t()
+
+  # How long a caller waits for a device to say it is going to sleep: the push
+  # and the close, with a margin.
+  @sleep_call_timeout :timer.seconds(15)
+
+  # The longest delay `Process.send_after/3` takes, about 49 days. A device
+  # can say it will sleep for longer than that.
+  @max_timer_ms 4_294_967_295
 
   @spec start_link(Configurator.Config.t(), GenServer.options()) :: GenServer.on_start()
   def start_link(config, opts \\ []) do
@@ -210,6 +222,18 @@ defmodule NervesHubLink.Socket do
           :ok | {:error, term()}
   def set_update_mode(server \\ __MODULE__, mode) when mode in [:automatic, :device_managed] do
     GenServer.call(server, {:set_update_mode, mode}, @update_request_call_timeout)
+  end
+
+  @doc """
+  Tell NervesHub this device is about to sleep, then close the connection.
+
+  The connection stays closed until `reconnect!/1`, or until `duration_ms` has
+  passed when one was given.
+  """
+  @spec going_to_sleep(GenServer.server(), :deep | :light, pos_integer() | nil) ::
+          :ok | {:error, term()}
+  def going_to_sleep(server \\ __MODULE__, mode, duration_ms) do
+    GenServer.call(server, {:going_to_sleep, mode, duration_ms}, @sleep_call_timeout)
   end
 
   @spec push_extensions_message(
@@ -430,6 +454,39 @@ defmodule NervesHubLink.Socket do
     start_update_request(socket, :set_update_mode, from, "set_update_mode", %{mode: mode})
   end
 
+  def handle_call({:going_to_sleep, mode, duration_ms}, _from, socket) do
+    payload = %{"mode" => Atom.to_string(mode), "duration_ms" => duration_ms}
+
+    case push_message(socket, @device_topic, "sleeping", payload) do
+      {{:ok, _ref}, socket} ->
+        Logger.info("[NervesHubLink] going to sleep (#{mode}), closing the connection")
+
+        # The push is on the wire before it returns, so the message has gone by
+        # the time the connection closes. Closing here rather than leaving it to
+        # the disconnect handling is the point of this: a device about to sleep
+        # must not have a reconnect scheduled behind it.
+        socket =
+          socket
+          |> cancel_reconnect()
+          |> cancel_heartbeat()
+          |> cancel_firmware_validation_check()
+          |> fail_pending_update_requests()
+          |> put_connection(Connection.close(socket.connection))
+
+        Alarms.set_alarm({NervesHubLink.Disconnected, [reason: :asleep]})
+
+        {:reply, :ok, %{socket | asleep: true, wake_timer: schedule_wake(duration_ms)}}
+
+      # Nothing was told, because there was nothing to tell it over. The
+      # connection is left as it was rather than closed and slept on.
+      {{:error, reason}, socket} when reason in [:not_connected, :not_joined] ->
+        {:reply, {:error, :disconnected}, socket}
+
+      {{:error, reason}, socket} ->
+        {:reply, {:error, reason}, socket}
+    end
+  end
+
   def handle_call({:push, topic, event, payload}, _from, socket) do
     {result, socket} = push_message(socket, topic, event, payload)
 
@@ -495,6 +552,10 @@ defmodule NervesHubLink.Socket do
   end
 
   @impl GenServer
+  def handle_cast(:reconnect, %State{asleep: true} = socket) do
+    {:noreply, wake(socket)}
+  end
+
   def handle_cast(:reconnect, socket) do
     # Closing is silent by design - the caller already knows - so the
     # disconnect handling, and with it the next connection, is run from here.
@@ -1049,6 +1110,16 @@ defmodule NervesHubLink.Socket do
     {:noreply, connect(%{socket | reconnect_timer: nil})}
   end
 
+  # The fallback for a device that slept for as long as it said it would and
+  # whose firmware did not call `reconnect!/1` when it woke.
+  def handle_info(:wake, %State{asleep: true} = socket) do
+    {:noreply, wake(socket)}
+  end
+
+  def handle_info(:wake, socket) do
+    {:noreply, socket}
+  end
+
   def handle_info({:rejoin, topic}, socket) do
     {:noreply, rejoin_now(socket, topic)}
   end
@@ -1106,6 +1177,12 @@ defmodule NervesHubLink.Socket do
     rejoin(socket, topic)
   end
 
+  # The connection was closed on purpose and is opened again when the device
+  # wakes, so nothing here reconnects it. A disconnect that arrives late - a
+  # transport message already in the mailbox when the socket was closed - comes
+  # through here too, and is left alone for the same reason.
+  defp handle_disconnect(_reason, %State{asleep: true} = socket), do: {:ok, socket}
+
   defp handle_disconnect(reason, socket) do
     _ = Client.handle_error(reason)
     Alarms.set_alarm({NervesHubLink.Disconnected, [reason: reason]})
@@ -1124,6 +1201,21 @@ defmodule NervesHubLink.Socket do
 
     handle_redirect(socket, reason)
   end
+
+  defp wake(socket) do
+    Logger.info("[NervesHubLink] awake, reconnecting")
+
+    maybe_cancel_timer(socket.wake_timer)
+
+    # Straight into connecting rather than through the backoff: the connection
+    # was closed on purpose, so there is nothing here to back off from.
+    connect(%{socket | asleep: false, wake_timer: nil})
+  end
+
+  defp schedule_wake(nil), do: nil
+
+  defp schedule_wake(duration_ms),
+    do: Process.send_after(self(), :wake, min(duration_ms, @max_timer_ms))
 
   # A 3xx answer to the upgrade request is NervesHub pointing this device at
   # another host. Anything else is an ordinary disconnect, and just reconnects.
