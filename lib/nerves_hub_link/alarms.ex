@@ -14,7 +14,7 @@ defmodule NervesHubLink.Alarms do
   It is also where alarms are watched from, for `NervesHubLink.Extensions.Alarms`:
   `current_alarms/0` says what is set and since when, and `subscribe/0` and
   `change/1` say what changes. With `Alarmist` both come from Alarmist itself.
-  Without it they come from `NervesHubLink.Alarms.Tracker`, which watches
+  Without it they come from `NervesHubLink.Extensions.Alarms.Tracker`, which watches
   `:alarm_handler` from application start.
 
   Times are monotonic (`System.monotonic_time/0`, native units) rather than
@@ -24,7 +24,7 @@ defmodule NervesHubLink.Alarms do
   """
 
   # Only the branch without Alarmist below uses it.
-  alias NervesHubLink.Alarms.Tracker, warn: false
+  alias NervesHubLink.Extensions.Alarms.Tracker, warn: false
 
   @typedoc """
   An alarm currently set: its id, its description, and the monotonic time it
@@ -119,7 +119,7 @@ defmodule NervesHubLink.Alarms do
     @doc """
     Every alarm currently set, with the time it was set at.
 
-    Known for anything set after `NervesHubLink.Alarms.Tracker` started, which
+    Known for anything set after `NervesHubLink.Extensions.Alarms.Tracker` started, which
     is early in application start; `nil` for anything set before.
     """
     @spec current_alarms() :: [timed_alarm()]

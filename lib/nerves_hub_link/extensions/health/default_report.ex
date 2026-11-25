@@ -7,18 +7,18 @@
 #
 defmodule NervesHubLink.Extensions.Health.DefaultReport do
   @moduledoc """
-  The default health report: the metrics `NervesHubLink.Metrics` samples, and
+  The default health report: the metrics `NervesHubLink.Extensions.Metrics` samples, and
   the alarms the device has set.
 
   Both are configured elsewhere, so there is nothing to configure here. See
-  `NervesHubLink.Metrics` for the metric sets, and `NervesHubLink.Alarms` for
+  `NervesHubLink.Extensions.Metrics` for the metric sets, and `NervesHubLink.Alarms` for
   how an alarm is named and which ones are left out of a report.
   """
   @behaviour NervesHubLink.Extensions.Health.Report
 
   alias NervesHubLink.Alarms
   alias NervesHubLink.Extensions.Health.Report
-  alias NervesHubLink.Metrics
+  alias NervesHubLink.Extensions.Metrics
 
   @impl Report
   def timestamp() do

@@ -5,13 +5,13 @@
 defmodule NervesHubLink.Extensions.Health.MetricSet.NetworkTraffic do
   @moduledoc false
 
-  # Moved to `NervesHubLink.Metrics.MetricSet.NetworkTraffic`. Kept so a device that names this
+  # Moved to `NervesHubLink.Extensions.Metrics.MetricSet.NetworkTraffic`. Kept so a device that names this
   # module in `metric_sets` goes on sampling the same numbers rather than
   # losing them to an undefined module.
 
-  @behaviour NervesHubLink.Metrics.MetricSet
+  @behaviour NervesHubLink.Extensions.Metrics.MetricSet
 
-  @impl NervesHubLink.Metrics.MetricSet
-  @deprecated "Use NervesHubLink.Metrics.MetricSet.NetworkTraffic.sample/0 instead"
-  defdelegate sample(), to: NervesHubLink.Metrics.MetricSet.NetworkTraffic
+  @impl NervesHubLink.Extensions.Metrics.MetricSet
+  @deprecated "Use NervesHubLink.Extensions.Metrics.MetricSet.NetworkTraffic.sample/0 instead"
+  defdelegate sample(), to: NervesHubLink.Extensions.Metrics.MetricSet.NetworkTraffic
 end

@@ -36,15 +36,15 @@ defmodule NervesHubLink.Supervisor do
 
   use Supervisor
 
-  alias NervesHubLink.Alarms.Tracker, as: AlarmsTracker
   alias NervesHubLink.ArchiveManager
   alias NervesHubLink.Configurator
   alias NervesHubLink.Extensions
+  alias NervesHubLink.Extensions.Alarms.Tracker, as: AlarmsTracker
   alias NervesHubLink.Extensions.ErrorReports
   alias NervesHubLink.Extensions.Logging
+  alias NervesHubLink.Extensions.Metrics
   alias NervesHubLink.ExtensionsSupervisor
   alias NervesHubLink.FwupConfig
-  alias NervesHubLink.Metrics
   alias NervesHubLink.Socket
   alias NervesHubLink.SupportScriptsManager
   alias NervesHubLink.UpdateManager

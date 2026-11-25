@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-defmodule NervesHubLink.Metrics.Sampler do
+defmodule NervesHubLink.Extensions.Metrics.Sampler do
   @moduledoc """
   Takes the device's readings, and holds them until the extension sends them.
 
@@ -42,12 +42,12 @@ defmodule NervesHubLink.Metrics.Sampler do
           max_samples: 60
         ]
 
-  What is sampled is `NervesHubLink.Metrics`'s.
+  What is sampled is `NervesHubLink.Extensions.Metrics`'s.
   """
 
   use GenServer
 
-  alias NervesHubLink.Metrics
+  alias NervesHubLink.Extensions.Metrics
 
   require Logger
 
@@ -125,7 +125,7 @@ defmodule NervesHubLink.Metrics.Sampler do
 
   ## Examples
 
-      iex> NervesHubLink.Metrics.Sampler.sample()
+      iex> NervesHubLink.Extensions.Metrics.Sampler.sample()
       :ok
 
   """

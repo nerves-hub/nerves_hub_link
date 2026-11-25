@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-defmodule NervesHubLink.Alarms.TrackerTest do
+defmodule NervesHubLink.Extensions.Alarms.TrackerTest do
   # Not async: `:alarm_handler` is global to the VM.
   #
   # Driven through `:alarm_handler` directly. In this project's own tests
@@ -10,7 +10,7 @@ defmodule NervesHubLink.Alarms.TrackerTest do
   # it is the devices without Alarmist that use it.
   use ExUnit.Case, async: false
 
-  alias NervesHubLink.Alarms.Tracker
+  alias NervesHubLink.Extensions.Alarms.Tracker
 
   test "sends each change to a subscriber, stamped with when it happened" do
     start_supervised!(Tracker)

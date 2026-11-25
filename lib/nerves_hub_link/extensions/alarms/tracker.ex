@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-defmodule NervesHubLink.Alarms.Tracker do
+defmodule NervesHubLink.Extensions.Alarms.Tracker do
   @moduledoc """
   Watches `:alarm_handler` for devices without `Alarmist`, and remembers when
   each alarm was set.
@@ -54,7 +54,10 @@ defmodule NervesHubLink.Alarms.Tracker do
     GenServer.call(__MODULE__, {:subscribe, pid})
   catch
     :exit, _ ->
-      Logger.warning("[NervesHubLink.Alarms.Tracker] not running; alarm changes will not be sent")
+      Logger.warning(
+        "[NervesHubLink.Extensions.Alarms.Tracker] not running; alarm changes will not be sent"
+      )
+
       :ok
   end
 
@@ -84,7 +87,7 @@ defmodule NervesHubLink.Alarms.Tracker do
     # an alarm, so there is nothing to track either.
     :exit, reason ->
       Logger.warning(
-        "[NervesHubLink.Alarms.Tracker] cannot watch :alarm_handler: #{inspect(reason)}"
+        "[NervesHubLink.Extensions.Alarms.Tracker] cannot watch :alarm_handler: #{inspect(reason)}"
       )
 
       :ignore

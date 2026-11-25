@@ -5,13 +5,13 @@
 defmodule NervesHubLink.Extensions.Health.MetricSet.Memory do
   @moduledoc false
 
-  # Moved to `NervesHubLink.Metrics.MetricSet.Memory`. Kept so a device that names this
+  # Moved to `NervesHubLink.Extensions.Metrics.MetricSet.Memory`. Kept so a device that names this
   # module in `metric_sets` goes on sampling the same numbers rather than
   # losing them to an undefined module.
 
-  @behaviour NervesHubLink.Metrics.MetricSet
+  @behaviour NervesHubLink.Extensions.Metrics.MetricSet
 
-  @impl NervesHubLink.Metrics.MetricSet
-  @deprecated "Use NervesHubLink.Metrics.MetricSet.Memory.sample/0 instead"
-  defdelegate sample(), to: NervesHubLink.Metrics.MetricSet.Memory
+  @impl NervesHubLink.Extensions.Metrics.MetricSet
+  @deprecated "Use NervesHubLink.Extensions.Metrics.MetricSet.Memory.sample/0 instead"
+  defdelegate sample(), to: NervesHubLink.Extensions.Metrics.MetricSet.Memory
 end

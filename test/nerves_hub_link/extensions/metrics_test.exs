@@ -4,9 +4,9 @@
 #
 defmodule NervesHubLink.Extensions.MetricsTest.CatMetrics do
   @moduledoc false
-  @behaviour NervesHubLink.Metrics.MetricSet
+  @behaviour NervesHubLink.Extensions.Metrics.MetricSet
 
-  @impl NervesHubLink.Metrics.MetricSet
+  @impl NervesHubLink.Extensions.Metrics.MetricSet
   def sample() do
     # Sampled from the sampler's process and from the health extension's, so
     # the test process is found by name rather than passed in.
@@ -26,8 +26,8 @@ defmodule NervesHubLink.Extensions.MetricsTest do
   alias NervesHubLink.Extensions.Alarms, as: AlarmsExtension
   alias NervesHubLink.Extensions.Health
   alias NervesHubLink.Extensions.Metrics, as: MetricsExtension
+  alias NervesHubLink.Extensions.Metrics.Sampler
   alias NervesHubLink.Extensions.MetricsTest.CatMetrics
-  alias NervesHubLink.Metrics.Sampler
   alias NervesHubLink.Support.SocketStub
 
   setup context do

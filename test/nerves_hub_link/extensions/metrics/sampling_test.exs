@@ -2,27 +2,27 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-defmodule NervesHubLink.MetricsTest.CatMetrics do
+defmodule NervesHubLink.Extensions.Metrics.SamplingTest.CatMetrics do
   @moduledoc false
-  @behaviour NervesHubLink.Metrics.MetricSet
+  @behaviour NervesHubLink.Extensions.Metrics.MetricSet
 
-  @impl NervesHubLink.Metrics.MetricSet
+  @impl NervesHubLink.Extensions.Metrics.MetricSet
   def sample(), do: %{cats_seen: 4, cats_fed: 2}
 end
 
-defmodule NervesHubLink.MetricsTest.Battery do
+defmodule NervesHubLink.Extensions.Metrics.SamplingTest.Battery do
   @moduledoc false
   @spec percent() :: number()
   def percent(), do: 87
 end
 
-defmodule NervesHubLink.MetricsTest do
+defmodule NervesHubLink.Extensions.Metrics.SamplingTest do
   use ExUnit.Case, async: false
 
-  alias NervesHubLink.Metrics
-  alias NervesHubLink.Metrics.MetricSet
-  alias NervesHubLink.MetricsTest.Battery
-  alias NervesHubLink.MetricsTest.CatMetrics
+  alias NervesHubLink.Extensions.Metrics
+  alias NervesHubLink.Extensions.Metrics.MetricSet
+  alias NervesHubLink.Extensions.Metrics.SamplingTest.Battery
+  alias NervesHubLink.Extensions.Metrics.SamplingTest.CatMetrics
 
   setup do
     previous_metrics = Application.get_env(:nerves_hub_link, :metrics)

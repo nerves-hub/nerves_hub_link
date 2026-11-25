@@ -28,7 +28,7 @@ defmodule NervesHubLink.SupervisorTest do
              DynamicSupervisor,
              NervesHubLink.Extensions,
              # The metrics extension is on by default, so its sampler starts at boot.
-             NervesHubLink.Metrics.Sampler,
+             NervesHubLink.Extensions.Metrics.Sampler,
              NervesHubLink.UpdateManager,
              NervesHubLink.ArchiveManager,
              NervesHubLink.Socket,

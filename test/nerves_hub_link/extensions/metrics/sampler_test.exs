@@ -2,11 +2,11 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-defmodule NervesHubLink.Metrics.SamplerTest.CatMetrics do
+defmodule NervesHubLink.Extensions.Metrics.SamplerTest.CatMetrics do
   @moduledoc false
-  @behaviour NervesHubLink.Metrics.MetricSet
+  @behaviour NervesHubLink.Extensions.Metrics.MetricSet
 
-  @impl NervesHubLink.Metrics.MetricSet
+  @impl NervesHubLink.Extensions.Metrics.MetricSet
   def sample(), do: %{"cats_seen" => :counters.get(counter(), 1)}
 
   @doc "The reading each sample returns, so a test can tell them apart."
@@ -26,22 +26,22 @@ defmodule NervesHubLink.Metrics.SamplerTest.CatMetrics do
   end
 end
 
-defmodule NervesHubLink.Metrics.SamplerTest.OnFire do
+defmodule NervesHubLink.Extensions.Metrics.SamplerTest.OnFire do
   @moduledoc false
-  @behaviour NervesHubLink.Metrics.MetricSet
+  @behaviour NervesHubLink.Extensions.Metrics.MetricSet
 
-  @impl NervesHubLink.Metrics.MetricSet
+  @impl NervesHubLink.Extensions.Metrics.MetricSet
   def sample(), do: raise("the sensor is on fire")
 end
 
-defmodule NervesHubLink.Metrics.SamplerTest do
+defmodule NervesHubLink.Extensions.Metrics.SamplerTest do
   use ExUnit.Case, async: false
 
   import ExUnit.CaptureLog
 
-  alias NervesHubLink.Metrics.Sampler
-  alias NervesHubLink.Metrics.SamplerTest.CatMetrics
-  alias NervesHubLink.Metrics.SamplerTest.OnFire
+  alias NervesHubLink.Extensions.Metrics.Sampler
+  alias NervesHubLink.Extensions.Metrics.SamplerTest.CatMetrics
+  alias NervesHubLink.Extensions.Metrics.SamplerTest.OnFire
 
   setup do
     previous = Application.get_env(:nerves_hub_link, :metrics)
