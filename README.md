@@ -192,5 +192,6 @@ Any [valid Erlang ssl socket option](http://erlang.org/doc/man/ssl.html#TLS/DTLS
 
 ### `console_version`
 
+- `2.1.0` - Acknowledge saving files sent to the device (`file-data/ack`, `file-data/saved`, `file-data/error`) when `file-data/start` has `"ack" => true`
 - `2.0.0` - Send and receive files from a device
 - `1.0.0` - Remote IEx console

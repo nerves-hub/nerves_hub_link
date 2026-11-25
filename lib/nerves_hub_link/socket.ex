@@ -38,6 +38,7 @@ defmodule NervesHubLink.Socket do
     defstruct [
       :config,
       :connection,
+      :console_file,
       :data_path,
       :firmware_validation_timer,
       :heartbeat_timer,
@@ -57,6 +58,7 @@ defmodule NervesHubLink.Socket do
     @type t :: %__MODULE__{
             config: NervesHubLink.Configurator.Config.t(),
             connection: NervesHubLink.Connection.t(),
+            console_file: map() | nil,
             data_path: Path.t(),
             firmware_validation_timer: reference() | nil,
             heartbeat_timer: reference() | nil,
@@ -732,38 +734,47 @@ defmodule NervesHubLink.Socket do
     {:ok, set_iex_timer(socket)}
   end
 
+  # `file-data/start`, its chunks, then `file-data/stop` write a file to the
+  # data path. Each chunk is saved before the next message is read, typing
+  # included, so the console doesn't answer until the file is saved.
+  #
+  # With `"ack" => true` in `file-data/start`, the device pushes `file-data/ack`
+  # after each chunk with the bytes saved so far, then `file-data/saved` at
+  # stop, or `file-data/error` if the file can't be written. Otherwise nothing
+  # is pushed, since an older NervesHub closes the console on an unknown event.
   defp handle_message(@console_topic, "file-data/start", params, socket) do
-    case data_file_path(socket, params["filename"]) do
-      {:ok, path} ->
-        :ok = File.mkdir_p!(socket.data_path)
-        _ = File.rm_rf!(path)
-        :ok = File.touch!(path)
+    file = %{name: params["filename"], ack?: params["ack"] == true, bytes: 0, failed?: false}
 
-      :error ->
-        :ok
-    end
+    {socket, file} = saved(socket, file, create_data_file(socket, file.name))
 
-    {:ok, socket}
+    {:ok, %{socket | console_file: file}}
   end
 
   defp handle_message(@console_topic, "file-data", params, socket) do
-    case data_file_path(socket, params["filename"]) do
-      {:ok, path} ->
-        _res =
-          File.open!(path, [:append], fn fd ->
-            chunk = Base.decode64!(params["data"])
-            IO.binwrite(fd, chunk)
-          end)
+    case receiving_file(socket, params["filename"]) do
+      %{failed?: true} ->
+        {:ok, socket}
 
-      :error ->
-        :ok
+      file ->
+        {socket, file} = append_to_data_file(socket, file, params["data"])
+
+        socket =
+          report(socket, file, "file-data/ack", %{
+            filename: file.name,
+            chunk: params["chunk"],
+            bytes: file.bytes
+          })
+
+        {:ok, track_file(socket, file)}
     end
-
-    {:ok, socket}
   end
 
-  defp handle_message(@console_topic, "file-data/stop", _params, socket) do
-    {:ok, socket}
+  defp handle_message(@console_topic, "file-data/stop", params, socket) do
+    file = receiving_file(socket, params["filename"])
+
+    socket = report(socket, file, "file-data/saved", %{filename: file.name, bytes: file.bytes})
+
+    {:ok, stop_tracking_file(socket, file.name)}
   end
 
   defp handle_message(@extensions_topic, event, payload, socket) do
@@ -791,11 +802,7 @@ defmodule NervesHubLink.Socket do
     if plain_filename?(filename) do
       {:ok, Path.join(socket.data_path, filename)}
     else
-      Logger.warning(
-        "[#{inspect(__MODULE__)}] Ignoring file data for #{inspect(filename)}, not a plain filename"
-      )
-
-      :error
+      {:error, :not_a_plain_filename}
     end
   end
 
@@ -803,6 +810,99 @@ defmodule NervesHubLink.Socket do
     is_binary(filename) and filename not in ["", ".", ".."] and
       Path.basename(filename) == filename and not String.contains?(filename, <<0>>)
   end
+
+  defp create_data_file(socket, filename) do
+    with {:ok, path} <- data_file_path(socket, filename),
+         :ok <- File.mkdir_p(socket.data_path),
+         {:ok, _removed} <- File.rm_rf(path) do
+      File.touch(path)
+    end
+  end
+
+  defp append_to_data_file(socket, file, data) do
+    with {:ok, path} <- data_file_path(socket, file.name),
+         {:ok, chunk} <- decode_chunk(data) do
+      saved(
+        socket,
+        %{file | bytes: file.bytes + byte_size(chunk)},
+        File.write(path, chunk, [:append])
+      )
+    else
+      {:error, reason} -> saved(socket, file, {:error, reason})
+    end
+  end
+
+  defp decode_chunk(data) do
+    case Base.decode64(data || "") do
+      {:ok, chunk} -> {:ok, chunk}
+      :error -> {:error, :invalid_data}
+    end
+  end
+
+  # The file `file-data/start` began. A chunk for any other file is saved
+  # without reporting anything.
+  defp receiving_file(socket, name) do
+    case socket.console_file do
+      %{name: ^name} = file -> file
+      _ -> %{name: name, ack?: false, bytes: 0, failed?: false}
+    end
+  end
+
+  # Only the file `file-data/start` began is kept, so a stray chunk for another
+  # file can't replace it and stop its reports.
+  defp track_file(socket, %{name: name} = file) do
+    case socket.console_file do
+      %{name: ^name} -> %{socket | console_file: file}
+      _ -> socket
+    end
+  end
+
+  defp stop_tracking_file(socket, name) do
+    case socket.console_file do
+      %{name: ^name} -> %{socket | console_file: nil}
+      _ -> socket
+    end
+  end
+
+  # How writing part of a file went. The first failure is logged and, if
+  # asked, reported, and the rest of the file is then ignored.
+  defp saved(socket, file, :ok), do: {socket, file}
+
+  defp saved(socket, file, {:error, reason, _path}), do: saved(socket, file, {:error, reason})
+
+  defp saved(socket, file, {:error, reason}) do
+    message = describe_file_error(reason)
+
+    Logger.warning(
+      "[NervesHubLink] Couldn't save #{inspect(file.name)} from the console: #{message}"
+    )
+
+    socket = report(socket, file, "file-data/error", %{filename: file.name, reason: message})
+
+    {socket, %{file | failed?: true}}
+  end
+
+  # Tells NervesHub how a file is going, if it asked. Once a file has failed,
+  # only the failure is told.
+  #
+  # The socket the push answers with is carried on rather than discarded. It
+  # holds the connection, and with it the ref the next push takes and whether
+  # the connection is still up. Nothing here is known to go wrong if it is
+  # dropped - a report is answered by a message the reader sees, so a dead
+  # connection is reported either way - but every other caller of `push/4`
+  # threads it and this one has no reason to be the exception.
+  defp report(socket, %{ack?: true, failed?: false}, event, payload) do
+    push(socket, @console_topic, event, payload)
+  end
+
+  defp report(socket, _file, _event, _payload), do: socket
+
+  defp describe_file_error(:invalid_data), do: "a chunk wasn't valid Base64"
+
+  defp describe_file_error(:not_a_plain_filename),
+    do: "the filename has to be a plain name, without a path"
+
+  defp describe_file_error(reason), do: reason |> :file.format_error() |> to_string()
 
   @impl GenServer
   def handle_info(:connect_check_network_availability, socket) do

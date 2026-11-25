@@ -639,6 +639,156 @@ defmodule NervesHubLink.SocketMessagesTest do
     end
   end
 
+  describe "saying how a file from the console is going" do
+    @describetag socket_config: [remote_iex: true]
+
+    setup :join_console_topic
+
+    test "says how saving it goes when NervesHub asks", %{data_path: data_path} do
+      filename = "notes.txt"
+
+      server_push(@console_topic, "file-data/start", %{"filename" => filename, "ack" => true})
+      server_push(@console_topic, "file-data", file_chunk(filename, "hello ", 0))
+
+      assert_push(@console_topic, "file-data/ack", %{
+        "filename" => ^filename,
+        "chunk" => 0,
+        "bytes" => 6
+      })
+
+      server_push(@console_topic, "file-data", file_chunk(filename, "world", 1))
+
+      assert_push(@console_topic, "file-data/ack", %{
+        "filename" => ^filename,
+        "chunk" => 1,
+        "bytes" => 11
+      })
+
+      server_push(@console_topic, "file-data/stop", %{"filename" => filename})
+      assert_push(@console_topic, "file-data/saved", %{"filename" => ^filename, "bytes" => 11})
+
+      assert File.read!(Path.join(data_path, filename)) == "hello world"
+    end
+
+    test "says nothing when NervesHub doesn't ask", %{socket: socket} do
+      filename = "notes.txt"
+
+      server_push(@console_topic, "file-data/start", %{"filename" => filename})
+      server_push(@console_topic, "file-data", file_chunk(filename, "hello"))
+      server_push(@console_topic, "file-data/stop", %{"filename" => filename})
+
+      assert NervesHubLink.socket_connected?(socket)
+
+      refute_push(@console_topic, "file-data/ack")
+      refute_push(@console_topic, "file-data/saved")
+    end
+
+    test "reports a chunk that isn't Base64, and saves nothing after it", %{
+      socket: socket,
+      data_path: data_path
+    } do
+      filename = "notes.txt"
+
+      server_push(@console_topic, "file-data/start", %{"filename" => filename, "ack" => true})
+
+      server_push(@console_topic, "file-data", %{
+        "filename" => filename,
+        "chunk" => 0,
+        "data" => "not base64!"
+      })
+
+      assert_push(@console_topic, "file-data/error", %{
+        "filename" => ^filename,
+        "reason" => "a chunk wasn't valid Base64"
+      })
+
+      server_push(@console_topic, "file-data", file_chunk(filename, "hello", 1))
+      server_push(@console_topic, "file-data/stop", %{"filename" => filename})
+
+      assert NervesHubLink.socket_connected?(socket)
+
+      refute_push(@console_topic, "file-data/ack")
+      refute_push(@console_topic, "file-data/saved")
+      assert File.read!(Path.join(data_path, filename)) == ""
+    end
+
+    test "keeps reporting on its file when a chunk for another arrives", %{data_path: data_path} do
+      server_push(@console_topic, "file-data/start", %{"filename" => "a.txt", "ack" => true})
+      server_push(@console_topic, "file-data", file_chunk("b.txt", "stray", 0))
+      server_push(@console_topic, "file-data", file_chunk("a.txt", "hello", 0))
+
+      assert_push(@console_topic, "file-data/ack", %{
+        "filename" => "a.txt",
+        "chunk" => 0,
+        "bytes" => 5
+      })
+
+      server_push(@console_topic, "file-data/stop", %{"filename" => "b.txt"})
+      server_push(@console_topic, "file-data/stop", %{"filename" => "a.txt"})
+      assert_push(@console_topic, "file-data/saved", %{"filename" => "a.txt", "bytes" => 5})
+
+      assert File.read!(Path.join(data_path, "a.txt")) == "hello"
+      assert File.read!(Path.join(data_path, "b.txt")) == "stray"
+    end
+
+    # A name that is not a plain one is refused before anything is written, and
+    # that is a failure to save like any other - NervesHub is told, rather than
+    # left waiting for an acknowledgement that never comes.
+    test "reports a filename it refuses", %{socket: socket, data_path: data_path} do
+      filename = "../escape.txt"
+
+      server_push(@console_topic, "file-data/start", %{"filename" => filename, "ack" => true})
+
+      assert_push(@console_topic, "file-data/error", %{
+        "filename" => ^filename,
+        "reason" => reason
+      })
+
+      assert reason =~ "plain name"
+
+      server_push(@console_topic, "file-data", file_chunk(filename, "hello", 0))
+
+      assert NervesHubLink.socket_connected?(socket)
+
+      refute_push(@console_topic, "file-data/ack")
+      refute File.exists?(Path.join(Path.dirname(data_path), "escape.txt"))
+    end
+
+    # The data path is read-only here, so the file cannot be created in it. A
+    # plain filename is used, since a name with a path in it is refused before
+    # the filesystem is touched at all. Taking the write permission away gives
+    # the same `:eacces` on every OS and OTP version, where making the data
+    # path a file gives `:eexist` on one and `:enotdir` on another.
+    test "reports a file it can't write, once, and keeps the console", %{
+      socket: socket,
+      data_path: data_path
+    } do
+      File.mkdir_p!(data_path)
+      File.chmod!(data_path, 0o500)
+      on_exit(fn -> File.chmod(data_path, 0o700) end)
+
+      filename = "notes.txt"
+
+      server_push(@console_topic, "file-data/start", %{"filename" => filename, "ack" => true})
+
+      assert_push(@console_topic, "file-data/error", %{
+        "filename" => ^filename,
+        "reason" => reason
+      })
+
+      assert reason == "permission denied"
+
+      server_push(@console_topic, "file-data", file_chunk(filename, "hello", 0))
+      server_push(@console_topic, "file-data/stop", %{"filename" => filename})
+
+      assert NervesHubLink.socket_connected?(socket)
+
+      refute_push(@console_topic, "file-data/ack")
+      refute_push(@console_topic, "file-data/saved")
+      refute_push(@console_topic, "file-data/error")
+    end
+  end
+
   describe "sending a file to the console" do
     @describetag socket_config: [remote_iex: true]
 
@@ -1174,8 +1324,8 @@ defmodule NervesHubLink.SocketMessagesTest do
     })
   end
 
-  defp file_chunk(filename, data) do
-    %{"filename" => filename, "data" => Base.encode64(data)}
+  defp file_chunk(filename, data, chunk \\ 0) do
+    %{"filename" => filename, "chunk" => chunk, "data" => Base.encode64(data)}
   end
 
   defp update_payload() do

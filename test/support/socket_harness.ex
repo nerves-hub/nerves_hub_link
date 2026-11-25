@@ -172,6 +172,49 @@ defmodule NervesHubLink.Support.SocketHarness do
   end
 
   @doc """
+  Assert the socket sent no `event` on `topic`.
+
+  Frames that do not match are kept, the way `assert_push/3` keeps them, so
+  this can sit between assertions without swallowing what they are waiting
+  for. Give the socket something to answer first - a call into it is handled
+  after the messages under test - or this only says the frame had not arrived
+  yet.
+  """
+  @spec refute_push(String.t(), String.t(), timeout()) :: :ok
+  def refute_push(topic, event, timeout \\ 200) do
+    case take_kept(topic, event) do
+      {:ok, message} -> flunk(sent(topic, event, message))
+      :error -> refute_frame(topic, event, System.monotonic_time(:millisecond) + timeout)
+    end
+  end
+
+  defp refute_frame(topic, event, deadline) do
+    remaining = deadline - System.monotonic_time(:millisecond)
+
+    if remaining <= 0 do
+      :ok
+    else
+      receive do
+        {:connection_test, {:frame, opcode, payload}} when opcode in [:text, :binary] ->
+          message = decode_device_frame(payload, opcode)
+
+          if message.topic == topic and message.event == event do
+            flunk(sent(topic, event, message))
+          else
+            keep(message)
+            refute_frame(topic, event, deadline)
+          end
+      after
+        remaining -> :ok
+      end
+    end
+  end
+
+  defp sent(topic, event, message) do
+    "the socket sent #{topic}:#{event}, with #{inspect(message.payload)}"
+  end
+
+  @doc """
   Assert the socket asked to join `topic` with params matching `pattern`, and
   answer it.
 
