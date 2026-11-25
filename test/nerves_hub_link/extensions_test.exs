@@ -258,33 +258,105 @@ defmodule NervesHubLink.ExtensionsTest do
 
     test "an extension offered again at the same version stays attached" do
       %{"reporter" => %{attach_ref: attach_ref}} = Extensions.list()
+      pid = Process.whereis(Reporter)
 
       assert Extensions.offer(%{"reporter" => ["1.2.3"]}) == %{"reporter" => "1.2.3"}
 
       # Its process kept running through the reconnect, so it can still push
       assert %{"reporter" => %{attached?: true, attach_ref: ^attach_ref}} = Extensions.list()
+      assert Process.whereis(Reporter) == pid
+      refute_received {:pushed, "extensions", "reporter:detached", %{}}
       assert {:ok, _ref} = Reporter.push("report", %{})
     end
 
-    test "an extension the platform no longer names is detached" do
-      # Nothing will attach it, so it has no business pushing
+    test "an extension the platform no longer names is stopped and detached" do
+      ref = Process.monitor(Reporter)
+
+      # Nothing will attach it, so it has no business running
       assert Extensions.offer(%{}) == %{}
 
+      assert_receive {:DOWN, ^ref, :process, _pid, _reason}
+      assert_receive {:pushed, "extensions", "reporter:detached", %{}}
       assert %{"reporter" => %{attached?: false}} = Extensions.list()
-      assert Reporter.push("report", %{}) == {:error, :detached}
     end
 
-    test "an extension offered at another version is detached until it attaches" do
-      Application.put_env(:nerves_hub_link, :extension_modules, [Versioned])
+    test "an extension the platform no longer names can't push" do
+      assert Extensions.offer(%{}) == %{}
+      assert_receive {:pushed, "extensions", "reporter:detached", %{}}
 
-      assert Extensions.offer(%{"versioned" => ["1.0.0"]}) == %{"versioned" => "1.0.0"}
+      _ = start_supervised!(Reporter)
+
+      assert Reporter.push("report", %{}) == {:error, :detached}
+      refute_receive {:pushed, "extensions", "reporter:report", %{}}, 100
+    end
+  end
+
+  describe "offering again at another version after a reconnect" do
+    setup do
+      Application.put_env(:nerves_hub_link, :extension_modules, [Reporter, Versioned])
+
+      assert Extensions.offer(%{"reporter" => ["1.2.3"], "versioned" => ["1.0.0"]}) ==
+               %{"reporter" => "1.2.3", "versioned" => "1.0.0"}
+
+      :ok = Extensions.attach(["reporter", "versioned"])
+      assert_receive {:pushed, "extensions", "reporter:attached", %{}}
+      assert_receive {:pushed, "extensions", "versioned:attached", %{}}
+
+      :ok
+    end
+
+    test "stops the old version and tells NervesHub it detached" do
+      ref = Process.monitor(Versioned)
+
+      assert Extensions.offer(%{"reporter" => ["1.2.3"], "versioned" => ["2.0.0"]}) ==
+               %{"reporter" => "1.2.3", "versioned" => "2.0.0"}
+
+      assert_receive {:DOWN, ^ref, :process, _pid, _reason}
+      assert_receive {:pushed, "extensions", "versioned:detached", %{}}
+
+      # The new version waits for the platform to attach it
+      assert %{"versioned" => %{attached?: false, attach_ref: nil, module: Versioned.Next}} =
+               Extensions.list()
+
+      refute Process.whereis(Versioned.Next)
+
+      # An extension still offered at the same version is left alone
+      assert %{"reporter" => %{attached?: true}} = Extensions.list()
+      assert Process.whereis(Reporter)
+      refute_received {:pushed, "extensions", "reporter:detached", %{}}
+    end
+
+    test "the old version can't push once the new one attaches" do
+      assert Extensions.offer(%{"versioned" => ["2.0.0"]}) == %{"versioned" => "2.0.0"}
+      assert_receive {:pushed, "extensions", "versioned:detached", %{}}
+
       :ok = Extensions.attach("versioned")
       assert_receive {:pushed, "extensions", "versioned:attached", %{}}
 
-      assert Extensions.offer(%{"versioned" => ["2.0.0"]}) == %{"versioned" => "2.0.0"}
+      # Both versions have the same name, and only the new one talks the format
+      # the platform expects now.
+      _ = start_supervised!(Versioned)
 
-      assert %{"versioned" => %{attached?: false, attach_ref: nil, module: Versioned.Next}} =
-               Extensions.list()
+      assert Versioned.push("report", %{}) == {:error, :detached}
+      refute_receive {:pushed, "extensions", "versioned:report", %{}}, 100
+
+      assert {:ok, _ref} = Versioned.Next.push("report", %{})
+      assert_receive {:pushed, "extensions", "versioned:report", %{}}
+    end
+
+    test "going back to the old version stops the new one" do
+      assert Extensions.offer(%{"versioned" => ["2.0.0"]}) == %{"versioned" => "2.0.0"}
+      assert_receive {:pushed, "extensions", "versioned:detached", %{}}
+
+      :ok = Extensions.attach("versioned")
+      assert_receive {:pushed, "extensions", "versioned:attached", %{}}
+      ref = Process.monitor(Versioned.Next)
+
+      assert Extensions.offer(%{"versioned" => ["1.0.0"]}) == %{"versioned" => "1.0.0"}
+
+      assert_receive {:DOWN, ^ref, :process, _pid, _reason}
+      assert_receive {:pushed, "extensions", "versioned:detached", %{}}
+      assert %{"versioned" => %{attached?: false, module: Versioned}} = Extensions.list()
     end
   end
 
