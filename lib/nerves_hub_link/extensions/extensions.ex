@@ -131,6 +131,13 @@ defmodule NervesHubLink.Extensions do
   implement it or has it switched off, and either way there is nothing to
   attach.
 
+  Every reconnect offers again, and extension processes keep running through
+  it. Once the offer is answered, any of them that is no longer what was
+  offered is stopped, and NervesHub is told it detached, as `detach/1` would.
+  That is a version that was replaced, such as `logging` 0.0.1 when 0.1.0 is
+  offered, or an extension the platform no longer names. One offered again at
+  the version it is running keeps running, and stays attached.
+
   > #### One version per extension {: .info}
   >
   > This client implements exactly one version of each extension, so choosing
@@ -257,7 +264,8 @@ defmodule NervesHubLink.Extensions do
   # pushes refused until the platform attaches it again. At another version it
   # is a different module, which hasn't been started. One the platform no
   # longer names isn't offered at all, and is left detached: nothing will
-  # attach it, so it has no business pushing.
+  # attach it, so it has no business pushing. Either way, the process that was
+  # running is stopped once the offer has been answered.
   defp keep_attached(%{module: module} = entry, %{module: module} = previous) do
     %{entry | attached?: previous.attached?, attach_ref: previous.attach_ref}
   end
@@ -293,26 +301,55 @@ defmodule NervesHubLink.Extensions do
         end
       end
 
-    {:reply, chosen, %{state | extensions: extensions}}
+    offered = for {name, version} <- chosen, do: extensions[name].versions[version]
+
+    # The rest are stopped after replying, not before. The socket is waiting on
+    # this answer, and stopping a process can take as long as its shutdown. A
+    # continue still runs before anything else this process is sent, so nothing
+    # attaches until they have gone.
+    {:reply, chosen, %{state | extensions: extensions}, {:continue, {:stop_replaced, offered}}}
   end
 
-  def handle_call({:push, extension, event, payload}, _from, state) do
+  def handle_call({:push, extension, module, event, payload}, _from, state) do
     # This serves as the gatekeeper for the socket and prevents
     # extension messages that may still be trying to send when they
-    # have been detached and are not wanted over the socket
+    # have been detached and are not wanted over the socket.
+    #
+    # The module has to match as well as the name. Every version of an
+    # extension has the same name, and only the one that was offered talks
+    # the format the platform expects.
     result =
-      if state.extensions[extension][:attached?] == true do
-        scoped_event =
-          if String.starts_with?(event, "#{extension}:"),
-            do: event,
-            else: "#{extension}:#{event}"
+      case state.extensions[extension] do
+        %{attached?: true, module: ^module} ->
+          scoped_event =
+            if String.starts_with?(event, "#{extension}:"),
+              do: event,
+              else: "#{extension}:#{event}"
 
-        push_to_socket(scoped_event, payload)
-      else
-        {:error, :detached}
+          push_to_socket(scoped_event, payload)
+
+        _ ->
+          {:error, :detached}
       end
 
     {:reply, result, state}
+  end
+
+  # Anything still running that wasn't just offered: a version the offer
+  # replaced, or an extension the platform no longer names. Left running, it
+  # would carry on working, and once the new version attached under the same
+  # name, its pushes would go out alongside the new one's, in its own format.
+  @impl GenServer
+  def handle_continue({:stop_replaced, offered}, state) do
+    for {_id, pid, _type, [module]} <- DynamicSupervisor.which_children(ExtensionsSupervisor),
+        is_pid(pid),
+        module not in offered do
+      # Ignore since either :ok, or {:error, :not_found}
+      _ = DynamicSupervisor.terminate_child(ExtensionsSupervisor, pid)
+      _ = push_to_socket("#{module.__name__()}:detached", %{})
+    end
+
+    {:noreply, state}
   end
 
   @impl GenServer
@@ -483,7 +520,10 @@ defmodule NervesHubLink.Extensions do
       @spec push(String.t(), map()) ::
               {:ok, Slipstream.push_reference()} | {:error, reason :: :detached | term()}
       def push(event, payload) do
-        GenServer.call(NervesHubLink.Extensions, {:push, __name__(), event, payload})
+        GenServer.call(
+          NervesHubLink.Extensions,
+          {:push, __name__(), __MODULE__, event, payload}
+        )
       end
 
       @impl GenServer
