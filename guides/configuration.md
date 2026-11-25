@@ -228,7 +228,7 @@ It is called when the device joins, and again on every reconnect, since a connec
 When metadata changes while the device is connected - an installer naming the room it sits in, say - send it again:
 
 ```elixir
-NervesHubLink.send_metadata()
+NervesHubLink.send_device_metadata()
 ```
 
 Without a callback, metadata is read from the application environment, where each value is either a term or an `{module, function, args}` tuple called when the metadata is collected:

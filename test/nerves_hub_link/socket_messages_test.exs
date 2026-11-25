@@ -153,7 +153,7 @@ defmodule NervesHubLink.SocketMessagesTest do
 
       stub(ClientMock, :metadata, fn -> %{"placement" => "the barn"} end)
 
-      assert NervesHubLink.send_metadata(socket) == :ok
+      assert NervesHubLink.send_device_metadata(socket) == :ok
 
       assert_push(@device_topic, "metadata", %{metadata: %{"placement" => "the barn"}})
     end

@@ -65,9 +65,9 @@ defmodule NervesHubLink.Socket do
     GenServer.cast(server, {:send_update_status, status})
   end
 
-  @spec send_metadata(GenServer.server()) :: :ok
-  def send_metadata(server \\ __MODULE__) do
-    GenServer.cast(server, :send_metadata)
+  @spec send_device_metadata(GenServer.server()) :: :ok
+  def send_device_metadata(server \\ __MODULE__) do
+    GenServer.cast(server, :send_device_metadata)
   end
 
   @spec check_connection(GenServer.server(), atom()) :: boolean()
@@ -266,7 +266,7 @@ defmodule NervesHubLink.Socket do
     Logger.debug("[#{inspect(__MODULE__)}] Joined Device channel")
 
     send(self(), :get_network_interface)
-    send(self(), :send_metadata)
+    send(self(), :send_device_metadata)
 
     {:ok, assign(socket, joined_at: System.monotonic_time(:millisecond))}
   end
@@ -395,7 +395,7 @@ defmodule NervesHubLink.Socket do
     {:noreply, disconnect(socket)}
   end
 
-  def handle_cast(:send_metadata, socket) do
+  def handle_cast(:send_device_metadata, socket) do
     {:noreply, push_metadata(socket)}
   end
 
@@ -759,7 +759,7 @@ defmodule NervesHubLink.Socket do
     end
   end
 
-  def handle_info(:send_metadata, socket) do
+  def handle_info(:send_device_metadata, socket) do
     {:noreply, push_metadata(socket)}
   end
 
