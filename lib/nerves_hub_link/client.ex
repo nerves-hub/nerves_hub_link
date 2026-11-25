@@ -22,6 +22,7 @@ defmodule NervesHubLink.Client do
   - `c:handle_error/1` - a firmware update has failed
   - `c:handle_fwup_message/1` - a message has been received by `NervesHubLink.UpdateManager`
   - `c:identify/0` - a request received from NervesHub to identify the device (eg. blink leds)
+  - `c:device_metadata/0` - the metadata describing this device, reported to NervesHub on connect
   - `c:reboot/0` - a request received from NervesHub to reboot the device
   - `c:reconnect_backoff/0` - how NervesHubLink should handle reconnection backoffs
   - `c:update_available/1` - should a firmware update be applied
@@ -74,6 +75,7 @@ defmodule NervesHubLink.Client do
   alias Nerves.Runtime
   alias Nerves.Runtime.KV
   alias NervesHubLink.Backoff
+  alias NervesHubLink.ConfigValue
 
   require Logger
 
@@ -178,6 +180,46 @@ defmodule NervesHubLink.Client do
   @callback reboot() :: no_return()
 
   @doc """
+  Optional callback for the metadata describing this device.
+
+  Metadata says what a device *is* rather than how it is doing: where it was
+  installed, which customer it belongs to, the revision of the board under it.
+  NervesHub holds it against the connection, so it is sent when the device
+  joins and again on every reconnect, and `NervesHubLink.send_device_metadata/1`
+  sends it again when it changes while the device is connected.
+
+  Keys are strings, and so are the values NervesHub expects. This runs on the
+  socket process, so anything slow to work out belongs in your application,
+  with this callback reading the answer.
+
+  ```elixir
+  @impl NervesHubLink.Client
+  def device_metadata() do
+    %{
+      "placement" => CatCounter.venue(),
+      "board_revision" => CatCounter.Hardware.revision()
+    }
+  end
+  ```
+
+  Without this callback, metadata is read from the application environment
+  instead, where each value is either a term or an `{module, function, args}`
+  tuple called when the metadata is collected:
+
+  ```elixir
+  config :nerves_hub_link,
+    metadata: %{
+      "placement" => {CatCounter, :venue, []}
+    }
+  ```
+
+  Devices that configured metadata under `health: [metadata: ...]`, which is
+  where it lived while the Health extension reported it, are still read from
+  there when neither of the above is in place.
+  """
+  @callback device_metadata() :: %{String.t() => String.t()}
+
+  @doc """
   Optional callback to check if the current firmware has been validated.
 
   The default behavior is to delegate to `Nerves.Runtime.firmware_valid?/0`.
@@ -202,6 +244,7 @@ defmodule NervesHubLink.Client do
 
   @optional_callbacks [
     connected: 0,
+    device_metadata: 0,
     firmware_auto_revert_detected?: 0,
     firmware_validated?: 0,
     reboot: 0,
@@ -274,6 +317,62 @@ defmodule NervesHubLink.Client do
   @spec identify() :: :ok
   def identify() do
     apply_wrap(mod(), :identify, [])
+  end
+
+  @doc """
+  This function is called internally by NervesHubLink to collect the device's metadata.
+
+  The configured client is asked first. A client that doesn't implement
+  `c:device_metadata/0` falls back to the `:metadata` application environment key, and
+  then to `health: [metadata: ...]`, where metadata was configured while the
+  Health extension reported it.
+  """
+  @spec device_metadata() :: %{String.t() => String.t()}
+  def device_metadata() do
+    if function_exported?(mod(), :device_metadata, 0) do
+      case apply_wrap(mod(), :device_metadata, []) do
+        metadata when is_map(metadata) ->
+          normalize_metadata(metadata)
+
+        other ->
+          Logger.warning(
+            "[NervesHubLink.Client] Invalid response from `#{inspect(mod())}.device_metadata/0`, sending none : #{inspect(other)}"
+          )
+
+          %{}
+      end
+    else
+      configured_metadata()
+    end
+  end
+
+  defp configured_metadata() do
+    case Application.get_env(:nerves_hub_link, :metadata) do
+      nil ->
+        Application.get_env(:nerves_hub_link, :health, [])
+        |> Keyword.get(:metadata, %{})
+        |> normalize_metadata()
+
+      metadata ->
+        normalize_metadata(metadata)
+    end
+  end
+
+  # Collecting metadata runs application code, whether through the callback or
+  # an MFA in the configuration, and it runs on the socket process. A device
+  # that can't say where it is still has to stay connected, so a failure here
+  # costs the metadata and nothing else.
+  defp normalize_metadata(metadata) do
+    for {key, value} <- metadata, into: %{} do
+      {ConfigValue.key(key), ConfigValue.resolve(value)}
+    end
+  catch
+    kind, reason ->
+      Logger.error(
+        "[NervesHubLink.Client] the device's metadata could not be collected (#{inspect(kind)} : #{inspect(reason)})"
+      )
+
+      %{}
   end
 
   @doc """

@@ -45,6 +45,7 @@ defmodule NervesHubLink.SocketMessagesTest do
 
     # Optional callbacks aren't covered by ClientStub
     stub(ClientMock, :connected, fn -> :ok end)
+    stub(ClientMock, :device_metadata, fn -> %{} end)
     stub(ClientMock, :reconnect_backoff, fn -> [1_000] end)
     stub(ClientMock, :firmware_validated?, fn -> true end)
     stub(ClientMock, :firmware_auto_revert_detected?, fn -> false end)
@@ -131,6 +132,40 @@ defmodule NervesHubLink.SocketMessagesTest do
 
       assert Task.await(task) == {:error, :not_permitted}
       assert Socket.update_mode(socket) == :automatic
+    end
+  end
+
+  describe "device metadata" do
+    test "is sent once the device channel is joined", %{socket: _socket} do
+      stub(ClientMock, :device_metadata, fn -> %{"placement" => "the shed"} end)
+
+      join_device_topic()
+
+      assert_push(@device_topic, "metadata", %{metadata: %{"placement" => "the shed"}})
+    end
+
+    test "is collected again, and sent again, when asked", %{socket: socket} do
+      stub(ClientMock, :device_metadata, fn -> %{"placement" => "the shed"} end)
+
+      join_device_topic()
+
+      assert_push(@device_topic, "metadata", %{metadata: %{"placement" => "the shed"}})
+
+      stub(ClientMock, :device_metadata, fn -> %{"placement" => "the barn"} end)
+
+      assert NervesHubLink.send_device_metadata(socket) == :ok
+
+      assert_push(@device_topic, "metadata", %{metadata: %{"placement" => "the barn"}})
+    end
+
+    test "is not sent at all by a device that has none", %{socket: socket} do
+      join_device_topic()
+
+      # NervesHub merges what it is given, so an empty map would only cost a
+      # message. The call is answered after the join has been handled, and so
+      # after any metadata would have been pushed.
+      assert NervesHubLink.connected?(socket)
+      refute_push(@device_topic, "metadata", _payload)
     end
   end
 
@@ -301,6 +336,7 @@ defmodule NervesHubLink.SocketMessagesTest do
       assert_receive :identified
     end
 
+    @tag socket_config: [params: %{"fwup_public_keys" => "on_connect"}]
     test "firmware public keys sent by the server are used for the next update", %{socket: socket} do
       test_pid = self()
 
@@ -315,6 +351,7 @@ defmodule NervesHubLink.SocketMessagesTest do
       assert_receive {:start_update, ["key from the server"]}
     end
 
+    @tag socket_config: [params: %{"archive_public_keys" => "on_connect"}]
     test "archive public keys sent by the server replace the configured ones", %{socket: socket} do
       push(socket, @device_topic, "archive_public_keys", %{"keys" => ["archive key from server"]})
 
@@ -326,6 +363,7 @@ defmodule NervesHubLink.SocketMessagesTest do
              ]
     end
 
+    @tag socket_config: [params: %{"fwup_public_keys" => "on_connect"}]
     test "an empty key list from the server does not clear the configured firmware keys", %{
       socket: socket
     } do
@@ -338,6 +376,7 @@ defmodule NervesHubLink.SocketMessagesTest do
       assert :sys.get_state(socket).assigns.config.fwup_public_keys == ["configured fwup key"]
     end
 
+    @tag socket_config: [params: %{"archive_public_keys" => "on_connect"}]
     test "an empty key list from the server does not clear the configured archive keys", %{
       socket: socket
     } do
@@ -350,6 +389,7 @@ defmodule NervesHubLink.SocketMessagesTest do
              ]
     end
 
+    @tag socket_config: [params: %{"fwup_public_keys" => "on_connect"}]
     test "keys from the server that are not binaries are discarded", %{socket: socket} do
       push(socket, @device_topic, "fwup_public_keys", %{"keys" => [nil, 42]})
 
@@ -358,13 +398,39 @@ defmodule NervesHubLink.SocketMessagesTest do
       assert :sys.get_state(socket).assigns.config.fwup_public_keys == ["configured fwup key"]
     end
 
+    test "firmware public keys the device did not request are ignored", %{socket: socket} do
+      # NervesHub only sends keys a device asks for on join. Keys it didn't ask
+      # for didn't come from NervesHub, so they must not replace configured ones.
+      test_pid = self()
+
+      expect(UpdaterMock, :start_update, fn _update_info, _fwup_config, fwup_public_keys ->
+        send(test_pid, {:start_update, fwup_public_keys})
+        {:ok, spawn(fn -> Process.sleep(:infinity) end)}
+      end)
+
+      push(socket, @device_topic, "fwup_public_keys", %{"keys" => ["unrequested key"]})
+      push(socket, @device_topic, "update", update_payload())
+
+      assert_receive {:start_update, ["configured fwup key"]}
+    end
+
+    test "archive public keys the device did not request are ignored", %{socket: socket} do
+      push(socket, @device_topic, "archive_public_keys", %{"keys" => ["unrequested key"]})
+
+      assert NervesHubLink.socket_connected?(socket)
+
+      assert :sys.get_state(socket).assigns.config.archive_public_keys == [
+               "configured archive key"
+             ]
+    end
+
     test "an extensions:get message asks to join the extensions topic", %{socket: socket} do
       push(socket, @device_topic, "extensions:get", %{})
 
       assert_join("extensions", available_extensions, :error)
 
       assert is_map(available_extensions)
-      assert Map.has_key?(available_extensions, "health")
+      assert Map.has_key?(available_extensions, "metrics")
     end
 
     test "only the extensions the platform advertised are offered", %{socket: socket} do
@@ -372,17 +438,17 @@ defmodule NervesHubLink.SocketMessagesTest do
       # never declares a version nothing can serve, and never declares an
       # extension an operator switched off.
       push(socket, @device_topic, "extensions:get", %{
-        "extensions" => %{"health" => ["0.0.1"]}
+        "extensions" => %{"metrics" => ["0.1.0"]}
       })
 
       assert_join("extensions", offered, :error)
 
-      assert offered == %{"health" => "0.0.1"}
+      assert offered == %{"metrics" => "0.1.0"}
     end
 
     test "an extension the platform has at another version is not offered", %{socket: socket} do
       push(socket, @device_topic, "extensions:get", %{
-        "extensions" => %{"health" => ["9.0.0"], "geo" => ["0.0.1"]}
+        "extensions" => %{"metrics" => ["9.0.0"], "geo" => ["0.0.1"]}
       })
 
       assert_join("extensions", offered, :error)
@@ -701,7 +767,9 @@ defmodule NervesHubLink.SocketMessagesTest do
   end
 
   # A topic has to be joined before the client will push to it.
-  defp join_device_topic(%{socket: _socket}) do
+  defp join_device_topic(%{socket: _socket}), do: join_device_topic()
+
+  defp join_device_topic() do
     assert_join(@device_topic, _params, :ok)
     answer_network_interface_probe()
     :ok

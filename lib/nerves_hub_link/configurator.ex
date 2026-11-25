@@ -142,6 +142,7 @@ defmodule NervesHubLink.Configurator do
     socket =
       config.socket
       |> Keyword.put(:transport_opts, transport_opts)
+      |> Keyword.update(:headers, [{"user-agent", user_agent()}], &put_user_agent/1)
       |> Keyword.put_new_lazy(:reconnect_after_msec, fn ->
         # Default retry interval
         # 1 second minimum delay that doubles up to 60 seconds. Up to 50% of
@@ -151,6 +152,30 @@ defmodule NervesHubLink.Configurator do
 
     %{config | socket: socket}
   end
+
+  @doc """
+  The product token this library names itself with: `NHL/<version>`.
+
+  It's sent as the `User-Agent` of the socket's websocket upgrade and of
+  firmware downloads. NervesHub records it for each connection, which is how
+  it knows which version of NervesHubLink a device runs.
+  """
+  @spec user_agent() :: String.t()
+  def user_agent(), do: "NHL/#{Application.spec(:nerves_hub_link, :vsn)}"
+
+  # Without a User-Agent, Mint sends its own (`mint/<version>`), which tells
+  # NervesHub nothing about the device. This runs after the configurator's
+  # `build/1` because `SharedSecret` replaces the headers, and it leaves alone a
+  # User-Agent that's already been set.
+  defp put_user_agent(headers) do
+    if Enum.any?(headers, &user_agent_header?/1) do
+      headers
+    else
+      [{"user-agent", user_agent()} | headers]
+    end
+  end
+
+  defp user_agent_header?({name, _value}), do: String.downcase(to_string(name)) == "user-agent"
 
   defp base_config() do
     base = struct(Config, Application.get_all_env(:nerves_hub_link))

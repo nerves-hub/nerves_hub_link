@@ -15,44 +15,23 @@ defmodule NervesHubLink.Extensions.Health.DeviceStatus do
     @derive Jason.Encoder
   end
 
-  defstruct [:timestamp, :metadata, :alarms, :metrics, :checks, :connectivity]
+  defstruct [:timestamp, :alarms, :metrics]
 
   @type alarm_id() :: String.t()
   @type alarm_description() :: String.t()
-  @type interface_identifier() :: String.t()
-
-  @type connection_status :: :lan | :internet | :disconnected
-  @type interface_type :: :ethernet | :wifi | :mobile | :local | :unknown
 
   @type t() :: %__MODULE__{
           timestamp: DateTime.t(),
-          metadata: %{String.t() => String.t()},
           alarms: %{alarm_id() => alarm_description()},
-          metrics: %{String.t() => number()},
-          checks: %{String.t() => %{pass: boolean(), note: String.t()}},
-          connectivity: %{
-            interface_identifier() => %{
-              type: interface_type(),
-              present: boolean(),
-              state: atom(),
-              connection_status: connection_status(),
-              # Such as RSSI and others
-              metrics: %{String.t() => number()},
-              # Network name, telecom operator and similar data
-              metadata: %{String.t() => String.t()}
-            }
-          }
+          metrics: %{String.t() => number()}
         }
 
   @spec new(Access.t()) :: t()
   def new(kv) do
     %__MODULE__{
       timestamp: kv[:timestamp] || DateTime.utc_now(),
-      metadata: kv[:metadata] || %{},
       alarms: kv[:alarms] || %{},
-      metrics: kv[:metrics] || %{},
-      checks: kv[:checks] || %{},
-      connectivity: kv[:connectivity] || %{}
+      metrics: kv[:metrics] || %{}
     }
   end
 end
