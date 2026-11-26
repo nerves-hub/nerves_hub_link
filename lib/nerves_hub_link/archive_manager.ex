@@ -88,6 +88,10 @@ defmodule NervesHubLink.ArchiveManager do
 
   @impl GenServer
   def init(args) do
+    # The downloader is linked to this process. Hear about a download that
+    # fails rather than stopping with it.
+    Process.flag(:trap_exit, true)
+
     state = %__MODULE__{
       data_path: args.data_path
     }
@@ -167,6 +171,28 @@ defmodule NervesHubLink.ArchiveManager do
         IO.binwrite(fd, data)
       end)
 
+    {:noreply, state}
+  end
+
+  def handle_info({:EXIT, download, reason}, %__MODULE__{download: download} = state)
+      when reason != :normal do
+    Logger.error("[NervesHubLink] Archive download failed: #{inspect(reason)}")
+
+    _ = File.rm_rf(state.temp_file_path)
+
+    {:noreply,
+     %{
+       state
+       | archive_info: nil,
+         file_path: nil,
+         temp_file_path: nil,
+         download: nil,
+         status: :idle
+     }}
+  end
+
+  # A download that finished normally, after its `:complete` reset the state.
+  def handle_info({:EXIT, _pid, _reason}, state) do
     {:noreply, state}
   end
 
