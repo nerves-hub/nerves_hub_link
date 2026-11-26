@@ -183,6 +183,20 @@ defmodule NervesHubLink.ArchiveManager do
     state
   end
 
+  # As with firmware updates, don't interrupt a download in progress. NervesHub
+  # offers the newer archive again the next time the device checks in.
+  defp maybe_update_archive(
+         %ArchiveInfo{uuid: uuid},
+         _verification_keys,
+         %__MODULE__{status: :downloading, archive_info: %ArchiveInfo{uuid: current}} = state
+       ) do
+    Logger.info(
+      "[NervesHubLink] Archive #{current} is downloading, ignoring offer of archive #{uuid}"
+    )
+
+    state
+  end
+
   defp maybe_update_archive(info, verification_keys, state) do
     if FwupConfig.signing_keys_available?(verification_keys) do
       download_archive(info, verification_keys, state)
