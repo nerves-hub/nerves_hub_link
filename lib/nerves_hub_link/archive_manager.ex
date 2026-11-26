@@ -170,6 +170,19 @@ defmodule NervesHubLink.ArchiveManager do
     {:noreply, state}
   end
 
+  # NervesHub can send the same archive message twice, for example when the
+  # deployment changes shortly after the device joins. Starting a second
+  # download would write into the same file as the first.
+  defp maybe_update_archive(
+         %ArchiveInfo{uuid: uuid},
+         _verification_keys,
+         %__MODULE__{status: :downloading, archive_info: %ArchiveInfo{uuid: uuid}} = state
+       ) do
+    Logger.info("[NervesHubLink] Archive #{uuid} is already downloading, ignoring repeat offer")
+
+    state
+  end
+
   defp maybe_update_archive(info, verification_keys, state) do
     if FwupConfig.signing_keys_available?(verification_keys) do
       download_archive(info, verification_keys, state)
