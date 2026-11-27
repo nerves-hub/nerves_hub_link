@@ -109,9 +109,8 @@ defmodule NervesHubLink do
 
   NervesHub shows a device that said so as asleep, with when it is due back,
   rather than as offline, and leaves the sleep out of its disconnect counts.
-  Call this just before the device sleeps. It returns once the message is
-  written and the connection closed, or after five seconds if the close is
-  slow, so the device can sleep straight after.
+  Call this just before the device sleeps. It returns once the message is on
+  the wire and the connection closed, so the device can sleep straight after.
   See the [Devices That Sleep guide](device_sleep.md).
 
       NervesHubLink.going_to_sleep(mode: :deep, duration_ms: :timer.minutes(5))

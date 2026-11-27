@@ -99,7 +99,7 @@ defmodule NervesHubLink.Extensions do
   """
   @type entry :: %{
           attached?: boolean(),
-          attach_ref: Slipstream.push_reference() | nil,
+          attach_ref: NervesHubLink.Socket.push_ref() | nil,
           module: module(),
           version: String.t(),
           versions: %{String.t() => module()}
@@ -150,6 +150,21 @@ defmodule NervesHubLink.Extensions do
   @spec offer(%{String.t() => [String.t()]} | nil) :: %{String.t() => String.t()}
   def offer(advertisement) do
     GenServer.call(__MODULE__, {:offer, advertisement})
+  end
+
+  @doc """
+  Work out what to offer, and send the answer to `reply_to` as
+  `{:extensions_offered, chosen}`.
+
+  Asynchronous on purpose. This process pushes to `NervesHubLink.Socket`, so a
+  call from the socket to here would be one half of a cycle: the socket waiting
+  on this process while this process waits on the socket, until both give up on
+  a call timeout and exit. `offer/1` remains for callers that are not the
+  socket and so cannot close that loop.
+  """
+  @spec request_offer(%{String.t() => [String.t()]} | nil, pid()) :: :ok
+  def request_offer(advertisement, reply_to) when is_pid(reply_to) do
+    GenServer.cast(__MODULE__, {:offer, advertisement, reply_to})
   end
 
   @spec handle_event(String.t(), map()) :: :ok
@@ -276,37 +291,9 @@ defmodule NervesHubLink.Extensions do
   end
 
   def handle_call({:offer, advertisement}, _from, state) do
-    extensions = find_extensions()
+    {chosen, offered, state} = choose_offer(advertisement, state)
 
-    chosen =
-      for {name, %{versions: versions}} <- extensions,
-          version = choose(Map.keys(versions), advertisement, name),
-          into: %{},
-          do: {name, version}
-
-    # Remembered so that the attach that follows starts the version that was
-    # offered. A device that offered 0.0.1 and then attached 0.1.0 would be
-    # talking a language the platform said it does not have.
-    extensions =
-      for {name, entry} <- extensions, into: %{} do
-        case chosen[name] do
-          nil ->
-            {name, entry}
-
-          version ->
-            entry = %{entry | version: version, module: entry.versions[version]}
-            {name, keep_attached(entry, state.extensions[name])}
-        end
-      end
-
-    offered = for {name, version} <- chosen, do: extensions[name].versions[version]
-
-    # The rest are stopped after replying, not before. `offer/1` runs inside the
-    # Socket process, so pushing `detached` here would call into a Socket that is
-    # waiting on this answer, and stopping a process can take as long as its
-    # shutdown. A continue still runs before anything else this process is sent,
-    # so nothing attaches until they have gone.
-    {:reply, chosen, %{state | extensions: extensions}, {:continue, {:stop_replaced, offered}}}
+    {:reply, chosen, state, {:continue, {:stop_replaced, offered}}}
   end
 
   def handle_call({:push, extension, module, event, payload}, _from, state) do
@@ -338,6 +325,11 @@ defmodule NervesHubLink.Extensions do
   # replaced, or an extension the platform no longer names. Left running, it
   # would carry on working, and once the new version attached under the same
   # name, its pushes would go out alongside the new one's, in its own format.
+  #
+  # A continue rather than part of answering the offer, because stopping a
+  # process can take as long as its shutdown and whoever asked should not wait
+  # on that. A continue still runs before anything else this process is sent,
+  # so nothing attaches until these have gone.
   @impl GenServer
   def handle_continue({:stop_replaced, offered}, state) do
     for {_id, pid, _type, [module]} <- DynamicSupervisor.which_children(ExtensionsSupervisor),
@@ -352,6 +344,14 @@ defmodule NervesHubLink.Extensions do
   end
 
   @impl GenServer
+  def handle_cast({:offer, advertisement, reply_to}, state) do
+    {chosen, offered, state} = choose_offer(advertisement, state)
+
+    send(reply_to, {:extensions_offered, chosen})
+
+    {:noreply, state, {:continue, {:stop_replaced, offered}}}
+  end
+
   def handle_cast({:detach, extensions}, state) do
     state =
       for {_, pid, _, [module]} <-
@@ -459,10 +459,45 @@ defmodule NervesHubLink.Extensions do
   # leaves a window between the answer and the push. The socket isn't running at
   # all when `connect: false`, which a push has to survive rather than take this
   # process down with it.
+  #
+  # The socket opens its own connection, and DNS, TCP and TLS all happen inside
+  # that process, so it can be busy for longer than a call will wait. A push
+  # that arrives then is not worth taking this process, and every extension
+  # under it, down for.
   defp push_to_socket(event, payload) do
     Socket.push_extensions_message(event, payload)
   catch
     :exit, {:noproc, _} -> {:error, :socket_not_running}
+    :exit, {:timeout, _} -> {:error, :socket_busy}
+  end
+
+  defp choose_offer(advertisement, state) do
+    extensions = find_extensions()
+
+    chosen =
+      for {name, %{versions: versions}} <- extensions,
+          version = choose(Map.keys(versions), advertisement, name),
+          into: %{},
+          do: {name, version}
+
+    # Remembered so that the attach that follows starts the version that was
+    # offered. A device that offered 0.0.1 and then attached 0.1.0 would be
+    # talking a language the platform said it does not have.
+    extensions =
+      for {name, entry} <- extensions, into: %{} do
+        case chosen[name] do
+          nil ->
+            {name, entry}
+
+          version ->
+            entry = %{entry | version: version, module: entry.versions[version]}
+            {name, keep_attached(entry, state.extensions[name])}
+        end
+      end
+
+    offered = for {name, version} <- chosen, do: extensions[name].versions[version]
+
+    {chosen, offered, %{state | extensions: extensions}}
   end
 
   defp start_extension(extension_module) do
@@ -517,7 +552,8 @@ defmodule NervesHubLink.Extensions do
 
       @doc false
       @spec push(String.t(), map()) ::
-              {:ok, Slipstream.push_reference()} | {:error, reason :: :detached | term()}
+              {:ok, NervesHubLink.Socket.push_ref()}
+              | {:error, reason :: :detached | term()}
       def push(event, payload) do
         GenServer.call(
           NervesHubLink.Extensions,

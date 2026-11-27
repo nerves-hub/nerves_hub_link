@@ -21,8 +21,7 @@ Call `NervesHubLink.going_to_sleep/2` just before the device sleeps:
 ```
 
 It pushes a `sleeping` message on the device channel, closes the connection,
-and returns once both are done, or after five seconds if the close is slow, so
-the device can sleep straight after.
+and returns once both are done, so the device can sleep straight after.
 NervesHub doesn't reply.
 
 Give `:duration_ms` when the device knows how long it will sleep, such as a
