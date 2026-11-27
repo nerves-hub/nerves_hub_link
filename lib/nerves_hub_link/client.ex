@@ -16,6 +16,7 @@ defmodule NervesHubLink.Client do
 
   - `c:archive_available/1` - an archive is available to download from NervesHub
   - `c:archive_ready/2` - an archive has been downloaded and is available for use
+  - `c:components_sync/1` - NervesHub asked for the device's components
   - `c:connected/0` - a connection to NervesHub has been established
   - `c:firmware_auto_revert_detected?/0` - checks if a firmware revert occurred
   - `c:firmware_validated?/0` - checks if the current firmware has been validated
@@ -93,6 +94,12 @@ defmodule NervesHubLink.Client do
 
   @typedoc "Supported responses from `archive_available/1`"
   @type archive_response :: :download | :ignore | {:reschedule, pos_integer()}
+
+  @typedoc "Supported responses from `components_sync/1`"
+  @type components_sync_response ::
+          :ok
+          | {:ok, [NervesHubLink.Extensions.Components.Component.input()]}
+          | {:error, term()}
 
   @typedoc "Firmware update progress, completion or error report"
   @type fwup_message ::
@@ -205,7 +212,41 @@ defmodule NervesHubLink.Client do
   """
   @callback firmware_auto_revert_detected?() :: boolean()
 
+  @doc """
+  Called when NervesHub asks for the device's components, if the
+  `NervesHubLink.Extensions.Components` extension is enabled.
+
+  NervesHub asks every time the device connects, and again when someone asks
+  from the web UI for the device to look at its components again. `opts` says
+  which:
+
+    * `:refresh` - `true` when someone asked the device to look again. A device
+      that can check on its components, such as by pinging each Zigbee node,
+      should do so before returning. When `false`, return what the device
+      already knows.
+
+  Return one of:
+
+    * `{:ok, components}` - the device's whole component set, as
+      `NervesHubLink.Extensions.Components.set_components/1` takes it. It
+      replaces what the device had.
+    * `:ok` - answer with the set as it stands, which is whatever was last given
+      to `NervesHubLink.Extensions.Components.set_components/1` or
+      `NervesHubLink.Extensions.Components.put_component/1`, and empty if
+      nothing was.
+    * `{:error, reason}` - logged, and answered as `:ok` would be.
+
+  The default returns `:ok`. A device that reports nothing answers with no
+  components.
+
+  It runs in a process of its own and has `refresh_timeout_seconds` to return,
+  30 by default. See `NervesHubLink.Extensions.Components.Refresher` for
+  calling something other than the client.
+  """
+  @callback components_sync(opts :: [refresh: boolean()]) :: components_sync_response()
+
   @optional_callbacks [
+    components_sync: 1,
     connected: 0,
     firmware_auto_revert_detected?: 0,
     firmware_validated?: 0,
@@ -249,6 +290,22 @@ defmodule NervesHubLink.Client do
         )
 
         :apply
+    end
+  end
+
+  @doc """
+  This function is called internally by NervesHubLink when NervesHub asks for
+  the device's components.
+
+  Calls `c:components_sync/1` on the configured client, or returns `:ok`, which
+  answers with the set as it stands, for a client that doesn't implement it.
+  """
+  @spec components_sync(refresh: boolean()) :: components_sync_response() | {:exit, term()}
+  def components_sync(opts) do
+    if function_exported?(mod(), :components_sync, 1) do
+      apply_wrap(mod(), :components_sync, [opts])
+    else
+      :ok
     end
   end
 
@@ -519,8 +576,12 @@ defmodule NervesHubLink.Client do
         Logger.info("[NervesHubLink.Client] identifying device")
       end
 
+      @impl NervesHubLink.Client
+      def components_sync(_opts), do: :ok
+
       defoverridable archive_available: 1,
                      archive_ready: 2,
+                     components_sync: 1,
                      handle_error: 1,
                      handle_fwup_message: 1,
                      identify: 0,

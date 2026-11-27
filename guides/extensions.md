@@ -2,8 +2,9 @@
 
 Extensions are pieces of non-critical functionality going over the NervesHub WebSocket. They are separated out under the Extensions mechanism so that the client can happily ignore anything extension-related in service of keeping firmware updates healthy. That is always the top priority.
 
-There are six extensions currently:
+There are seven extensions currently:
 
+- [**Components**](#components) reports what the device is connected to, such as microcontrollers, Zigbee and Z-Wave nodes and USB peripherals, with what they measure and the state they're in.
 - [**Error Reports**](#error-reports) sends the device's exceptions and crashes to NervesHub, where they are grouped into issues you can resolve.
 - [**Geo**](#geo) provides hooks to send a device's GeoIP information.
 - [**Health**](#health) reports device metrics, alarms, metadata and similar.
@@ -14,6 +15,147 @@ There are six extensions currently:
 Your NervesHub server controls enabling and disabling extensions to allow you to switch them off if they impact operations.
 
 Which extensions a device offers is decided when it connects. The server names the extensions it has, and the versions of each, and the device offers back the ones it also implements. An extension the server does not name is not offered, so switching one off server-side stops the device doing the work as well as stops the reporting. A server that asks without naming anything is offered every extension this library implements, exactly as before. And nothing is offered until the server asks, so a server that never asks gets no extensions at all.
+
+## Components
+
+The Components extension reports the things your device is connected to: a microcontroller on a UART, Zigbee and Z-Wave nodes paired to its radio, a USB peripheral. NervesHub calls each of these a component. It lists them on the device's Components tab, groups them by model on the product's Components page, and marks one Missing when the device can't reach it or stops listing it.
+
+It is off by default. To turn it on, name it in `extension_modules`:
+
+```elixir
+config :nerves_hub_link,
+  extension_modules: [
+    NervesHubLink.Extensions.Components,
+    NervesHubLink.Extensions.Geo,
+    NervesHubLink.Extensions.Health,
+    NervesHubLink.Extensions.LocalShell,
+    NervesHubLink.Extensions.NetworkIdentity
+  ]
+```
+
+> #### This list replaces the defaults {: .warning}
+>
+> `extension_modules` replaces the default list rather than adding to it, so every extension you want has to be named, not just the one you are adding. `NervesHubLink.Extensions.LocalShell` is only in the default list when [`ExPTY`](https://hex.pm/packages/expty) is available, so leave it out of your list if you don't depend on it.
+
+Enabling it here only makes the extension available. Like every extension, it sends nothing until NervesHub asks the device to attach it, which you control in your Product settings.
+
+### Telling NervesHub what the device has
+
+NervesHubLink can't discover your components, because only your application knows what is on its buses and radios. Your application describes them in one of two ways: it answers when NervesHub asks, from your `NervesHubLink.Client` (see [Answering NervesHub from your client](#answering-nerveshub-from-your-client)), or it tells the extension whenever they change:
+
+```elixir
+NervesHubLink.Extensions.Components.set_components([
+  %{
+    namespace: "mcu",
+    vendor: "raspberrypi",
+    model: "rp2350",
+    serial: "e6614c311b4a2c2f",
+    name: "Power controller",
+    address: "UART0",
+    versions: %{firmware: "1.4.2"}
+  },
+  %{
+    namespace: "zigbee",
+    vendor: "1286",
+    model: "SNZB-02D",
+    serial: "00:12:4b:00:2a:3f:91:c7",
+    name: "Freezer probe A",
+    vendor_name: "Sonoff",
+    last_seen_at: ~U[2026-11-24 10:42:11Z]
+  }
+])
+```
+
+`namespace`, `vendor`, `model` and `serial` are required. `NervesHubLink.Extensions.Components.Component` lists the rest, and `NervesHubLink.Extensions.Components` has the conventions for what goes in `vendor`, `model` and `serial` in the `mcu`, `zigbee`, `zwave`, `ble` and `usb` namespaces. Use `custom` for anything else.
+
+NervesHub is always sent the whole set. There is no event for a component going away: it just isn't in the next set. A component the device still has but can't reach belongs in the set with `reachable: false`, which NervesHub shows as "can't reach it" rather than "stopped listing it".
+
+An application that hears about components one at a time, such as a Zigbee coordinator announcing a node that has joined, can change the set a component at a time instead:
+
+```elixir
+NervesHubLink.Extensions.Components.put_component(node)
+NervesHubLink.Extensions.Components.delete_component("zigbee", ieee_address)
+```
+
+The set goes to NervesHub when NervesHub asks, which it does as soon as the extension attaches, and five seconds after it last changed, so pairing twenty sensors in a row sends one snapshot rather than twenty. A set that comes out the same as the last one sent isn't sent again, so call `set_components/1` as often as is convenient.
+
+### `serial` for a component without a serial number
+
+`serial` is required for every component, because it is how NervesHub tells one from the next. For a component without a serial number, send the first of these it has:
+
+1. A hardware ID: a serial number, a unique chip ID, a radio address.
+2. Where it is on the device, when nothing else is connected there: `i2c-1:76`, a USB port path like `1-1.3`.
+3. Your application's own name for it, when the application knows which one it is: `freezer-probe-a`.
+4. The model, when the device can only ever have one of it, such as a power controller soldered to the board.
+
+Never send something that changes on its own, like a list index or `ttyUSB0`. A component sent under a new `serial` is a new component with no history, and the old one shows as Missing until somebody forgets it.
+
+### Readings and state
+
+A component can report numbers it measures, and named states that change now and then:
+
+```elixir
+alias NervesHubLink.Extensions.Components
+
+Components.report_readings("zigbee", "00:12:4b:00:2a:3f:91:c7", %{temperature: -18.9, battery: 87})
+
+Components.report_state("zwave", lock_dsk, :lock, :unlocked, detail: "by keypad, user 3")
+```
+
+Use the same reading name for the same quantity on every model: `temperature` in degrees Celsius, `humidity` and `battery` in percent, `co2` in ppm.
+
+Readings are collected and sent at most once a second, many to a message, so report them as they are measured. They are held while the device is offline, up to `max_readings`, and the oldest are dropped past that.
+
+A state change is sent straight away, and also remembered: every snapshot carries each component's current state, so a change NervesHub missed is put right by the next snapshot. NervesHub replaces a component's state with what the snapshot says, so report every state a component has when your application starts, or give them in the component's `state` field, or the first snapshot after a reboot leaves out the ones not yet reported.
+
+Both are only accepted for a component in the set. A component that has just been added waits for the snapshot that lists it before its readings are sent, since NervesHub ignores readings for a component it hasn't been told about.
+
+### Answering NervesHub from your client
+
+NervesHub asks for the set every time the device connects, and again when someone in the web UI asks the device to look at its components again. Each time, the device calls `components_sync/1` on your `NervesHubLink.Client` and answers with what it returns. A device can report everything this way and never call `set_components/1`:
+
+```elixir
+defmodule MyApp.NervesHubLinkClient do
+  use NervesHubLink.Client
+
+  # Someone asked the device to look again: check on every node first.
+  @impl NervesHubLink.Client
+  def components_sync(refresh: true) do
+    {:ok, Enum.map(MyApp.Zigbee.ping_all(), &MyApp.Zigbee.to_component/1)}
+  end
+
+  # On connect: what the device already knows.
+  def components_sync(refresh: false) do
+    {:ok, Enum.map(MyApp.Zigbee.known_nodes(), &MyApp.Zigbee.to_component/1)}
+  end
+end
+```
+
+Return `{:ok, components}` with the whole set, `:ok` to answer with the set as it stands, or `{:error, reason}`, which is logged and answered as `:ok` would be. The default returns `:ok`, so a device that reports nothing answers that it has no components, and one that uses `set_components/1` answers with what it was given.
+
+The two work together. A client that answers syncs, and an application that calls `put_component/1` when a node joins, gets the join to NervesHub within five seconds instead of at the next connect.
+
+To answer from somewhere other than the client, set `refresher` to a module implementing `NervesHubLink.Extensions.Components.Refresher`, or to an MFA, which is called with the options appended to its arguments:
+
+```elixir
+config :nerves_hub_link,
+  components: [
+    # Or MyApp.ComponentRefresher.
+    refresher: {MyApp.Zigbee, :components, [:coordinator_0]},
+    # How long to wait before answering with the set as it stands.
+    refresh_timeout_seconds: 30,
+    # How many readings to hold while they can't be sent.
+    max_readings: 600
+  ]
+```
+
+Whatever answers runs in a process of its own, so a slow check holds up nothing but the answer. One that raises, exits or takes longer than `refresh_timeout_seconds` is logged, and the device answers with the set as it stands.
+
+### What is checked on the device
+
+NervesHub rejects a whole snapshot when anything in it is wrong, and a rejected snapshot changes nothing. So every component, reading and state change is checked on the device first, against the same rules: required fields present, namespaces and names in the right form, no more than 500 components or 8 states, and no string over 255 characters.
+
+A component that fails is logged and left out, and the rest are sent. An optional field that fails is dropped from its component, which is still sent: a component listed without its name is better than one NervesHub shows as Missing. A reading or state change that fails is logged and `report_readings/4` or `report_state/5` returns `{:error, reason}`.
 
 ## Error Reports
 
