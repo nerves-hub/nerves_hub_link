@@ -297,7 +297,7 @@ defmodule NervesHubLink.ArchiveManager do
   defp describe_exit(reason) when is_tuple(reason) and tuple_size(reason) > 0,
     do: inspect(elem(reason, 0))
 
-  defp describe_exit(_reason), do: "an unrecognised reason"
+  defp describe_exit(_reason), do: "an unknown reason"
 
   defp reset_download(%__MODULE__{} = state) do
     %{
