@@ -136,7 +136,6 @@ defmodule NervesHubLink.ArchiveManagerTest do
       keys = [context.public_key]
       ref = Process.monitor(context.manager)
 
-      # The download has started
       assert ArchiveManager.apply_archive(context.manager, info, keys) == :downloading
       assert_received {:archive_available, _uuid}
       assert_receive {:gated_request, :first, request}, @timeout
@@ -149,16 +148,13 @@ defmodule NervesHubLink.ArchiveManagerTest do
       refute_received {:archive_available, _uuid},
                       "the client was asked about the repeat offer"
 
-      # Let the file contents through
       send(request, :release)
 
-      # The contents should not be mangled, and the client hears about it once
       assert_receive {:archive_ready, ready_uuid, ready_contents}, @timeout
       assert ready_uuid == info.uuid
       assert ready_contents == contents, "the archive handed to the client was corrupted"
-      refute_received {:archive_ready, _uuid, _contents}
+      refute_received {:archive_ready, _uuid, _contents}, "the client was told twice"
 
-      # The client shouldn't crash
       refute_receive {:DOWN, ^ref, :process, _pid, _reason}, 1_000, "ArchiveManager crashed"
 
       assert ArchiveManager.status(context.manager) == :idle
@@ -170,7 +166,6 @@ defmodule NervesHubLink.ArchiveManagerTest do
       keys = [context.public_key]
       ref = Process.monitor(context.manager)
 
-      # Verify the first archive is downloading
       assert ArchiveManager.apply_archive(context.manager, first.info, keys) == :downloading
       assert_received {:archive_available, first_offered}
       assert first_offered == first.info.uuid
@@ -198,13 +193,42 @@ defmodule NervesHubLink.ArchiveManagerTest do
       assert second_uuid == second.info.uuid
       assert second_contents == second.contents, "the held archive was corrupted"
 
-      # The client shouldn't crash
       refute_receive {:DOWN, ^ref, :process, _pid, _reason}, 1_000, "ArchiveManager crashed"
 
       assert ArchiveManager.status(context.manager) == :idle
 
       assert Path.wildcard(Path.join(context.data_path, "archives/*.download")) == [],
              "a partial download was left behind"
+    end
+
+    test "a repeat of the downloading archive drops an archive held behind it", context do
+      %{first: first, second: second} = context.archives
+      keys = [context.public_key]
+
+      assert ArchiveManager.apply_archive(context.manager, first.info, keys) == :downloading
+      assert_received {:archive_available, _uuid}
+      assert_receive {:gated_request, :first, first_request}, @timeout
+
+      # The second archive is held behind the download in progress ...
+      assert ArchiveManager.apply_archive(context.manager, second.info, keys) == :downloading
+
+      # ... and then NervesHub offers the downloading archive again
+      assert ArchiveManager.apply_archive(context.manager, first.info, keys) == :downloading
+      refute_received {:archive_available, _uuid}
+
+      send(first_request, :release)
+
+      assert_receive {:archive_ready, ready_uuid, _contents}, @timeout
+      assert ready_uuid == first.info.uuid
+
+      # This call is answered after the manager has finished with the completed
+      # download, so anything held would already have been offered.
+      assert ArchiveManager.status(context.manager) == :idle
+
+      refute_received {:archive_available, _uuid},
+                      "the held archive was offered after the repeat offer"
+
+      refute_received {:archive_ready, _uuid, _contents}
     end
 
     test "an archive held while the download before it fails is still offered", context do

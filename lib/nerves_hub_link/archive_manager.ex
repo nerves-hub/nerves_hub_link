@@ -170,7 +170,7 @@ defmodule NervesHubLink.ArchiveManager do
 
   def handle_info({:EXIT, download, reason}, %__MODULE__{download: download} = state)
       when reason != :normal do
-    Logger.error("[NervesHubLink] Archive download failed: #{inspect(reason)}")
+    Logger.error("[NervesHubLink] Archive download failed: #{describe_exit(reason)}")
 
     _ = File.rm_rf(state.temp_file_path)
 
@@ -186,7 +186,7 @@ defmodule NervesHubLink.ArchiveManager do
   # since exits are trapped and whatever it was would otherwise fail silently.
   def handle_info({:EXIT, pid, reason}, state) do
     Logger.warning(
-      "[NervesHubLink] Ignoring the exit of #{inspect(pid)}, which isn't the archive being downloaded: #{inspect(reason)}"
+      "[NervesHubLink] Ignoring the exit of #{inspect(pid)}, which isn't the archive being downloaded: #{describe_exit(reason)}"
     )
 
     {:noreply, state}
@@ -194,7 +194,8 @@ defmodule NervesHubLink.ArchiveManager do
 
   # NervesHub can send the same archive message twice, for example when the
   # deployment changes shortly after the device joins. Starting a second
-  # download would write into the same file as the first.
+  # download would write into the same file as the first. A repeat is also the
+  # latest archive NervesHub has asked for, so drop any held behind it.
   defp maybe_update_archive(
          %ArchiveInfo{uuid: uuid},
          _verification_keys,
@@ -202,14 +203,13 @@ defmodule NervesHubLink.ArchiveManager do
        ) do
     Logger.info("[NervesHubLink] Archive #{uuid} is already downloading, ignoring repeat offer")
 
-    state
+    %{state | pending_archive: nil}
   end
 
   # As with firmware updates, don't interrupt a download in progress. Unlike
-  # firmware, though, nothing asks NervesHub for the archive again: it pushes one
-  # when the deployment changes, and a device that stays connected is not offered
-  # it a second time. So hold the newer archive and offer it to the client once
-  # the download in progress finishes.
+  # firmware, nothing asks NervesHub for the archive again: it pushes one when
+  # the deployment changes and doesn't repeat it while the device stays
+  # connected. So hold the newer archive until the download finishes.
   defp maybe_update_archive(
          %ArchiveInfo{uuid: uuid} = info,
          verification_keys,
@@ -285,6 +285,19 @@ defmodule NervesHubLink.ArchiveManager do
         %{state | status: :update_rescheduled, update_reschedule_timer: timer}
     end
   end
+
+  # A download's exit reason can carry a stacktrace whose arguments hold the
+  # signed archive URL and the SSL options, which `Downloader.format_status/1`
+  # keeps out of the download's own crash report. Name the reasons it stops with
+  # on purpose, and reduce anything else to its exception or tag; the download's
+  # report has the detail, with the secrets taken out.
+  defp describe_exit(reason) when is_atom(reason), do: inspect(reason)
+  defp describe_exit({:http_error, status}), do: "HTTP #{status}"
+
+  defp describe_exit(reason) when is_tuple(reason) and tuple_size(reason) > 0,
+    do: inspect(elem(reason, 0))
+
+  defp describe_exit(_reason), do: "an unrecognised reason"
 
   defp reset_download(%__MODULE__{} = state) do
     %{

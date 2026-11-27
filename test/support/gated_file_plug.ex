@@ -5,17 +5,13 @@
 #
 defmodule NervesHubLink.Support.GatedFilePlug do
   @moduledoc """
-  Serves a file from disk, but only once the test lets each request through.
+  Serves a file from disk, but only once the test lets each request through,
+  which holds a download open while the test makes something else happen.
 
   Every request sends `{:gated_request, tag, handler_pid}` to `:test_pid` and
-  then waits before sending anything back. That holds a download open, so a test
-  can make something else happen while it's in progress. Send the handler:
-
-    * `:release` - serve the file.
-    * `:fail` - answer with a 500 instead, failing the download.
-
-  A request nothing answers serves the file after five seconds, so a test that
-  fails before releasing it doesn't leave the handler blocked.
+  then waits for `:release`, to serve the file, or `:fail`, to answer with a 500
+  and fail the download. A request nothing answers serves the file after five
+  seconds, so a test that fails mid-gate doesn't leave the handler blocked.
 
   Options:
 
