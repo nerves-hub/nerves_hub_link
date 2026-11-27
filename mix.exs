@@ -49,7 +49,7 @@ defmodule NervesHubLink.MixProject do
     [
       flags: [:missing_return, :extra_return, :error_handling, :underspecs, :unmatched_returns],
       plt_file: {:no_warn, "priv/plts/project.plt"},
-      plt_add_apps: [:ex_unit]
+      plt_add_apps: [:ex_unit, :igniter, :sourceror, :rewrite, :mix]
     ]
   end
 
@@ -161,6 +161,7 @@ defmodule NervesHubLink.MixProject do
       {:expty, "~> 0.3.0", optional: true},
       {:extty, "~> 0.4.1"},
       {:fwup, "~> 1.0"},
+      {:igniter, "~> 0.6", optional: true, runtime: false},
       {:jason, "~> 1.0"},
       {:mint, "~> 1.9"},
       {:mox, "~> 1.0", only: :test},

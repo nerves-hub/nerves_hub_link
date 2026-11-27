@@ -58,6 +58,49 @@ project's `mix.exs`. For example:
   end
 ```
 
+#### Igniter
+
+If your project uses [Igniter](https://hexdocs.pm/igniter), the dependency and the configuration described in the next section can be added with:
+
+```bash
+mix igniter.install nerves_hub_link --nerves-hub-host devices.example.com
+```
+
+The configuration is written to `config/target.exs` (`config/config.exs` if the project has none), and `config/host.exs` is told not to connect. Nothing that is already configured is overwritten. The options are:
+
+- `--nerves-hub-host` - the host devices connect to. Defaults to `devices.nervescloud.com`, the device endpoint of NervesCloud.
+- `--nerves-hub-auth` - how the device authenticates, as described in the sections below. If you don't pass it, the installer asks. Non-interactive runs (`--yes`, CI) use `shared-secret`, and a project that already has authentication set up is not asked again.
+  - `shared-secret` - a product key and secret.
+  - `nerves-key` - adds the `nerves_key` dependency.
+  - `tpm` - adds the `tpm` dependency.
+  - `local-cert` - sets `configurator: NervesHubLink.Configurator.LocalCertKey`.
+- `--nerves-hub-remote-iex` - enable the remote IEx console, which is off by default.
+
+No secret is written to a file. With shared secret authentication the generated configuration reads the product key and secret from the `NERVES_HUB_PRODUCT_KEY` and `NERVES_HUB_PRODUCT_SECRET` environment variables when the firmware is built:
+
+```elixir
+config :nerves_hub_link,
+  host: "devices.example.com",
+  shared_secret: [
+    product_key: System.get_env("NERVES_HUB_PRODUCT_KEY"),
+    product_secret: System.get_env("NERVES_HUB_PRODUCT_SECRET")
+  ]
+```
+
+The installer finishes by listing what is left for you to do: creating the product and its key and secret (or provisioning certificates), and creating a firmware signing key.
+
+##### Generating a client
+
+To control when firmware updates are applied, or to follow update progress, errors and reboots, your project needs its own [`NervesHubLink.Client`](https://hexdocs.pm/nerves_hub_link/NervesHubLink.Client.html). This is not part of the installer, run it when you want one:
+
+```bash
+mix nerves_hub_link.gen.client
+```
+
+It generates `MyApp.NervesHubClient` (pass another module name as an argument to change that), which does `use NervesHubLink.Client` and overrides each callback with a call to the default implementation, so nothing changes until you edit it. It also adds `config :nerves_hub_link, client: MyApp.NervesHubClient` to `config/target.exs` (`config/config.exs` if the project has none). An existing module or `client` setting is left as it is.
+
+If your `mix.exs` only includes `nerves_hub_link` for some targets (`targets: ...`), the module is wrapped in `if Code.ensure_loaded?(NervesHubLink.Client)` so that host builds still compile.
+
 ### Connecting your device to NervesHub
 
 #### Shared secret device authentication
