@@ -244,15 +244,14 @@ defmodule NervesHubLink.ArchiveManager do
     end
   end
 
-  # NervesHub supplies the URL, so the name taken from it decides where the
-  # archive is written, and the completed download removes whatever is already
-  # at that path. `Path.basename/1` returns "" for a path of "/" and ".." for
-  # one ending in "/..", both of which name the archives directory rather than a
-  # file inside it, and a URL with no path at all names nothing. A path
-  # separator can't survive `Path.basename/1`, but a null byte can, and the
-  # `File` functions refuse a path holding one.
+  # The URL is server-supplied, and the name taken from it decides where the
+  # archive is written and what the completed download removes first.
+  # `Path.basename/1` gives "" for "/" and ".." for "/..", which name the
+  # archives directory rather than a file in it, and a URL that isn't a string,
+  # or has no path, names nothing. A separator can't survive `Path.basename/1`;
+  # a null byte can, and the `File` functions raise on a path holding one.
   defp archive_file_name(url) do
-    %URI{path: path} = URI.parse(url)
+    path = url_path(url)
     file_name = if is_binary(path), do: Path.basename(path), else: ""
 
     if file_name in ["", ".", ".."] or String.contains?(file_name, <<0>>) do
@@ -261,6 +260,13 @@ defmodule NervesHubLink.ArchiveManager do
       {:ok, file_name}
     end
   end
+
+  # `ArchiveInfo` copies the URL out of NervesHub's message without checking it,
+  # so a message sent without one leaves `nil` here. Its type says `URI.t()`
+  # while a string is what arrives, so take either.
+  defp url_path(url) when is_binary(url), do: URI.parse(url).path
+  defp url_path(%URI{path: path}), do: path
+  defp url_path(_other), do: nil
 
   defp download_archive(info, file_name, verification_keys, state) do
     # Cancel an existing timer if it exists.
