@@ -1,3 +1,4 @@
+# SPDX-FileCopyrightText: 2026 Benjamin Moss
 # SPDX-FileCopyrightText: 2026 Josh Kalderimis
 #
 # SPDX-License-Identifier: Apache-2.0
