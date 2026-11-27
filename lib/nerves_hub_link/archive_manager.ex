@@ -33,6 +33,7 @@ defmodule NervesHubLink.ArchiveManager do
           data_path: Path.t(),
           download: nil | GenServer.server(),
           file_path: Path.t(),
+          pending_archive: nil | {ArchiveInfo.t(), [binary()]},
           status: status(),
           temp_file_path: Path.t(),
           update_reschedule_timer: nil | :timer.tref()
@@ -42,6 +43,7 @@ defmodule NervesHubLink.ArchiveManager do
             data_path: nil,
             download: nil,
             file_path: nil,
+            pending_archive: nil,
             status: :idle,
             temp_file_path: nil,
             update_reschedule_timer: nil
@@ -88,6 +90,10 @@ defmodule NervesHubLink.ArchiveManager do
 
   @impl GenServer
   def init(args) do
+    # The downloader is linked to this process. Hear about a download that
+    # fails rather than stopping with it.
+    Process.flag(:trap_exit, true)
+
     state = %__MODULE__{
       data_path: args.data_path
     }
@@ -144,15 +150,7 @@ defmodule NervesHubLink.ArchiveManager do
       )
     end
 
-    {:noreply,
-     %{
-       state
-       | archive_info: nil,
-         file_path: nil,
-         temp_file_path: nil,
-         download: nil,
-         status: :idle
-     }}
+    {:noreply, state |> reset_download() |> apply_held_archive()}
   end
 
   def handle_info({:download, {:error, reason}, _verification_keys}, state) do
@@ -170,28 +168,112 @@ defmodule NervesHubLink.ArchiveManager do
     {:noreply, state}
   end
 
-  defp maybe_update_archive(info, verification_keys, state) do
-    if FwupConfig.signing_keys_available?(verification_keys) do
-      download_archive(info, verification_keys, state)
-    else
-      # `fwup -V` exits 0 when it is given no public key, so an unsigned archive
-      # would validate. Refuse the archive rather than hand it to the client.
-      Logger.error(
-        "[NervesHubLink] Refusing archive : no public keys are available to verify the archive signature"
-      )
+  def handle_info({:EXIT, download, reason}, %__MODULE__{download: download} = state)
+      when reason != :normal do
+    Logger.error("[NervesHubLink] Archive download failed: #{describe_exit(reason)}")
 
-      state
+    _ = File.rm_rf(state.temp_file_path)
+
+    {:noreply, state |> reset_download() |> apply_held_archive()}
+  end
+
+  # The download that just finished: its `:complete` already reset the state.
+  def handle_info({:EXIT, _pid, :normal}, state) do
+    {:noreply, state}
+  end
+
+  # Nothing else is linked to this process today. Say so rather than swallow it,
+  # since exits are trapped and whatever it was would otherwise fail silently.
+  def handle_info({:EXIT, pid, reason}, state) do
+    Logger.warning(
+      "[NervesHubLink] Ignoring the exit of #{inspect(pid)}, which isn't the archive being downloaded: #{describe_exit(reason)}"
+    )
+
+    {:noreply, state}
+  end
+
+  # NervesHub can send the same archive message twice, for example when the
+  # deployment changes shortly after the device joins. Starting a second
+  # download would write into the same file as the first. A repeat is also the
+  # latest archive NervesHub has asked for, so drop any held behind it.
+  defp maybe_update_archive(
+         %ArchiveInfo{uuid: uuid},
+         _verification_keys,
+         %__MODULE__{status: :downloading, archive_info: %ArchiveInfo{uuid: uuid}} = state
+       ) do
+    Logger.info("[NervesHubLink] Archive #{uuid} is already downloading, ignoring repeat offer")
+
+    %{state | pending_archive: nil}
+  end
+
+  # As with firmware updates, don't interrupt a download in progress. Unlike
+  # firmware, nothing asks NervesHub for the archive again: it pushes one when
+  # the deployment changes and doesn't repeat it while the device stays
+  # connected. So hold the newer archive until the download finishes.
+  defp maybe_update_archive(
+         %ArchiveInfo{uuid: uuid} = info,
+         verification_keys,
+         %__MODULE__{status: :downloading, archive_info: %ArchiveInfo{uuid: current}} = state
+       ) do
+    Logger.info(
+      "[NervesHubLink] Archive #{current} is downloading, holding archive #{uuid} until it finishes"
+    )
+
+    %{state | pending_archive: {info, verification_keys}}
+  end
+
+  defp maybe_update_archive(info, verification_keys, state) do
+    with :ok <- signing_keys_available(verification_keys),
+         {:ok, file_name} <- archive_file_name(info.url) do
+      download_archive(info, file_name, verification_keys, state)
+    else
+      {:error, reason} ->
+        Logger.error("[NervesHubLink] Refusing archive: #{reason}")
+
+        state
     end
   end
 
-  defp download_archive(info, verification_keys, state) do
+  # `fwup -V` exits 0 when it is given no public key, so an unsigned archive
+  # would validate. Refuse the archive rather than hand it to the client.
+  defp signing_keys_available(verification_keys) do
+    if FwupConfig.signing_keys_available?(verification_keys) do
+      :ok
+    else
+      {:error, "no public keys are available to verify the archive signature"}
+    end
+  end
+
+  # The URL is server-supplied, and the name taken from it decides where the
+  # archive is written and what the completed download removes first.
+  # `Path.basename/1` gives "" for "/" and ".." for "/..", which name the
+  # archives directory rather than a file in it, and a URL that isn't a string,
+  # or has no path, names nothing. A separator can't survive `Path.basename/1`;
+  # a null byte can, and the `File` functions raise on a path holding one.
+  defp archive_file_name(url) do
+    path = url_path(url)
+    file_name = if is_binary(path), do: Path.basename(path), else: ""
+
+    if file_name in ["", ".", ".."] or String.contains?(file_name, <<0>>) do
+      {:error, "its URL doesn't name a file to download to"}
+    else
+      {:ok, file_name}
+    end
+  end
+
+  # `ArchiveInfo` copies the URL out of NervesHub's message without checking it,
+  # so a message sent without one leaves `nil` here. Its type says `URI.t()`
+  # while a string is what arrives, so take either.
+  defp url_path(url) when is_binary(url), do: URI.parse(url).path
+  defp url_path(%URI{path: path}), do: path
+  defp url_path(_other), do: nil
+
+  defp download_archive(info, file_name, verification_keys, state) do
     # Cancel an existing timer if it exists.
     # This prevents rescheduled updates`
     # from compounding.
     state = maybe_cancel_timer(state)
 
-    uri = URI.parse(info.url)
-    file_name = Path.basename(uri.path)
     file_path = Path.join(state.data_path, "archives/#{file_name}")
     temp_file_path = Path.join(state.data_path, "archives/#{file_name}.download")
     directory = Path.dirname(file_path)
@@ -232,6 +314,38 @@ defmodule NervesHubLink.ArchiveManager do
         Logger.info("[NervesHubLink] rescheduling archive in #{ms} milliseconds")
         %{state | status: :update_rescheduled, update_reschedule_timer: timer}
     end
+  end
+
+  # A download's exit reason can carry a stacktrace whose arguments hold the
+  # signed archive URL and the SSL options, which `Downloader.format_status/1`
+  # keeps out of the download's own crash report. Name the reasons it stops with
+  # on purpose, and reduce anything else to its exception or tag; the download's
+  # report has the detail, with the secrets taken out.
+  defp describe_exit(reason) when is_atom(reason), do: inspect(reason)
+  defp describe_exit({:http_error, status}), do: "HTTP #{status}"
+
+  defp describe_exit(reason) when is_tuple(reason) and tuple_size(reason) > 0,
+    do: inspect(elem(reason, 0))
+
+  defp describe_exit(_reason), do: "an unknown reason"
+
+  defp reset_download(%__MODULE__{} = state) do
+    %{
+      state
+      | archive_info: nil,
+        file_path: nil,
+        temp_file_path: nil,
+        download: nil,
+        status: :idle
+    }
+  end
+
+  defp apply_held_archive(%__MODULE__{pending_archive: nil} = state), do: state
+
+  defp apply_held_archive(%__MODULE__{pending_archive: {info, verification_keys}} = state) do
+    Logger.info("[NervesHubLink] Offering archive #{info.uuid}, held while one was downloading")
+
+    maybe_update_archive(info, verification_keys, %{state | pending_archive: nil})
   end
 
   defp maybe_cancel_timer(%{update_reschedule_timer: nil} = state), do: state
