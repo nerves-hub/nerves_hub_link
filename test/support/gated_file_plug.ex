@@ -7,8 +7,14 @@ defmodule NervesHubLink.Support.GatedFilePlug do
   Serves a file from disk, but only once the test lets each request through.
 
   Every request sends `{:gated_request, tag, handler_pid}` to `:test_pid` and
-  then waits for `:release` before sending anything back. That holds a download
-  open, so a test can make something else happen while it's in progress.
+  then waits before sending anything back. That holds a download open, so a test
+  can make something else happen while it's in progress. Send the handler:
+
+    * `:release` - serve the file.
+    * `:fail` - answer with a 500 instead, failing the download.
+
+  A request nothing answers serves the file after five seconds, so a test that
+  fails before releasing it doesn't leave the handler blocked.
 
   Options:
 
@@ -21,6 +27,8 @@ defmodule NervesHubLink.Support.GatedFilePlug do
 
   import Plug.Conn
 
+  @release_timeout 5_000
+
   @impl Plug
   def init(options), do: options
 
@@ -29,9 +37,10 @@ defmodule NervesHubLink.Support.GatedFilePlug do
     send(Keyword.fetch!(opts, :test_pid), {:gated_request, opts[:tag], self()})
 
     receive do
-      :release -> :ok
+      :release -> send_file(conn, 200, Keyword.fetch!(opts, :path))
+      :fail -> send_resp(conn, 500, "Internal Server Error")
+    after
+      @release_timeout -> send_file(conn, 200, Keyword.fetch!(opts, :path))
     end
-
-    send_file(conn, 200, Keyword.fetch!(opts, :path))
   end
 end

@@ -136,87 +136,105 @@ defmodule NervesHubLink.ArchiveManagerTest do
       keys = [context.public_key]
       ref = Process.monitor(context.manager)
 
-      # Verify the download has been started
+      # The download has started
       assert ArchiveManager.apply_archive(context.manager, info, keys) == :downloading
-      assert_receive {:gated_request, :first, first_request}, @timeout
+      assert_received {:archive_available, _uuid}
+      assert_receive {:gated_request, :first, request}, @timeout
 
-      # Start the second download
-      _ = ArchiveManager.apply_archive(context.manager, info, keys)
+      # The repeat offer is dropped before the client is asked about it. The
+      # client is asked inside the call, so by the time it has returned a second
+      # download either started or never will.
+      assert ArchiveManager.apply_archive(context.manager, info, keys) == :downloading
 
-      # Wait to see if a second download starts
-      second_request =
-        receive do
-          {:gated_request, :first, pid} -> pid
-        after
-          500 -> nil
-        end
+      refute_received {:archive_available, _uuid},
+                      "the client was asked about the repeat offer"
 
       # Let the file contents through
-      for pid <- [first_request, second_request], pid, do: send(pid, :release)
+      send(request, :release)
+
+      # The contents should not be mangled, and the client hears about it once
+      assert_receive {:archive_ready, ready_uuid, ready_contents}, @timeout
+      assert ready_uuid == info.uuid
+      assert ready_contents == contents, "the archive handed to the client was corrupted"
+      refute_received {:archive_ready, _uuid, _contents}
 
       # The client shouldn't crash
       refute_receive {:DOWN, ^ref, :process, _pid, _reason}, 1_000, "ArchiveManager crashed"
 
-      # The contents should be not be mangled
-      assert_receive {:archive_ready, uuid, ready_contents}, @timeout
-      assert uuid == info.uuid
-      assert ready_contents == contents, "the archive handed to the client was corrupted"
-
-      # And only delivered once
-      refute_received {:archive_ready, _uuid, _contents}
-      assert Process.alive?(context.manager)
-
-      # The archive should be available once
-      assert_received {:archive_available, _uuid}
-      refute_received {:archive_available, _uuid}, "the client was asked about the repeat offer"
-
       assert ArchiveManager.status(context.manager) == :idle
     end
 
-    test "a different archive offered mid-download doesn't corrupt or crash", context do
+    test "a different archive offered mid-download is held until the first finishes",
+         context do
       %{first: first, second: second} = context.archives
       keys = [context.public_key]
       ref = Process.monitor(context.manager)
 
       # Verify the first archive is downloading
       assert ArchiveManager.apply_archive(context.manager, first.info, keys) == :downloading
+      assert_received {:archive_available, first_offered}
+      assert first_offered == first.info.uuid
       assert_receive {:gated_request, :first, first_request}, @timeout
 
-      # Start the other archive
-      _ = ArchiveManager.apply_archive(context.manager, second.info, keys)
+      # Offer the other archive. The client isn't asked about it yet, which is
+      # what stops a second download writing over the first.
+      assert ArchiveManager.apply_archive(context.manager, second.info, keys) == :downloading
 
-      second_request =
-        receive do
-          {:gated_request, :second, pid} -> pid
-        after
-          500 -> nil
-        end
+      refute_received {:archive_available, _uuid},
+                      "a second download started while one was in progress"
 
-      for pid <- [first_request, second_request], pid, do: send(pid, :release)
+      send(first_request, :release)
+
+      # The first archive arrives intact ...
+      assert_receive {:archive_ready, first_uuid, first_contents}, @timeout
+      assert first_uuid == first.info.uuid
+      assert first_contents == first.contents, "the first archive was corrupted"
+
+      # ... and the held archive is offered once it has
+      assert_receive {:gated_request, :second, second_request}, @timeout
+      send(second_request, :release)
+
+      assert_receive {:archive_ready, second_uuid, second_contents}, @timeout
+      assert second_uuid == second.info.uuid
+      assert second_contents == second.contents, "the held archive was corrupted"
 
       # The client shouldn't crash
       refute_receive {:DOWN, ^ref, :process, _pid, _reason}, 1_000, "ArchiveManager crashed"
 
-      # Whichever archive the manager settles on, it must be the bytes of that
-      # archive, and the client hears about it once.
-      assert_receive {:archive_ready, uuid, ready_contents}, @timeout
+      assert ArchiveManager.status(context.manager) == :idle
 
-      expected =
-        Enum.find_value([first, second], fn %{info: info, contents: c} ->
-          if info.uuid == uuid, do: c
-        end)
-
-      # the contents should be unmangled
-      assert ready_contents == expected,
-             "the archive handed to the client doesn't match the archive it was told about"
-
-      # The archive should be ready
-      refute_received {:archive_ready, _uuid, _contents}
-      assert Process.alive?(context.manager)
-
-      # The 2nd archive should not have downloaded any bits
       assert Path.wildcard(Path.join(context.data_path, "archives/*.download")) == [],
              "a partial download was left behind"
+    end
+
+    test "an archive held while the download before it fails is still offered", context do
+      %{first: first, second: second} = context.archives
+      keys = [context.public_key]
+      ref = Process.monitor(context.manager)
+
+      assert ArchiveManager.apply_archive(context.manager, first.info, keys) == :downloading
+      assert_received {:archive_available, _uuid}
+      assert_receive {:gated_request, :first, first_request}, @timeout
+
+      assert ArchiveManager.apply_archive(context.manager, second.info, keys) == :downloading
+      refute_received {:archive_available, _uuid}
+
+      # Fail the download in progress rather than finish it
+      send(first_request, :fail)
+
+      assert_receive {:gated_request, :second, second_request}, @timeout
+      send(second_request, :release)
+
+      assert_receive {:archive_ready, uuid, archive_contents}, @timeout
+      assert uuid == second.info.uuid
+      assert archive_contents == second.contents, "the held archive was corrupted"
+
+      refute_receive {:DOWN, ^ref, :process, _pid, _reason}, 1_000, "ArchiveManager crashed"
+
+      assert ArchiveManager.status(context.manager) == :idle
+
+      assert Path.wildcard(Path.join(context.data_path, "archives/*.download")) == [],
+             "the failed download was left behind"
     end
   end
 

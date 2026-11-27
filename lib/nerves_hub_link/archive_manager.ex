@@ -33,6 +33,7 @@ defmodule NervesHubLink.ArchiveManager do
           data_path: Path.t(),
           download: nil | GenServer.server(),
           file_path: Path.t(),
+          pending_archive: nil | {ArchiveInfo.t(), [binary()]},
           status: status(),
           temp_file_path: Path.t(),
           update_reschedule_timer: nil | :timer.tref()
@@ -42,6 +43,7 @@ defmodule NervesHubLink.ArchiveManager do
             data_path: nil,
             download: nil,
             file_path: nil,
+            pending_archive: nil,
             status: :idle,
             temp_file_path: nil,
             update_reschedule_timer: nil
@@ -148,15 +150,7 @@ defmodule NervesHubLink.ArchiveManager do
       )
     end
 
-    {:noreply,
-     %{
-       state
-       | archive_info: nil,
-         file_path: nil,
-         temp_file_path: nil,
-         download: nil,
-         status: :idle
-     }}
+    {:noreply, state |> reset_download() |> apply_held_archive()}
   end
 
   def handle_info({:download, {:error, reason}, _verification_keys}, state) do
@@ -180,15 +174,7 @@ defmodule NervesHubLink.ArchiveManager do
 
     _ = File.rm_rf(state.temp_file_path)
 
-    {:noreply,
-     %{
-       state
-       | archive_info: nil,
-         file_path: nil,
-         temp_file_path: nil,
-         download: nil,
-         status: :idle
-     }}
+    {:noreply, state |> reset_download() |> apply_held_archive()}
   end
 
   # A download that finished normally, after its `:complete` reset the state.
@@ -209,18 +195,21 @@ defmodule NervesHubLink.ArchiveManager do
     state
   end
 
-  # As with firmware updates, don't interrupt a download in progress. NervesHub
-  # offers the newer archive again the next time the device checks in.
+  # As with firmware updates, don't interrupt a download in progress. Unlike
+  # firmware, though, nothing asks NervesHub for the archive again: it pushes one
+  # when the deployment changes, and a device that stays connected is not offered
+  # it a second time. So hold the newer archive and offer it to the client once
+  # the download in progress finishes.
   defp maybe_update_archive(
-         %ArchiveInfo{uuid: uuid},
-         _verification_keys,
+         %ArchiveInfo{uuid: uuid} = info,
+         verification_keys,
          %__MODULE__{status: :downloading, archive_info: %ArchiveInfo{uuid: current}} = state
        ) do
     Logger.info(
-      "[NervesHubLink] Archive #{current} is downloading, ignoring offer of archive #{uuid}"
+      "[NervesHubLink] Archive #{current} is downloading, holding archive #{uuid} until it finishes"
     )
 
-    state
+    %{state | pending_archive: {info, verification_keys}}
   end
 
   defp maybe_update_archive(info, verification_keys, state) do
@@ -285,6 +274,25 @@ defmodule NervesHubLink.ArchiveManager do
         Logger.info("[NervesHubLink] rescheduling archive in #{ms} milliseconds")
         %{state | status: :update_rescheduled, update_reschedule_timer: timer}
     end
+  end
+
+  defp reset_download(%__MODULE__{} = state) do
+    %{
+      state
+      | archive_info: nil,
+        file_path: nil,
+        temp_file_path: nil,
+        download: nil,
+        status: :idle
+    }
+  end
+
+  defp apply_held_archive(%__MODULE__{pending_archive: nil} = state), do: state
+
+  defp apply_held_archive(%__MODULE__{pending_archive: {info, verification_keys}} = state) do
+    Logger.info("[NervesHubLink] Offering archive #{info.uuid}, held while one was downloading")
+
+    maybe_update_archive(info, verification_keys, %{state | pending_archive: nil})
   end
 
   defp maybe_cancel_timer(%{update_reschedule_timer: nil} = state), do: state
