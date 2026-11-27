@@ -177,8 +177,18 @@ defmodule NervesHubLink.ArchiveManager do
     {:noreply, state |> reset_download() |> apply_held_archive()}
   end
 
-  # A download that finished normally, after its `:complete` reset the state.
-  def handle_info({:EXIT, _pid, _reason}, state) do
+  # The download that just finished: its `:complete` already reset the state.
+  def handle_info({:EXIT, _pid, :normal}, state) do
+    {:noreply, state}
+  end
+
+  # Nothing else is linked to this process today. Say so rather than swallow it,
+  # since exits are trapped and whatever it was would otherwise fail silently.
+  def handle_info({:EXIT, pid, reason}, state) do
+    Logger.warning(
+      "[NervesHubLink] Ignoring the exit of #{inspect(pid)}, which isn't the archive being downloaded: #{inspect(reason)}"
+    )
+
     {:noreply, state}
   end
 
