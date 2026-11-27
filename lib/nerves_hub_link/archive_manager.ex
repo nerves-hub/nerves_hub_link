@@ -223,27 +223,57 @@ defmodule NervesHubLink.ArchiveManager do
   end
 
   defp maybe_update_archive(info, verification_keys, state) do
-    if FwupConfig.signing_keys_available?(verification_keys) do
-      download_archive(info, verification_keys, state)
+    with :ok <- signing_keys_available(verification_keys),
+         {:ok, file_name} <- archive_file_name(info.url) do
+      download_archive(info, file_name, verification_keys, state)
     else
-      # `fwup -V` exits 0 when it is given no public key, so an unsigned archive
-      # would validate. Refuse the archive rather than hand it to the client.
-      Logger.error(
-        "[NervesHubLink] Refusing archive : no public keys are available to verify the archive signature"
-      )
+      {:error, reason} ->
+        Logger.error("[NervesHubLink] Refusing archive: #{reason}")
 
-      state
+        state
     end
   end
 
-  defp download_archive(info, verification_keys, state) do
+  # `fwup -V` exits 0 when it is given no public key, so an unsigned archive
+  # would validate. Refuse the archive rather than hand it to the client.
+  defp signing_keys_available(verification_keys) do
+    if FwupConfig.signing_keys_available?(verification_keys) do
+      :ok
+    else
+      {:error, "no public keys are available to verify the archive signature"}
+    end
+  end
+
+  # The URL is server-supplied, and the name taken from it decides where the
+  # archive is written and what the completed download removes first.
+  # `Path.basename/1` gives "" for "/" and ".." for "/..", which name the
+  # archives directory rather than a file in it, and a URL that isn't a string,
+  # or has no path, names nothing. A separator can't survive `Path.basename/1`;
+  # a null byte can, and the `File` functions raise on a path holding one.
+  defp archive_file_name(url) do
+    path = url_path(url)
+    file_name = if is_binary(path), do: Path.basename(path), else: ""
+
+    if file_name in ["", ".", ".."] or String.contains?(file_name, <<0>>) do
+      {:error, "its URL doesn't name a file to download to"}
+    else
+      {:ok, file_name}
+    end
+  end
+
+  # `ArchiveInfo` copies the URL out of NervesHub's message without checking it,
+  # so a message sent without one leaves `nil` here. Its type says `URI.t()`
+  # while a string is what arrives, so take either.
+  defp url_path(url) when is_binary(url), do: URI.parse(url).path
+  defp url_path(%URI{path: path}), do: path
+  defp url_path(_other), do: nil
+
+  defp download_archive(info, file_name, verification_keys, state) do
     # Cancel an existing timer if it exists.
     # This prevents rescheduled updates`
     # from compounding.
     state = maybe_cancel_timer(state)
 
-    uri = URI.parse(info.url)
-    file_name = Path.basename(uri.path)
     file_path = Path.join(state.data_path, "archives/#{file_name}")
     temp_file_path = Path.join(state.data_path, "archives/#{file_name}.download")
     directory = Path.dirname(file_path)

@@ -76,6 +76,81 @@ defmodule NervesHubLink.ArchiveManagerTest do
     end
   end
 
+  describe "refusing archives whose URL doesn't name a file" do
+    # The completed download removes whatever is already at the path built from
+    # the URL, before the signature is checked, so refusing these URLs is what
+    # keeps a file in the archives directory from being deleted.
+
+    setup context do
+      unique = System.unique_integer([:positive])
+      key_name = "archive-manager-file-name-#{unique}"
+      :ok = Fixtures.gen_key_pair(key_name)
+
+      {:ok, path} =
+        Fixtures.create_signed_firmware(
+          key_name,
+          "unsigned-archive-#{unique}",
+          "signed-archive-#{unique}"
+        )
+
+      # This plug serves the archive whatever path is asked for, so a download
+      # the manager started would finish.
+      {:ok, _server, port} = Utils.supervise_plug(FirmwareFilePlug, path: path)
+
+      kept_file = Path.join(context.data_path, "archives/keep-me.fw")
+      File.mkdir_p!(Path.dirname(kept_file))
+      File.write!(kept_file, "keep me")
+
+      {:ok, port: port, kept_file: kept_file, public_key: Fixtures.get_public_key(key_name)}
+    end
+
+    test ~s(an archive whose URL path is "/.." is refused), context do
+      expect(ClientMock, :archive_available, 0, fn _ -> :download end)
+
+      info = %{context.archive_info | url: "http://localhost:#{context.port}/.."}
+
+      assert ArchiveManager.apply_archive(context.manager, info, [context.public_key]) == :idle
+
+      assert File.exists?(context.kept_file), "a file in the archives directory was removed"
+      assert ArchiveManager.status(context.manager) == :idle
+    end
+
+    test ~s(an archive whose URL path is "/" is refused), context do
+      expect(ClientMock, :archive_available, 0, fn _ -> :download end)
+
+      info = %{context.archive_info | url: "http://localhost:#{context.port}/"}
+
+      assert ArchiveManager.apply_archive(context.manager, info, [context.public_key]) == :idle
+
+      assert File.exists?(context.kept_file), "a file in the archives directory was removed"
+      assert ArchiveManager.status(context.manager) == :idle
+    end
+
+    test "an archive whose URL has no path at all is refused", context do
+      expect(ClientMock, :archive_available, 0, fn _ -> :download end)
+
+      info = %{context.archive_info | url: "http://localhost:#{context.port}"}
+
+      assert ArchiveManager.apply_archive(context.manager, info, [context.public_key]) == :idle
+
+      assert File.exists?(context.kept_file), "a file in the archives directory was removed"
+      assert ArchiveManager.status(context.manager) == :idle
+    end
+
+    test "an archive with no URL at all is refused", context do
+      expect(ClientMock, :archive_available, 0, fn _ -> :download end)
+
+      # NervesHub's "archive" message is copied into `ArchiveInfo` field by
+      # field, so a message sent without a URL arrives here as `nil`.
+      info = %{context.archive_info | url: nil}
+
+      assert ArchiveManager.apply_archive(context.manager, info, [context.public_key]) == :idle
+
+      assert File.exists?(context.kept_file), "a file in the archives directory was removed"
+      assert ArchiveManager.status(context.manager) == :idle
+    end
+  end
+
   describe "downloading an archive" do
     setup do
       test_pid = self()
