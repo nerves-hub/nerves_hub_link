@@ -33,6 +33,7 @@ defmodule NervesHubLink.ArchiveManager do
           data_path: Path.t(),
           download: nil | GenServer.server(),
           file_path: Path.t(),
+          pending_archive: nil | {ArchiveInfo.t(), [binary()]},
           status: status(),
           temp_file_path: Path.t(),
           update_reschedule_timer: nil | :timer.tref()
@@ -42,6 +43,7 @@ defmodule NervesHubLink.ArchiveManager do
             data_path: nil,
             download: nil,
             file_path: nil,
+            pending_archive: nil,
             status: :idle,
             temp_file_path: nil,
             update_reschedule_timer: nil
@@ -88,6 +90,10 @@ defmodule NervesHubLink.ArchiveManager do
 
   @impl GenServer
   def init(args) do
+    # The downloader is linked to this process. Hear about a download that
+    # fails rather than stopping with it.
+    Process.flag(:trap_exit, true)
+
     state = %__MODULE__{
       data_path: args.data_path
     }
@@ -144,15 +150,7 @@ defmodule NervesHubLink.ArchiveManager do
       )
     end
 
-    {:noreply,
-     %{
-       state
-       | archive_info: nil,
-         file_path: nil,
-         temp_file_path: nil,
-         download: nil,
-         status: :idle
-     }}
+    {:noreply, state |> reset_download() |> apply_held_archive()}
   end
 
   def handle_info({:download, {:error, reason}, _verification_keys}, state) do
@@ -168,6 +166,60 @@ defmodule NervesHubLink.ArchiveManager do
       end)
 
     {:noreply, state}
+  end
+
+  def handle_info({:EXIT, download, reason}, %__MODULE__{download: download} = state)
+      when reason != :normal do
+    Logger.error("[NervesHubLink] Archive download failed: #{describe_exit(reason)}")
+
+    _ = File.rm_rf(state.temp_file_path)
+
+    {:noreply, state |> reset_download() |> apply_held_archive()}
+  end
+
+  # The download that just finished: its `:complete` already reset the state.
+  def handle_info({:EXIT, _pid, :normal}, state) do
+    {:noreply, state}
+  end
+
+  # Nothing else is linked to this process today. Say so rather than swallow it,
+  # since exits are trapped and whatever it was would otherwise fail silently.
+  def handle_info({:EXIT, pid, reason}, state) do
+    Logger.warning(
+      "[NervesHubLink] Ignoring the exit of #{inspect(pid)}, which isn't the archive being downloaded: #{describe_exit(reason)}"
+    )
+
+    {:noreply, state}
+  end
+
+  # NervesHub can send the same archive message twice, for example when the
+  # deployment changes shortly after the device joins. Starting a second
+  # download would write into the same file as the first. A repeat is also the
+  # latest archive NervesHub has asked for, so drop any held behind it.
+  defp maybe_update_archive(
+         %ArchiveInfo{uuid: uuid},
+         _verification_keys,
+         %__MODULE__{status: :downloading, archive_info: %ArchiveInfo{uuid: uuid}} = state
+       ) do
+    Logger.info("[NervesHubLink] Archive #{uuid} is already downloading, ignoring repeat offer")
+
+    %{state | pending_archive: nil}
+  end
+
+  # As with firmware updates, don't interrupt a download in progress. Unlike
+  # firmware, nothing asks NervesHub for the archive again: it pushes one when
+  # the deployment changes and doesn't repeat it while the device stays
+  # connected. So hold the newer archive until the download finishes.
+  defp maybe_update_archive(
+         %ArchiveInfo{uuid: uuid} = info,
+         verification_keys,
+         %__MODULE__{status: :downloading, archive_info: %ArchiveInfo{uuid: current}} = state
+       ) do
+    Logger.info(
+      "[NervesHubLink] Archive #{current} is downloading, holding archive #{uuid} until it finishes"
+    )
+
+    %{state | pending_archive: {info, verification_keys}}
   end
 
   defp maybe_update_archive(info, verification_keys, state) do
@@ -232,6 +284,38 @@ defmodule NervesHubLink.ArchiveManager do
         Logger.info("[NervesHubLink] rescheduling archive in #{ms} milliseconds")
         %{state | status: :update_rescheduled, update_reschedule_timer: timer}
     end
+  end
+
+  # A download's exit reason can carry a stacktrace whose arguments hold the
+  # signed archive URL and the SSL options, which `Downloader.format_status/1`
+  # keeps out of the download's own crash report. Name the reasons it stops with
+  # on purpose, and reduce anything else to its exception or tag; the download's
+  # report has the detail, with the secrets taken out.
+  defp describe_exit(reason) when is_atom(reason), do: inspect(reason)
+  defp describe_exit({:http_error, status}), do: "HTTP #{status}"
+
+  defp describe_exit(reason) when is_tuple(reason) and tuple_size(reason) > 0,
+    do: inspect(elem(reason, 0))
+
+  defp describe_exit(_reason), do: "an unknown reason"
+
+  defp reset_download(%__MODULE__{} = state) do
+    %{
+      state
+      | archive_info: nil,
+        file_path: nil,
+        temp_file_path: nil,
+        download: nil,
+        status: :idle
+    }
+  end
+
+  defp apply_held_archive(%__MODULE__{pending_archive: nil} = state), do: state
+
+  defp apply_held_archive(%__MODULE__{pending_archive: {info, verification_keys}} = state) do
+    Logger.info("[NervesHubLink] Offering archive #{info.uuid}, held while one was downloading")
+
+    maybe_update_archive(info, verification_keys, %{state | pending_archive: nil})
   end
 
   defp maybe_cancel_timer(%{update_reschedule_timer: nil} = state), do: state
